@@ -9,6 +9,10 @@ from rclpy.duration import Duration
 
 from roboto_viz.map_view import MapView
 
+import rclpy
+from geometry_msgs.msg import PoseWithCovarianceStamped 
+from rclpy.node import Node
+
 class NavigatorData:
     def __init__(self):
         self.navigator = BasicNavigator()
@@ -48,12 +52,34 @@ class Worker(QThread):
 
         self.finished.emit()
 
+
+class PoseUpdater(QThread):
+    updatePose = pyqtSignal(int)
+
+    def __init__(self):
+        super().__init__()
+        self.node = rclpy.create_node('sub_to_qt')
+
+        self.sub = self.node.create_subscription(
+            PoseWithCovarianceStamped,
+            'amcl_pose',
+            self.pose_callback,
+            10
+        )
+
+    def run(self):
+        rclpy.spin(self.node)
+
+    def pose_callback(self, msg):
+        print(msg.pose.pose.position.x)
+
 class Window(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.nav_data = NavigatorData()
         self.clicks_count = 0
         self.setupUi()
+        self.updatePose()
 
     def setupUi(self):
         self.setWindowTitle("Map Viewer")
@@ -107,6 +133,10 @@ class Window(QMainWindow):
         self.long_running_btn.setEnabled(False)
         self.worker.finished.connect(lambda: self.long_running_btn.setEnabled(True))
         self.worker.finished.connect(lambda: self.step_label.setText("Long-Running Step: 0"))
+
+    def updatePose(self):
+        self.pos_updater = PoseUpdater()
+        self.pos_updater.start()
 
     def print_coordinates(self, x, y):
         print(f"Mouse position: ({x:.2f}, {y:.2f})")
