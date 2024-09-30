@@ -67,6 +67,7 @@ class Window(QMainWindow):
 
         self.map_view = MapView(self)
         self.map_view.load_image(self.image_path)
+        self.map_view.mouse_moved.connect(self.print_coordinates)  # Connect to the new signal
 
         self.clicks_label = QLabel("Counting: 0 clicks", self)
         self.clicks_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
@@ -106,3 +107,6 @@ class Window(QMainWindow):
         self.long_running_btn.setEnabled(False)
         self.worker.finished.connect(lambda: self.long_running_btn.setEnabled(True))
         self.worker.finished.connect(lambda: self.step_label.setText("Long-Running Step: 0"))
+
+    def print_coordinates(self, x, y):
+        print(f"Mouse position: ({x:.2f}, {y:.2f})")

@@ -1,8 +1,10 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
 from PyQt5.QtGui import QPixmap, QPainter, QTransform
-from PyQt5.QtCore import QRectF
+from PyQt5.QtCore import QRectF, pyqtSignal
 
 class MapView(QGraphicsView):
+    mouse_moved = pyqtSignal(float, float)  # New signal for mouse movement
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scene = QGraphicsScene(self)
@@ -10,6 +12,7 @@ class MapView(QGraphicsView):
         self.setRenderHint(QPainter.SmoothPixmapTransform)
         self.setRenderHint(QPainter.Antialiasing)
         self.image_item = None
+        self.setMouseTracking(True)  # Enable mouse tracking
 
     def load_image(self, image_path):
         self.pixmap = QPixmap(image_path)
@@ -42,3 +45,11 @@ class MapView(QGraphicsView):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.update_view()
+
+    def mouseMoveEvent(self, event):
+        if self.image_item:
+            scene_pos = self.mapToScene(event.pos())
+            x = scene_pos.x()
+            y = scene_pos.y()
+            self.mouse_moved.emit(x, y)
+        super().mouseMoveEvent(event)
