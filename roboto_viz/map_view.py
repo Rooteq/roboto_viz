@@ -1,9 +1,9 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
-from PyQt5.QtGui import QPixmap, QPainter, QTransform
+from PyQt5.QtGui import QMouseEvent, QPixmap, QPainter, QTransform
 from PyQt5.QtCore import QRectF, pyqtSignal
 
 class MapView(QGraphicsView):
-    mouse_moved = pyqtSignal(float, float)  # New signal for mouse movement
+    mouse_clicked = pyqtSignal(float, float)  # New signal for mouse movement
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -13,8 +13,11 @@ class MapView(QGraphicsView):
         self.setRenderHint(QPainter.Antialiasing)
         self.image_item = None
         self.setMouseTracking(True)  # Enable mouse tracking
+        self.map_origin = tuple()
 
-    def load_image(self, image_path):
+    def load_image(self, image_path, origin_data):
+        self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
+
         self.pixmap = QPixmap(image_path)
         if self.image_item:
             self.scene.removeItem(self.image_item)
@@ -46,10 +49,16 @@ class MapView(QGraphicsView):
         super().resizeEvent(event)
         self.update_view()
 
-    def mouseMoveEvent(self, event):
-        if self.image_item:
-            scene_pos = self.mapToScene(event.pos())
-            x = scene_pos.x()
-            y = scene_pos.y()
-            self.mouse_moved.emit(x, y)
-        super().mouseMoveEvent(event)
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        scene_pos = self.mapToScene(event.pos())
+        x = (scene_pos.x() * 0.05) + self.map_origin[0]
+        y = (self.pixmap.rect().height() - scene_pos.y()) * 0.05 + self.map_origin[1]
+        self.mouse_clicked.emit(x,y)
+
+    # def mouseMoveEvent(self, event):
+    #     if self.image_item:
+    #         scene_pos = self.mapToScene(event.pos())
+    #         x = scene_pos.x()
+    #         y = scene_pos.y()
+    #         self.mouse_moved.emit(x, y)
+    #     super().mouseMoveEvent(event)

@@ -12,6 +12,7 @@ from roboto_viz.map_view import MapView
 import rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped 
 from rclpy.node import Node
+import yaml
 
 class NavigatorData:
     def __init__(self):
@@ -54,7 +55,7 @@ class Worker(QThread):
 
 
 class PoseUpdater(QThread):
-    updatePose = pyqtSignal(int)
+    updatePose = pyqtSignal(PoseWithCovarianceStamped)
 
     def __init__(self):
         super().__init__()
@@ -71,13 +72,15 @@ class PoseUpdater(QThread):
         rclpy.spin(self.node)
 
     def pose_callback(self, msg):
-        print(msg.pose.pose.position.x)
+        self.updatePose.emit(msg)
+        # print(msg.pose.pose.position.x)
 
 class Window(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.nav_data = NavigatorData()
         self.clicks_count = 0
+        
         self.setupUi()
         self.updatePose()
 
@@ -90,10 +93,17 @@ class Window(QMainWindow):
         package_name = 'roboto_diffbot'
         package_path = get_package_share_directory(package_name)
         self.image_path = os.path.join(package_path, 'sim', 'map', 'my_map.pgm')
+        self.origin_path = os.path.join(package_path, 'sim', 'map', 'my_map.yaml')
+        
+        with open(self.origin_path, 'r') as file:
+            origin_data = yaml.safe_load(file)
+
+        self.map_origin = origin_data['origin']
 
         self.map_view = MapView(self)
-        self.map_view.load_image(self.image_path)
-        self.map_view.mouse_moved.connect(self.print_coordinates)  # Connect to the new signal
+        self.map_view.load_image(self.image_path, self.map_origin)
+        # self.map_view.mouse_moved.connect(self.print_coordinates)  # Connect to the new signal
+        self.map_view.mouse_clicked.connect(self.print_coordinates)
 
         self.clicks_label = QLabel("Counting: 0 clicks", self)
         self.clicks_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
@@ -136,6 +146,7 @@ class Window(QMainWindow):
 
     def updatePose(self):
         self.pos_updater = PoseUpdater()
+        self.pos_updater.updatePose.connect(lambda msg : print(msg.pose.pose.position.x))
         self.pos_updater.start()
 
     def print_coordinates(self, x, y):
