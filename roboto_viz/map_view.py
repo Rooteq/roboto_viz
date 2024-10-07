@@ -2,8 +2,10 @@ from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
 from PyQt5.QtGui import QMouseEvent, QPixmap, QPainter, QTransform
 from PyQt5.QtCore import QRectF, pyqtSignal
 
+from roboto_viz.robot_item import RobotItem
+
 class MapView(QGraphicsView):
-    mouse_clicked = pyqtSignal(float, float)  # New signal for mouse movement
+    mouse_clicked = pyqtSignal(float, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -14,6 +16,9 @@ class MapView(QGraphicsView):
         self.image_item = None
         self.setMouseTracking(True)  # Enable mouse tracking
         self.map_origin = tuple()
+
+        self.robot_item = RobotItem()
+        self.scene.addItem(self.robot_item)
 
     def load_image(self, image_path, origin_data):
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
@@ -30,24 +35,27 @@ class MapView(QGraphicsView):
             view_rect = self.viewport().rect()
             scene_rect = self.pixmap.rect()
             
-            # Calculate the scaling factor to fit the image in the view
             scale_x = view_rect.width() / scene_rect.width()
             scale_y = view_rect.height() / scene_rect.height()
             scale = min(scale_x, scale_y)
             
-            # Create a new transform with the calculated scale
             transform = QTransform()
             transform.scale(scale, scale)
             
-            # Apply the transform to the QGraphicsView
             self.setTransform(transform)
             
-            # Center the image in the view
             self.centerOn(self.image_item)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.update_view()
+
+    def update_robot_pose(self, x, y, theta):
+        map_x = (x - self.map_origin[0]) * 20
+        map_y = self.pixmap.rect().height() - ((y - self.map_origin[1]) * 20)
+        
+        self.robot_item.update_pose(map_x, map_y, theta)
+        self.scene.update()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         scene_pos = self.mapToScene(event.pos())

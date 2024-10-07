@@ -10,9 +10,15 @@ from rclpy.duration import Duration
 from roboto_viz.map_view import MapView
 
 import rclpy
-from geometry_msgs.msg import PoseWithCovarianceStamped 
+from geometry_msgs.msg import PoseStamped 
 from rclpy.node import Node
 import yaml
+
+import math
+
+import tf2_geometry_msgs
+from tf2_ros import TransformStamped
+from geometry_msgs.msg import Quaternion
 
 class NavigatorData:
     def __init__(self):
@@ -55,15 +61,15 @@ class Worker(QThread):
 
 
 class PoseUpdater(QThread):
-    updatePose = pyqtSignal(PoseWithCovarianceStamped)
+    update_pose = pyqtSignal(float, float, float)
 
     def __init__(self):
         super().__init__()
         self.node = rclpy.create_node('sub_to_qt')
 
         self.sub = self.node.create_subscription(
-            PoseWithCovarianceStamped,
-            'amcl_pose',
+            PoseStamped,
+            'diffbot_pose',
             self.pose_callback,
             10
         )
@@ -72,8 +78,14 @@ class PoseUpdater(QThread):
         rclpy.spin(self.node)
 
     def pose_callback(self, msg):
-        self.updatePose.emit(msg)
-        # print(msg.pose.pose.position.x)
+        x = msg.pose.position.x
+        y = msg.pose.position.y
+        # theta = 2 * math.atan2(msg.pose.orientation.z, msg.pose.orientation.w)
+        
+        transform = TransformStamped()
+        transform.transform.rotation = msg.pose.orientation
+
+        self.update_pose.emit(x, y, theta)
 
 class Window(QMainWindow):
     def __init__(self, parent=None):
@@ -82,7 +94,7 @@ class Window(QMainWindow):
         self.clicks_count = 0
         
         self.setupUi()
-        self.updatePose()
+        self.setupPoseSubscriber()
 
     def setupUi(self):
         self.setWindowTitle("Map Viewer")
@@ -144,10 +156,13 @@ class Window(QMainWindow):
         self.worker.finished.connect(lambda: self.long_running_btn.setEnabled(True))
         self.worker.finished.connect(lambda: self.step_label.setText("Long-Running Step: 0"))
 
-    def updatePose(self):
+    def setupPoseSubscriber(self):
         self.pos_updater = PoseUpdater()
-        self.pos_updater.updatePose.connect(lambda msg : print(msg.pose.pose.position.x))
+        self.pos_updater.update_pose.connect(self.update_robot)
         self.pos_updater.start()
 
     def print_coordinates(self, x, y):
         print(f"Mouse position: ({x:.2f}, {y:.2f})")
+
+    def update_robot(self, x, y, theta):
+        self.map_view.update_robot_pose(x,y,theta)
