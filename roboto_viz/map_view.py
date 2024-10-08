@@ -1,11 +1,12 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
 from PyQt5.QtGui import QMouseEvent, QPixmap, QPainter, QTransform
-from PyQt5.QtCore import QRectF, pyqtSignal
+from PyQt5.QtCore import QRectF, pyqtSignal, Qt
 
 from roboto_viz.robot_item import RobotItem
+from roboto_viz.goal_arrow import GoalArrow
 
 class MapView(QGraphicsView):
-    mouse_clicked = pyqtSignal(float, float)
+    goal_pose_set = pyqtSignal(float, float, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -19,6 +20,10 @@ class MapView(QGraphicsView):
 
         self.robot_item = RobotItem()
         self.scene.addItem(self.robot_item)
+        self.goal_arrow = GoalArrow()
+        self.scene.addItem(self.goal_arrow)
+
+        self.drawing_arrow = False
 
     def load_image(self, image_path, origin_data):
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
@@ -57,11 +62,45 @@ class MapView(QGraphicsView):
         self.robot_item.update_pose(map_x, map_y, theta)
         self.scene.update()
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        scene_pos = self.mapToScene(event.pos())
-        x = (scene_pos.x() * 0.05) + self.map_origin[0]
-        y = (self.pixmap.rect().height() - scene_pos.y()) * 0.05 + self.map_origin[1]
-        self.mouse_clicked.emit(x,y)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drawing_arrow = True
+            scene_pos = self.mapToScene(event.pos())
+            self.goal_arrow.set_points(scene_pos, scene_pos)
+
+    def mouseMoveEvent(self, event):
+        if self.drawing_arrow:
+            scene_pos = self.mapToScene(event.pos())
+            self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.drawing_arrow:
+            self.drawing_arrow = False
+            scene_pos = self.mapToScene(event.pos())
+            self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
+            
+            # Convert to map coordinates
+            start_x = (self.goal_arrow.start_point.x() * 0.05) + self.map_origin[0]
+            start_y = (self.pixmap.rect().height() - self.goal_arrow.start_point.y()) * 0.05 + self.map_origin[1]
+            end_x = (scene_pos.x() * 0.05) + self.map_origin[0]
+            end_y = (self.pixmap.rect().height() - scene_pos.y()) * 0.05 + self.map_origin[1]
+            
+            # Calculate angle
+            angle = self.goal_arrow.get_angle()
+            
+            self.clear_goal_arrow()
+
+            # Emit the goal pose
+            self.goal_pose_set.emit(start_x, start_y, angle)
+
+    def clear_goal_arrow(self):
+        self.goal_arrow.hide_arrow()
+
+    # def mousePressEvent(self, event) -> None:
+    #     scene_pos = self.mapToScene(event.pos())
+    #     x = (scene_pos.x() * 0.05) + self.map_origin[0]
+    #     y = (self.pixmap.rect().height() - scene_pos.y()) * 0.05 + self.map_origin[1]
+    #     self.mouse_clicked.emit(x,y)
 
     # def mouseMoveEvent(self, event):
     #     if self.image_item:

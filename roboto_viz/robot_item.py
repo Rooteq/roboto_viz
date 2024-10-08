@@ -7,7 +7,7 @@ class RobotItem(QGraphicsItem):
     def __init__(self):
         super().__init__()
         self.arrow_color = QColor(255, 0, 0)  # Red arrow
-        self.arrow_size = 20  # Size of the arrow
+        self.arrow_size = 10  # Size of the arrow
         self.setZValue(1)  # Ensure the arrow is drawn on top of the map
 
     def boundingRect(self):

@@ -6,18 +6,14 @@ import os
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
 from rclpy.duration import Duration
-
+import math
 from roboto_viz.map_view import MapView
 
 import rclpy
 from geometry_msgs.msg import TwistStamped
 from rclpy.node import Node
 import yaml
-
-import math
-
-import tf2_geometry_msgs
-from tf2_ros import TransformStamped
+from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 
 class NavigatorData:
     def __init__(self):
@@ -35,7 +31,7 @@ class Worker(QThread):
     finished = pyqtSignal()
     progress = pyqtSignal(int)
 
-    def __init__(self, nav_data):
+    def __init__(self, nav_data : NavigatorData):
         super().__init__()
         self.nav_data = nav_data
 
@@ -56,8 +52,9 @@ class Worker(QThread):
 class PoseUpdater(QThread):
     update_pose = pyqtSignal(float, float, float)
 
-    def __init__(self):
+    def __init__(self, executor: MultiThreadedExecutor):
         super().__init__()
+        self.executor = executor
         self.node = rclpy.create_node('sub_to_qt')
 
         self.sub = self.node.create_subscription(
@@ -67,8 +64,11 @@ class PoseUpdater(QThread):
             10
         )
 
+        self.executor.add_node(self.node)
+
     def run(self):
-        rclpy.spin(self.node)
+        self.executor.spin()
+        # rclpy.spin(self.node)
 
     def pose_callback(self, msg):
         x = msg.twist.linear.x
@@ -82,10 +82,13 @@ class Window(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.nav_data = NavigatorData()
+
+        self.executor = MultiThreadedExecutor()
+
         self.clicks_count = 0
         
         self.setupUi()
-        # self.setupPoseSubscriber()
+        self.setupPoseSubscriber()
 
     def setupUi(self):
         self.setWindowTitle("Map Viewer")
@@ -105,8 +108,9 @@ class Window(QMainWindow):
 
         self.map_view = MapView(self)
         self.map_view.load_image(self.image_path, self.map_origin)
+        self.map_view.goal_pose_set.connect(self.handle_goal_pose)
         # self.map_view.mouse_moved.connect(self.print_coordinates)  # Connect to the new signal
-        self.map_view.mouse_clicked.connect(self.print_coordinates)
+        # self.map_view.mouse_clicked.connect(self.print_coordinates)
 
         self.clicks_label = QLabel("Counting: 0 clicks", self)
         self.clicks_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
@@ -148,12 +152,31 @@ class Window(QMainWindow):
         self.worker.finished.connect(lambda: self.step_label.setText("Long-Running Step: 0"))
 
     def setupPoseSubscriber(self):
-        self.pos_updater = PoseUpdater()
+        self.pos_updater = PoseUpdater(self.executor)
         self.pos_updater.update_pose.connect(self.update_robot)
         self.pos_updater.start()
 
-    def print_coordinates(self, x, y):
-        print(f"Mouse position: ({x:.2f}, {y:.2f})")
+    # def print_coordinates(self, x, y):
+    #     print(f"Mouse position: ({x:.2f}, {y:.2f})")
+
+    def handle_goal_pose(self, x, y, theta):
+        print(f"New goal pose set: x={x:.2f}, y={y:.2f}, theta={theta:.2f}")
+        
+        # Here you can update your navigation goal or perform any other necessary actions
+
+        self.nav_data.goal_pose.pose.position.x = x
+        self.nav_data.goal_pose.pose.position.y = y
+        self.nav_data.goal_pose.pose.orientation.z = math.sin(theta / 2)
+        self.nav_data.goal_pose.pose.orientation.w = math.cos(theta / 2)
+
+        self.worker = Worker(self.nav_data)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.progress.connect(self.reportProgress)
+        self.worker.start()
+
+        self.long_running_btn.setEnabled(False)
+        self.worker.finished.connect(lambda: self.long_running_btn.setEnabled(True))
+        self.worker.finished.connect(lambda: self.step_label.setText("Long-Running Step: 0"))
 
     def update_robot(self, x, y, theta):
         self.map_view.update_robot_pose(x,y,theta)
