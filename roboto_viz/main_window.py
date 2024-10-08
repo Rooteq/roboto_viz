@@ -10,7 +10,7 @@ from rclpy.duration import Duration
 from roboto_viz.map_view import MapView
 
 import rclpy
-from geometry_msgs.msg import PoseStamped 
+from geometry_msgs.msg import TwistStamped
 from rclpy.node import Node
 import yaml
 
@@ -18,7 +18,6 @@ import math
 
 import tf2_geometry_msgs
 from tf2_ros import TransformStamped
-from geometry_msgs.msg import Quaternion
 
 class NavigatorData:
     def __init__(self):
@@ -45,14 +44,8 @@ class Worker(QThread):
         self.nav_data.navigator.goToPose(self.nav_data.goal_pose)
         self.nav_data.navigator.waitUntilNav2Active()
 
-        i = 0
         while not self.nav_data.navigator.isTaskComplete():
-            i += 1
             feedback = self.nav_data.navigator.getFeedback()
-            if feedback and i % 5 == 0:
-                eta = Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9
-                print(f'Estimated time of arrival: {eta:.0f} seconds.')
-                self.progress.emit(i)
 
             if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
                 self.nav_data.navigator.cancelTask()
@@ -68,7 +61,7 @@ class PoseUpdater(QThread):
         self.node = rclpy.create_node('sub_to_qt')
 
         self.sub = self.node.create_subscription(
-            PoseStamped,
+            TwistStamped,
             'diffbot_pose',
             self.pose_callback,
             10
@@ -78,12 +71,10 @@ class PoseUpdater(QThread):
         rclpy.spin(self.node)
 
     def pose_callback(self, msg):
-        x = msg.pose.position.x
-        y = msg.pose.position.y
+        x = msg.twist.linear.x
+        y = msg.twist.linear.y
         # theta = 2 * math.atan2(msg.pose.orientation.z, msg.pose.orientation.w)
-        
-        transform = TransformStamped()
-        transform.transform.rotation = msg.pose.orientation
+        theta = -msg.twist.angular.z
 
         self.update_pose.emit(x, y, theta)
 
@@ -94,7 +85,7 @@ class Window(QMainWindow):
         self.clicks_count = 0
         
         self.setupUi()
-        self.setupPoseSubscriber()
+        # self.setupPoseSubscriber()
 
     def setupUi(self):
         self.setWindowTitle("Map Viewer")
