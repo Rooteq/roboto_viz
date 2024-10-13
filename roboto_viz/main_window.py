@@ -9,6 +9,10 @@ from rclpy.duration import Duration
 import math
 from roboto_viz.map_view import MapView
 
+from std_srvs.srv import Trigger
+from lifecycle_msgs.srv import ChangeState
+from lifecycle_msgs.msg import Transition
+
 import rclpy
 from geometry_msgs.msg import TwistStamped
 from rclpy.node import Node
@@ -49,26 +53,44 @@ class Worker(QThread):
         self.finished.emit()
 
 
-class PoseUpdater(QThread):
+class RobotManagement(QThread):
     update_pose = pyqtSignal(float, float, float)
 
     def __init__(self, executor: MultiThreadedExecutor):
         super().__init__()
-        self.executor = executor
-        self.node = rclpy.create_node('sub_to_qt')
+        self.executor: MultiThreadedExecutor = executor
+        self.state: str = 'inactive'
 
-        self.sub = self.node.create_subscription(
-            TwistStamped,
-            'diffbot_pose',
-            self.pose_callback,
-            10
-        )
+        self.robot_management_node: Node = Node('robot_management_node')
+        
+        self.existence_srv = self.robot_management_node.create_service(Trigger, 'robot_ready', self.robot_ready_callback)
+        # self.node = rclpy.create_node('pose_listener')
+
+        # self.sub = self.node.create_subscription(
+        #     TwistStamped,
+        #     'diffbot_pose',
+        #     self.pose_callback,
+        #     10
+        # )
+
+    def robot_ready_callback(self, request, response):
+        self.node.get_logger().info('Received robot ready signal')
+        self.state = 'active'
+        self.activate_gui_integration_node()
+        self.robot_ready.emit()
+        response.success = True
+        response.message = "GUI notified and gui_integration_node activated"
+        return response
+
+
 
         self.executor.add_node(self.node)
 
     def run(self):
         self.executor.spin()
         # rclpy.spin(self.node)
+
+    def 
 
     def pose_callback(self, msg):
         x = msg.twist.linear.x
@@ -152,7 +174,7 @@ class Window(QMainWindow):
         self.worker.finished.connect(lambda: self.step_label.setText("Long-Running Step: 0"))
 
     def setupPoseSubscriber(self):
-        self.pos_updater = PoseUpdater(self.executor)
+        self.pos_updater = RobotManagement(self.executor)
         self.pos_updater.update_pose.connect(self.update_robot)
         self.pos_updater.start()
 
