@@ -15,7 +15,7 @@ from std_srvs.srv import Trigger
 
 from ament_index_python.packages import get_package_share_directory
 
-from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
+from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QTabWidget
 # internal imports:
 from roboto_viz.map_view import MapView
 from roboto_viz.goal_arrow import GoalArrow
@@ -113,6 +113,7 @@ class ConnectedView(QWidget):
         # self.main_view.switch_to_connecting()
 
 class ActiveView(QWidget):
+    on_disconnection = pyqtSignal(str)
     def __init__(self):
         super().__init__()
 
@@ -145,19 +146,45 @@ class ActiveView(QWidget):
         # self.long_running_btn = QPushButton("Long-Running Task!", self)
         # self.long_running_btn.clicked.connect(self.runLongTask)
 
-        self.disconnect_btn = QPushButton("Disconnect", self)
+        # self.disconnect_btn = QPushButton("Disconnect", self)
+        # self.disconnect_btn.clicked.connect(self.on_disconnect)
 
-        button_layout = QVBoxLayout()
-        button_layout.addWidget(self.disconnect_btn)
+        # button_layout = QVBoxLayout()
+        # button_layout.addWidget(self.disconnect_btn)
         # button_layout.addWidget(self.clicks_label)
         # button_layout.addWidget(self.count_btn)
         # button_layout.addStretch()
         # button_layout.addWidget(self.step_label)
         # button_layout.addWidget(self.long_running_btn)
 
+        # self.centralWidget.setLayout(main_layout)
+        # Create tab widget for right side
+
+        
+        tab_widget = QTabWidget()
+        # Create first tab
+        operation_tab = QWidget()
+        first_layout = QVBoxLayout(operation_tab)
+        for i in range(3):
+            button = QPushButton(f"Button {i+1} (Tab 1)")
+            first_layout.addWidget(button)
+        tab_widget.addTab(operation_tab, "Operation")
+
+        # Create second tab
+        planning_tab = QWidget()
+        second_layout = QVBoxLayout(planning_tab)
+        for i in range(2):
+            button = QPushButton(f"Button {i+1} (Tab 2)")
+            second_layout.addWidget(button)
+        tab_widget.addTab(planning_tab, "Planning") 
+
+
         main_layout = QHBoxLayout()
         main_layout.addWidget(self.map_view, 3)
-        main_layout.addLayout(button_layout, 1)
+        main_layout.addWidget(tab_widget, 1)
 
         self.setLayout(main_layout)
-        # self.centralWidget.setLayout(main_layout)
+
+    def on_disconnect(self):
+        print("Disconnecting")
+        self.on_disconnection.emit("disconnection")

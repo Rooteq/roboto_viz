@@ -13,7 +13,8 @@ def generate_launch_description():
         package='roboto_viz',
         executable='test',
         name='gui_app',
-        output='both'
+        output='both',
+        emulate_tty=True
     )
 
     return LaunchDescription([

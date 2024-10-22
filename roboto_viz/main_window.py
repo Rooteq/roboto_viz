@@ -90,7 +90,6 @@ class RobotManagement(QThread):
         self.executor.spin()
         # rclpy.spin(self.node)
 
-    def 
 
     def pose_callback(self, msg):
         x = msg.twist.linear.x

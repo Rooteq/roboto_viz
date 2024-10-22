@@ -76,21 +76,19 @@ class DisconnectedState(State):
         # self.service_status_label.setText(f"Service: {status}")
         # self.service_button.setEnabled(available)
 
-class ConnectedState(State):
-    def handleGui(self) -> None:
-        self.gui.main_view.switch_to_connected()
-        self.gui.main_view.disconnection_signal.connect(self.handleDisconnection)
-
-    def handleDisconnection(self):
-        print("handling disconnection")
-        self.gui.transition_to(DisconnectedState())
-        self.gui.handleGui()
-
 class ActiveState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_active()
         self.gui.gui_manager.update_pose.connect(self.gui.main_view.active_view.map_view.update_robot_pose)
-        # TODO: handle disconnection!
+        self.gui.gui_manager.service_availability.connect(self.handleDisconnection)
+
+    def handleDisconnection(self, availability: bool):
+        if(not availability):
+            print("handling disconnection!")
+            self.gui.transition_to(DisconnectedState())
+            self.gui.handleGui()
+        else:
+            pass 
 
 class App(QApplication):
     def __init__(self, argv):
