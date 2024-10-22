@@ -56,6 +56,7 @@ class MapView(QGraphicsView):
         self.update_view()
 
     def update_robot_pose(self, x, y, theta):
+        # print("pose update!")
         map_x = (x - self.map_origin[0]) * 20
         map_y = self.pixmap.rect().height() - ((y - self.map_origin[1]) * 20)
         
