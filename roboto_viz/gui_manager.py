@@ -10,6 +10,13 @@ from std_srvs.srv import Trigger
 from geometry_msgs.msg import TwistStamped
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer, pyqtSlot
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
+import threading
+from nav2_simple_commander.robot_navigator import BasicNavigator
+
+from geometry_msgs.msg import PoseStamped
+from rclpy.duration import Duration
+
+import math
 
 class ManagerNode(LifecycleNode):
     def __init__(self):
@@ -112,6 +119,82 @@ class ManagerNode(LifecycleNode):
         # if self.listener_active and self.twist_callback:
         self.listener_pose_callback(msg)
 
+class NavData():
+    def __init__(self):
+        self.navigator: BasicNavigator = BasicNavigator('gui_navigator_node')
+        self.goal_pose = PoseStamped()
+        self.goal_pose.header.frame_id = 'map'
+        self.goal_pose.pose.position.x = 0.0
+        self.goal_pose.pose.position.y = 0.0
+        self.goal_pose.pose.orientation.w = 0.0
+
+class Navigator(QThread):
+    finished = pyqtSignal()  # Emitted when a goal is reached
+    navigation_status = pyqtSignal(str)  # Optional: to inform GUI about status
+
+    def __init__(self, nav_data: NavData):
+        super().__init__()
+        self.nav_data = nav_data
+        self._running = True
+        self._new_goal = None
+        self._goal_lock = threading.Lock()  # For thread-safe goal updates
+        
+    def stop(self):
+        self._running = False
+        if self.nav_data.navigator.isTaskComplete() is False:
+            self.nav_data.navigator.cancelTask()
+        self.wait()
+
+    def set_goal(self, x: float, y: float, theta: float):
+        """Set a new goal, replacing any existing one"""
+        with self._goal_lock:
+            self._new_goal = (x, y, theta)
+            # Cancel current navigation if there is one
+            if not self.nav_data.navigator.isTaskComplete():
+                self.nav_data.navigator.cancelTask()
+        
+    def run(self):
+        while self._running:
+            # Check if we have a new goal
+            with self._goal_lock:
+                current_goal = self._new_goal
+                self._new_goal = None
+            
+            if current_goal is None:
+                # No goal to process, wait a bit
+                self.msleep(100)  # Sleep for 100ms
+                continue
+                
+            try:
+                x, y, theta = current_goal
+                
+                # Update goal pose
+                self.nav_data.goal_pose.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
+                self.nav_data.goal_pose.pose.position.x = x
+                self.nav_data.goal_pose.pose.position.y = y
+                self.nav_data.goal_pose.pose.orientation.z = math.sin(theta / 2)
+                self.nav_data.goal_pose.pose.orientation.w = math.cos(theta / 2)
+                
+                # Start navigation
+                self.nav_data.navigator.goToPose(self.nav_data.goal_pose)
+                self.nav_data.navigator.waitUntilNav2Active()
+                
+                while not self.nav_data.navigator.isTaskComplete() and self._running:
+                    # Check if there's a new goal
+                    if self._new_goal is not None:
+                        break  # Exit this loop to process the new goal
+                        
+                    feedback = self.nav_data.navigator.getFeedback()
+                    if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
+                        self.nav_data.navigator.cancelTask()
+                        break
+                
+                if self._running and self.nav_data.navigator.isTaskComplete():
+                    self.finished.emit()
+                    
+            except Exception as e:
+                print(f"Navigation error: {e}")
+                self.navigation_status.emit(f"Error: {str(e)}")
 
 
 class GuiManager(QThread):
@@ -125,6 +208,10 @@ class GuiManager(QThread):
         super().__init__()
         self.node: ManagerNode = None
         self.executor = MultiThreadedExecutor()
+        self.nav_data: NavData = NavData()
+        self.navigator: Navigator = Navigator(self.nav_data)
+
+        self.navigator.start()
 
     def trigger_configure(self):
         self.node.trigger_configure()
@@ -143,6 +230,14 @@ class GuiManager(QThread):
         self.node.disconnect_callback = self.emit_disconnect_call
         self.executor.spin()
 
+    def stop(self):
+        if self.navigator:
+            self.navigator.stop()
+        if self.node:
+            self.executor.remove_node(self.node)
+            self.node.destroy_node()
+        self.executor.shutdown()
+
     def emit_service_response(self, success):
         self.service_response.emit(success)
 
@@ -159,8 +254,13 @@ class GuiManager(QThread):
     def emit_disconnect_call(self):
         self.trigger_disconnect.emit(True)
 
-    def stop(self):
-        if self.node:
-            self.executor.remove_node(self.node)
-            self.node.destroy_node()
-        self.executor.shutdown()
+    pyqtSlot()
+    def handle_goal_pose(self, x, y, theta):
+        print(f"New goal pose set: x={x:.2f}, y={y:.2f}, theta={theta:.2f}")
+        
+        # self.nav_data.goal_pose.pose.position.x = x
+        # self.nav_data.goal_pose.pose.position.y = y
+        # self.nav_data.goal_pose.pose.orientation.z = math.sin(theta / 2)
+        # self.nav_data.goal_pose.pose.orientation.w = math.cos(theta / 2)
+
+        self.navigator.set_goal(x, y, theta)

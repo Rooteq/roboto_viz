@@ -25,6 +25,7 @@ from roboto_viz.robot_item import RobotItem
 class MainView(QMainWindow):
     connection_signal = pyqtSignal(str)
     disconnection_signal = pyqtSignal(str)
+    set_position_signal = pyqtSignal(float, float, float)
 
     def __init__(self):
         super().__init__()
@@ -60,12 +61,16 @@ class MainView(QMainWindow):
 
     def switch_to_active(self):
         self.stacked_widget.setCurrentWidget(self.active_view)
+        self.active_view.map_view.goal_pose_set.connect(self.on_set_position)
 
     def on_connection(self):
         self.connection_signal.emit("connect emit from MainView")
 
     def on_disconnection(self):
         self.disconnection_signal.emit("disconnect emit from MainView")
+
+    def on_set_position(self, x, y, theta):
+        self.set_position_signal.emit(x,y,-theta)
 
 class DisconnectedView(QWidget):
     on_connection = pyqtSignal(str)

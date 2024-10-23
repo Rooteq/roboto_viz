@@ -81,6 +81,7 @@ class ActiveState(State):
         self.gui.main_view.switch_to_active()
         self.gui.gui_manager.update_pose.connect(self.gui.main_view.active_view.map_view.update_robot_pose)
         self.gui.gui_manager.service_availability.connect(self.handleDisconnection)
+        self.gui.main_view.set_position_signal.connect(self.gui.gui_manager.handle_goal_pose)
 
     def handleDisconnection(self, availability: bool):
         if(not availability):
