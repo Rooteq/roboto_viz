@@ -31,10 +31,12 @@ class MainView(QMainWindow):
         super().__init__()
         self.setWindowTitle("Robot Control")
         self.setGeometry(100, 100, 300, 200)
+        
+        self.map_view = MapView()
 
         self.disconnected_view = DisconnectedView()
         self.connected_view = ConnectedView()
-        self.active_view = ActiveView()
+        self.active_view = ActiveView(self.map_view)
 
         self.setup_ui()
 
@@ -119,10 +121,10 @@ class ConnectedView(QWidget):
 
 class ActiveView(QWidget):
     on_disconnection = pyqtSignal(str)
-    def __init__(self):
+    def __init__(self, map_view: MapView):
         super().__init__()
 
-        self.map_view = MapView()
+        self.map_view = map_view
 
         self.setup_ui()
 

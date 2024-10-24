@@ -1,19 +1,18 @@
+from roboto_viz.gui_state_machine import Gui, DisconnectedState
+
+from PyQt5.QtWidgets import QApplication
 import sys
-from PyQt5.QtWidgets import (
-    QApplication
-)
-import rclpy
 
-from roboto_viz.main_window import Window
+class App(QApplication):
+    def __init__(self, argv):
+        super(App, self).__init__(argv)
+        self.gui = Gui()
+        self.gui.setup()
+        self.gui.main_view.show()
 
-def main(args=None):
-    rclpy.init(args=args)
-    app = QApplication(sys.argv)
-    win = Window()
-    win.show()
-    # win.updateMapView()
-    app.exec_()
-    rclpy.shutdown()
+def main():
+    app = App(sys.argv)
+    sys.exit(app.exec())
 
 if __name__ == '__main__':
     main()

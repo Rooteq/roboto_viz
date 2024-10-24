@@ -11,7 +11,7 @@ def generate_launch_description():
 
     gui_node = Node(
         package='roboto_viz',
-        executable='test',
+        executable='gui',
         # name='gui_app',
         output='both',
         emulate_tty=True

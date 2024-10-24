@@ -19,9 +19,11 @@ from roboto_viz.views import MainView
 class Gui:
     _state = None
 
-    def __init__(self, state: State) -> None:
+    def __init__(self) -> None:
         rclpy.init()
-        self.transition_to(state)
+        # self.transition_to(state)
+
+        self.transition_to(DisconnectedState())
 
         self.main_view: MainView = MainView()
         self.gui_manager: GuiManager = GuiManager()
@@ -90,17 +92,3 @@ class ActiveState(State):
             self.gui.handleGui()
         else:
             pass 
-
-class App(QApplication):
-    def __init__(self, argv):
-        super(App, self).__init__(argv)
-        self.gui = Gui(DisconnectedState())
-        self.gui.setup()
-        self.gui.main_view.show()
-
-def main():
-    app = App(sys.argv)
-    sys.exit(app.exec())
-
-if __name__ == '__main__':
-    main()

@@ -22,9 +22,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'talker = roboto_viz.publisher:main',
-            'gui = gui_app.app:main',
-            'test = roboto_viz.test:main'
+            'gui = gui_app.app:main'
+            # 'test = roboto_viz.test:main'
         ],
     },
 )
