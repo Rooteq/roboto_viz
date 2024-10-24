@@ -2,7 +2,7 @@
 from __future__ import annotations
 import sys
 import os
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QStackedWidget, QLabel, QHBoxLayout
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QStackedWidget, QLabel, QHBoxLayout, QListWidget
 from abc import ABC, abstractmethod
 import yaml
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
@@ -138,58 +138,121 @@ class ActiveView(QWidget):
         self.map_origin = origin_data['origin']
 
         self.map_view.load_image(self.image_path, self.map_origin)
-        # self.map_view.goal_pose_set.connect(self.handle_goal_pose)
-        # self.map_view.mouse_moved.connect(self.print_coordinates)  # Connect to the new signal
-        # self.map_view.mouse_clicked.connect(self.print_coordinates)
 
-        # self.clicks_label = QLabel("Counting: 0 clicks", self)
-        # self.clicks_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        # self.step_label = QLabel("Long-Running Step: 0")
-        # self.step_label.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        # self.count_btn = QPushButton("Click me!", self)
-        # self.count_btn.clicked.connect(self.countClicks)
-        # self.long_running_btn = QPushButton("Long-Running Task!", self)
-        # self.long_running_btn.clicked.connect(self.runLongTask)
-
-        # self.disconnect_btn = QPushButton("Disconnect", self)
-        # self.disconnect_btn.clicked.connect(self.on_disconnect)
-
-        # button_layout = QVBoxLayout()
-        # button_layout.addWidget(self.disconnect_btn)
-        # button_layout.addWidget(self.clicks_label)
-        # button_layout.addWidget(self.count_btn)
-        # button_layout.addStretch()
-        # button_layout.addWidget(self.step_label)
-        # button_layout.addWidget(self.long_running_btn)
-
-        # self.centralWidget.setLayout(main_layout)
-        # Create tab widget for right side
-
-        
+        # TABS
         tab_widget = QTabWidget()
+        
         # Create first tab
         operation_tab = QWidget()
         first_layout = QVBoxLayout(operation_tab)
-        for i in range(3):
-            button = QPushButton(f"Button {i+1} (Tab 1)")
-            first_layout.addWidget(button)
-        tab_widget.addTab(operation_tab, "Operation")
+        self.route_list = QListWidget()
+        # Add example routes
+        example_routes = ["Route A: Warehouse to Loading Dock", 
+                         "Route B: Assembly Line to Storage",
+                         "Route C: Main Entrance to Office"]
+        self.route_list.setFixedHeight(200)
+        self.route_list.addItems(example_routes)
+        first_layout.addWidget(self.route_list)
+        
+        # Create button layout for first row
+        button_layout_1 = QHBoxLayout()
+        self.button_add = QPushButton("Add Route")
+        self.button_remove = QPushButton("Remove Route")
+        button_layout_1.addWidget(self.button_add)
+        button_layout_1.addWidget(self.button_remove)
+        first_layout.addLayout(button_layout_1)
+        
+        # Create button layout for second row
+        button_layout_2 = QHBoxLayout()
+        self.button_set_active = QPushButton("Set Active")
+        button_layout_2.addWidget(self.button_set_active)
+        first_layout.addLayout(button_layout_2)
+        
+        # Add spacing
+        # first_layout.addSpacing(20)
+        first_layout.addStretch()
 
-        # Create second tab
+        # Add the original navigation buttons
+        self.button_go_to_base = QPushButton("Go to base")
+        self.button_go_to_dest = QPushButton("Go to dest")
+        self.button_stop = QPushButton("Stop")
+        first_layout.addWidget(self.button_go_to_base)
+        first_layout.addWidget(self.button_go_to_dest)
+        first_layout.addWidget(self.button_stop)
+        
+        tab_widget.addTab(operation_tab, "Operation")
+        
+        # Connect button signals to slots
+        self.button_add.clicked.connect(self.add_route)
+        self.button_remove.clicked.connect(self.remove_route)
+        self.button_set_active.clicked.connect(self.set_active_route)
+        
+        # Create second tab (unchanged)
         planning_tab = QWidget()
         second_layout = QVBoxLayout(planning_tab)
         for i in range(2):
             button = QPushButton(f"Button {i+1} (Tab 2)")
             second_layout.addWidget(button)
-        tab_widget.addTab(planning_tab, "Planning") 
-
-
+        tab_widget.addTab(planning_tab, "Planning")
+        
         main_layout = QHBoxLayout()
         main_layout.addWidget(self.map_view, 3)
         main_layout.addWidget(tab_widget, 1)
-
         self.setLayout(main_layout)
 
+        # Keep track of active route, MOVE TO NAVDATA
+        self.active_route = None
+        
     def on_disconnect(self):
         print("Disconnecting")
         self.on_disconnection.emit("disconnection")
+
+    def add_route(self):
+        """Add a new example route to the list"""
+        count = self.route_list.count()
+        self.route_list.addItem(f"New Route {count + 1}")
+        
+    def remove_route(self):
+        """Remove the currently selected route"""
+        current_item = self.route_list.currentItem()
+        if current_item:
+            # If removing active route, clear the active route
+            if current_item == self.active_route:
+                self.active_route = None
+            self.route_list.takeItem(self.route_list.row(current_item))
+
+    def set_active_route(self):
+        """Move the selected route to the top of the list and mark it with a green tick"""
+        current_item = self.route_list.currentItem()
+        if current_item:
+            # Clear previous active route's tick
+            if self.active_route:
+                old_text = self.active_route.text()
+                if old_text.startswith("✓ "):
+                    self.active_route.setText(old_text[2:])
+            
+            # Get the current row
+            current_row = self.route_list.row(current_item)
+            
+            # Take the item from the list
+            item = self.route_list.takeItem(current_row)
+            
+            # Add tick to the text if it doesn't already have one
+            if not item.text().startswith("✓ "):
+                item.setText("✓ " + item.text())
+            
+            # Insert it at the top
+            self.route_list.insertItem(0, item)
+            # Select the moved item
+            self.route_list.setCurrentRow(0)
+            
+            # Update the active route reference
+            self.active_route = item
+            
+            # Optional: Set text color to green for active route
+            item.setForeground(Qt.green)
+            
+            # Reset color of other items
+            for i in range(1, self.route_list.count()):
+                other_item = self.route_list.item(i)
+                other_item.setForeground(Qt.black)
