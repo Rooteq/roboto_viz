@@ -25,8 +25,8 @@ class Gui:
 
         self.transition_to(DisconnectedState())
 
-        self.main_view: MainView = MainView()
         self.gui_manager: GuiManager = GuiManager()
+        self.main_view: MainView = MainView()
 
     def setup(self):
         self.handleGui()
@@ -65,6 +65,10 @@ class DisconnectedState(State):
         self.gui.main_view.connection_signal.connect(self.handleConnection)
 
         self.gui.gui_manager.service_availability.connect(self.gui.main_view.disconnected_view.set_availability)
+        
+        self.gui.gui_manager.send_route_names.connect(self.gui.main_view.active_view.active_tools.load_routes)
+        self.gui.main_view.active_view.active_tools.save_current_routes.connect(self.gui.gui_manager.save_routes)
+        self.gui.gui_manager.send_routes()
         # self.gui.main_view.show()
     
     def handleConnection(self):
@@ -85,6 +89,8 @@ class ActiveState(State):
         self.gui.gui_manager.service_availability.connect(self.handleDisconnection)
         self.gui.main_view.set_position_signal.connect(self.gui.gui_manager.handle_goal_pose)
 
+        self.gui.main_view.start_planning.connect(self.startPlanning)
+
     def handleDisconnection(self, availability: bool):
         if(not availability):
             print("handling disconnection!")
@@ -92,3 +98,19 @@ class ActiveState(State):
             self.gui.handleGui()
         else:
             pass 
+    
+    def startPlanning(self):
+        self.gui.transition_to(PlannerState())
+        self.gui.handleGui()
+
+#TODO: handleDisconnection in the planner mode
+class PlannerState(State):
+    def handleGui(self) -> None:
+        self.gui.main_view.switch_to_planner()
+        self.gui.main_view.finish_planning.connect(self.finishPlanning)
+
+        self.gui.gui_manager.update_pose.connect(self.gui.main_view.map_view.update_robot_pose)
+
+    def finishPlanning(self):
+        self.gui.transition_to(ActiveState())
+        self.gui.handleGui()

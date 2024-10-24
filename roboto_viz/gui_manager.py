@@ -8,7 +8,7 @@ from rclpy.lifecycle.node import LifecycleState, TransitionCallbackReturn
 from rclpy.executors import MultiThreadedExecutor
 from std_srvs.srv import Trigger
 from geometry_msgs.msg import TwistStamped
-from PyQt5.QtCore import QThread, pyqtSignal, QTimer, pyqtSlot
+from PyQt5.QtCore import QThread, pyqtSignal, QTimer, pyqtSlot, QObject
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
 import threading
 from nav2_simple_commander.robot_navigator import BasicNavigator
@@ -17,6 +17,9 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.duration import Duration
 
 import math
+
+from roboto_viz.route_manager import RouteManager
+from typing import Dict, List, Tuple
 
 class ManagerNode(LifecycleNode):
     def __init__(self):
@@ -119,14 +122,22 @@ class ManagerNode(LifecycleNode):
         # if self.listener_active and self.twist_callback:
         self.listener_pose_callback(msg)
 
-class NavData():
+class NavData(QObject):
+    # send_routes = pyqtSignal(list)
+
     def __init__(self):
+        super().__init__()
+        self.route_manager = RouteManager()
         self.navigator: BasicNavigator = BasicNavigator('gui_navigator_node')
-        self.goal_pose = PoseStamped()
-        self.goal_pose.header.frame_id = 'map'
-        self.goal_pose.pose.position.x = 0.0
-        self.goal_pose.pose.position.y = 0.0
-        self.goal_pose.pose.orientation.w = 0.0
+
+        self.routes: Dict[str, List[Tuple[float, float]]]
+
+        self.routes = self.route_manager.load_routes()
+
+    def save_routes(self, new_routes: Dict[str, List[Tuple[float, float]]]):
+        self.route_manager.save_routes(new_routes)
+
+        # self.send_routes.emit(list(self.routes.keys()))
 
 class Navigator(QThread):
     finished = pyqtSignal()  # Emitted when a goal is reached
@@ -204,6 +215,8 @@ class GuiManager(QThread):
 
     trigger_disconnect = pyqtSignal(bool)
 
+    send_route_names = pyqtSignal(dict)
+
     def __init__(self):
         super().__init__()
         self.node: ManagerNode = None
@@ -211,7 +224,16 @@ class GuiManager(QThread):
         self.nav_data: NavData = NavData()
         self.navigator: Navigator = Navigator(self.nav_data)
 
+        # self.nav_data.send_routes.connect(lambda: self.send_route_names)
+
         self.navigator.start()
+
+    def send_routes(self):
+        self.send_route_names.emit(self.nav_data.routes)
+
+    pyqtSignal(dict)
+    def save_routes(self, new_routes: dict):
+        self.nav_data.save_routes(new_routes)
 
     def trigger_configure(self):
         self.node.trigger_configure()

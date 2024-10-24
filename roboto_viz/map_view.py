@@ -1,9 +1,13 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
 from PyQt5.QtGui import QMouseEvent, QPixmap, QPainter, QTransform
 from PyQt5.QtCore import QRectF, pyqtSignal, Qt
+from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsTextItem
+from PyQt5.QtGui import QPen, QBrush, QColor, QFont
+from PyQt5.QtCore import Qt, QPointF
 
 from roboto_viz.robot_item import RobotItem
 from roboto_viz.goal_arrow import GoalArrow
+
 
 class MapView(QGraphicsView):
     goal_pose_set = pyqtSignal(float, float, float)
@@ -22,6 +26,8 @@ class MapView(QGraphicsView):
         self.scene.addItem(self.robot_item)
         self.goal_arrow = GoalArrow()
         self.scene.addItem(self.goal_arrow)
+
+        self.point_items = []  # Will store tuples of (ellipse, text) items
 
         self.drawing_arrow = False
 
@@ -96,6 +102,72 @@ class MapView(QGraphicsView):
 
     def clear_goal_arrow(self):
         self.goal_arrow.hide_arrow()
+
+    def display_points(self, points):
+        """
+        Display numbered blue dots at the specified points.
+        Args:
+            points: List of (x,y,z,w) coordinates
+        """
+        # Clear existing points first
+        self.clear_points()
+        
+        # Define point appearance
+        point_radius = 5
+        point_color = QColor(0, 0, 255)  # Blue
+        
+        # Create small font for numbers
+        font = QFont()
+        font.setPointSize(3)  # Smaller font size
+        
+        for i, point in enumerate(points):
+            # Convert map coordinates to scene coordinates
+            map_x = (point[0] - self.map_origin[0]) * 20
+            map_y = self.pixmap.rect().height() - ((point[1] - self.map_origin[1]) * 20)
+            
+            # Create the dot
+            ellipse = QGraphicsEllipseItem(
+                map_x - point_radius/2,
+                map_y - point_radius/2,
+                point_radius,
+                point_radius
+            )
+            ellipse.setBrush(QBrush(point_color))
+            ellipse.setPen(QPen(point_color))
+            
+            # Create the number label with smaller font
+            text = QGraphicsTextItem(str(i))
+            text.setFont(font)
+            text.setDefaultTextColor(Qt.white)
+            
+            # Get the exact bounding rectangle of the text
+            text_bounds = text.boundingRect()
+            
+            # Calculate center position of the dot
+            dot_center_x = map_x
+            dot_center_y = map_y
+            
+            # Position text so its center aligns with dot's center
+            text_x = dot_center_x - text_bounds.width()/2
+            text_y = dot_center_y - text_bounds.height()/2
+            
+            text.setPos(text_x, text_y)
+            
+            # Add items to scene
+            self.scene.addItem(ellipse)
+            self.scene.addItem(text)
+            
+            # Store items for later removal
+            self.point_items.append((ellipse, text))
+
+    def clear_points(self):
+        """
+        Remove all point markers from the map.
+        """
+        for ellipse, text in self.point_items:
+            self.scene.removeItem(ellipse)
+            self.scene.removeItem(text)
+        self.point_items.clear()
 
     # def mousePressEvent(self, event) -> None:
     #     scene_pos = self.mapToScene(event.pos())
