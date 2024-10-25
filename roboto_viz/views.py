@@ -141,6 +141,9 @@ class ActiveTools(QWidget):
     draw_points = pyqtSignal(list)
     stop_drawing_points = pyqtSignal()
 
+    start_nav = pyqtSignal(str)
+    stop_nav = pyqtSignal()
+
     def __init__(self, routes: dict):
         super().__init__()
 
@@ -191,7 +194,11 @@ class ActiveTools(QWidget):
         self.button_add.clicked.connect(lambda: self.start_planning.emit())
         self.button_remove.clicked.connect(self.remove_route)
         self.button_set_active.clicked.connect(self.set_active_route)
-        
+
+        # Change to a separate callback method, use bools for direction
+        self.button_go_to_dest.clicked.connect(self.handle_navigate)
+        self.button_stop.clicked.connect(lambda: self.stop_nav.emit())
+
         # Create second tab (unchanged)
         planning_tab = QWidget()
         second_layout = QVBoxLayout(planning_tab)
@@ -206,7 +213,11 @@ class ActiveTools(QWidget):
 
         # Keep track of active route, MOVE TO NAVDATA
         self.active_route = None
-        
+
+    def handle_navigate(self):
+        if self.active_route:
+            self.start_nav.emit(self.active_route.text()[2:])
+
 
     # def add_route(self):
     #     """Add a new example route to the list"""
@@ -352,7 +363,6 @@ class ActiveView(QWidget):
     finish_planning = pyqtSignal()
     on_disconnection = pyqtSignal(str)
     start_planning = pyqtSignal()
-
 
     def __init__(self, map_view : MapView):
         super().__init__()

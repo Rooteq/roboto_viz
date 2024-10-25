@@ -111,6 +111,11 @@ class ActiveState(State):
         self.gui.main_view.switch_to_active()
 
         self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.start_nav,
+            self.gui.gui_manager.handle_set_route
+        )
+
+        self.connect_and_store(
             self.gui.gui_manager.service_availability,
             self.gui.main_view.disconnected_view.set_availability
         )

@@ -7,7 +7,7 @@ from rclpy.lifecycle.node import LifecycleState, TransitionCallbackReturn
 
 from rclpy.executors import MultiThreadedExecutor
 from std_srvs.srv import Trigger
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import TwistStamped, Quaternion
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer, pyqtSlot, QObject
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
 import threading
@@ -20,6 +20,10 @@ import math
 
 from roboto_viz.route_manager import RouteManager
 from typing import Dict, List, Tuple
+
+from copy import deepcopy
+
+from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 
 class ManagerNode(LifecycleNode):
     def __init__(self):
@@ -148,7 +152,7 @@ class Navigator(QThread):
         super().__init__()
         self.nav_data = nav_data
         self._running = True
-        self._new_goal = None
+        self._new_goal: list = None
         self._goal_lock = threading.Lock()  # For thread-safe goal updates
         
     def stop(self):
@@ -157,10 +161,10 @@ class Navigator(QThread):
             self.nav_data.navigator.cancelTask()
         self.wait()
 
-    def set_goal(self, x: float, y: float, theta: float):
+    def set_goal(self, route: str):
         """Set a new goal, replacing any existing one"""
         with self._goal_lock:
-            self._new_goal = (x, y, theta)
+            self._new_goal = self.nav_data.routes[route]
             # Cancel current navigation if there is one
             if not self.nav_data.navigator.isTaskComplete():
                 self.nav_data.navigator.cancelTask()
@@ -178,18 +182,27 @@ class Navigator(QThread):
                 continue
                 
             try:
-                x, y, theta = current_goal
-                
+                points_on_route = []
+
+                goal_pose = PoseStamped()
+                goal_pose.header.frame_id = 'map'
+                goal_pose.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
+
+                for point in current_goal:
+                    goal_pose.pose.position.x = point[0]
+                    goal_pose.pose.position.y = point[1]
+                    goal_pose.pose.position.z = 0.0
+
+                    q = quaternion_from_euler(0,0,point[3])
+                    goal_pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+                    points_on_route.append(deepcopy(goal_pose))
+
                 # Update goal pose
-                self.nav_data.goal_pose.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
-                self.nav_data.goal_pose.pose.position.x = x
-                self.nav_data.goal_pose.pose.position.y = y
-                self.nav_data.goal_pose.pose.orientation.z = math.sin(theta / 2)
-                self.nav_data.goal_pose.pose.orientation.w = math.cos(theta / 2)
                 
                 # Start navigation
-                self.nav_data.navigator.goToPose(self.nav_data.goal_pose)
-                # self.nav_data.navigator.goThroughPoses()
+
+                # self.nav_data.navigator.goToPose(self.nav_data.goal_pose)
+                self.nav_data.navigator.goThroughPoses(points_on_route)
                 self.nav_data.navigator.waitUntilNav2Active()
                 
                 while not self.nav_data.navigator.isTaskComplete() and self._running:
@@ -279,13 +292,7 @@ class GuiManager(QThread):
     def emit_disconnect_call(self):
         self.trigger_disconnect.emit(True)
 
-    pyqtSlot()
-    def handle_goal_pose(self, x, y, theta):
-        print(f"New goal pose set: x={x:.2f}, y={y:.2f}, theta={theta:.2f}")
-        
-        # self.nav_data.goal_pose.pose.position.x = x
-        # self.nav_data.goal_pose.pose.position.y = y
-        # self.nav_data.goal_pose.pose.orientation.z = math.sin(theta / 2)
-        # self.nav_data.goal_pose.pose.orientation.w = math.cos(theta / 2)
-
-        self.navigator.set_goal(x, y, theta)
+    pyqtSlot(str)
+    def handle_set_route(self, route: str):
+        print("New goal set!")
+        self.navigator.set_goal(route)
