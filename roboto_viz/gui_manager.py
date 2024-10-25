@@ -189,6 +189,7 @@ class Navigator(QThread):
                 
                 # Start navigation
                 self.nav_data.navigator.goToPose(self.nav_data.goal_pose)
+                # self.nav_data.navigator.goThroughPoses()
                 self.nav_data.navigator.waitUntilNav2Active()
                 
                 while not self.nav_data.navigator.isTaskComplete() and self._running:

@@ -71,6 +71,9 @@ class MainView(QMainWindow):
         self.active_view.active_tools.draw_points.connect(self.map_view.display_points)
         self.active_view.active_tools.stop_drawing_points.connect(self.map_view.clear_points)
 
+        self.active_view.planning_tools.draw_points.connect(self.map_view.display_points)
+        self.active_view.planning_tools.stop_drawing_points.connect(self.map_view.clear_points)
+
     def switch_to_disconnected(self):
         self.stacked_widget.setCurrentWidget(self.disconnected_view)
         self.disconnected_view.on_connection.connect(self.on_connection)
@@ -222,6 +225,8 @@ class ActiveTools(QWidget):
             item = QListWidgetItem(route)
             self.route_list.addItem(item)
 
+        self.stop_drawing_points.emit()
+
 
     def remove_route(self):
         """Remove the currently selected route"""
@@ -286,6 +291,10 @@ class ActiveTools(QWidget):
 class PlanningTools(QWidget):
     finish_planning = pyqtSignal()
     save_current_routes = pyqtSignal(dict)
+
+    draw_points = pyqtSignal(list)
+    stop_drawing_points = pyqtSignal()
+
     def __init__(self, routes: dict):
         super().__init__()
 
@@ -322,9 +331,11 @@ class PlanningTools(QWidget):
         if self._last_point != new_point:  # Only append if different
             self.new_route.append(new_point)
             self._last_point = new_point
+            self.draw_points.emit(self.new_route)
 
     def exit_cancel(self):
         self.new_route.clear()
+        self.stop_drawing_points.emit()
         self.finish_planning.emit()
     
     def exit_done(self):
@@ -333,6 +344,7 @@ class PlanningTools(QWidget):
             self.save_current_routes.emit(self.routes)
             self.new_route.clear()
             self._last_point = None
+            self.stop_drawing_points.emit()
             self.finish_planning.emit()
         
 
@@ -340,6 +352,7 @@ class ActiveView(QWidget):
     finish_planning = pyqtSignal()
     on_disconnection = pyqtSignal(str)
     start_planning = pyqtSignal()
+
 
     def __init__(self, map_view : MapView):
         super().__init__()
