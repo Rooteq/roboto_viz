@@ -132,10 +132,11 @@ class NavData(QObject):
 
         self.routes: Dict[str, List[Tuple[float, float]]]
 
-        self.routes = self.route_manager.load_routes()
-
     def save_routes(self, new_routes: Dict[str, List[Tuple[float, float]]]):
         self.route_manager.save_routes(new_routes)
+    
+    def load_routes(self):
+        self.routes = self.route_manager.load_routes()
 
         # self.send_routes.emit(list(self.routes.keys()))
 
@@ -229,6 +230,7 @@ class GuiManager(QThread):
         self.navigator.start()
 
     def send_routes(self):
+        self.nav_data.load_routes()
         self.send_route_names.emit(self.nav_data.routes)
 
     pyqtSignal(dict)

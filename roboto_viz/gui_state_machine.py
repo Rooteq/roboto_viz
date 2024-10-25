@@ -34,6 +34,8 @@ class Gui:
 
     def transition_to(self, state: State):
         print(f"Context: Transition to {type(state).__name__}")
+        if self._state is not None:
+            self._state.cleanup_connections()
         self._state = state
         self._state.gui = self
 
@@ -46,6 +48,7 @@ class Gui:
 class State(ABC):
     def __init__(self):
         super().__init__()
+        self._connections = []  # Store signal connections
     
     @property
     def gui(self) -> Gui:
@@ -55,6 +58,22 @@ class State(ABC):
     def gui(self, gui: Gui) -> None:
         self._gui = gui
 
+    def cleanup_connections(self):
+        """Disconnect all signals registered in this state"""
+        for connection in self._connections:
+            try:
+                connection.disconnect()
+            except TypeError:
+                # Handle case where connection might already be disconnected
+                pass
+        self._connections.clear()
+
+    def connect_and_store(self, signal, slot):
+        """Connect a signal to a slot and store the connection"""
+        connection = signal.connect(slot)
+        self._connections.append(signal)
+        return connection
+
     @abstractmethod
     def handleGui(self) -> None:
         pass
@@ -62,14 +81,19 @@ class State(ABC):
 class DisconnectedState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_disconnected()
-        self.gui.main_view.connection_signal.connect(self.handleConnection)
-
-        self.gui.gui_manager.service_availability.connect(self.gui.main_view.disconnected_view.set_availability)
-        
-        self.gui.gui_manager.send_route_names.connect(self.gui.main_view.active_view.active_tools.load_routes)
-        self.gui.main_view.active_view.active_tools.save_current_routes.connect(self.gui.gui_manager.save_routes)
-        self.gui.gui_manager.send_routes()
-        # self.gui.main_view.show()
+        self.connect_and_store(self.gui.main_view.connection_signal, self.handleConnection)
+        self.connect_and_store(
+            self.gui.gui_manager.service_availability,
+            self.gui.main_view.disconnected_view.set_availability
+        )
+        self.connect_and_store(
+            self.gui.gui_manager.send_route_names,
+            self.gui.main_view.active_view.load__routes
+        )
+        self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.save_current_routes,
+            self.gui.gui_manager.save_routes
+        )
     
     def handleConnection(self):
         print("handling connection")
@@ -85,21 +109,47 @@ class DisconnectedState(State):
 class ActiveState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_active()
-        self.gui.gui_manager.update_pose.connect(self.gui.main_view.active_view.map_view.update_robot_pose)
-        self.gui.gui_manager.service_availability.connect(self.handleDisconnection)
-        self.gui.main_view.set_position_signal.connect(self.gui.gui_manager.handle_goal_pose)
 
-        self.gui.main_view.start_planning.connect(self.startPlanning)
+        self.connect_and_store(
+            self.gui.gui_manager.service_availability,
+            self.gui.main_view.disconnected_view.set_availability
+        )
+
+        self.connect_and_store(
+            self.gui.gui_manager.send_route_names,
+            self.gui.main_view.active_view.load__routes
+        )
+        
+        self.connect_and_store(
+            self.gui.gui_manager.update_pose,
+            self.gui.main_view.active_view.map_view.update_robot_pose
+        )
+        self.connect_and_store(
+            self.gui.gui_manager.service_availability,
+            self.handleDisconnection
+        )
+        self.connect_and_store(
+            self.gui.main_view.start_planning,
+            self.startPlanning
+        )
+        self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.save_current_routes,
+            self.gui.gui_manager.save_routes
+        )
+
+        self.gui.gui_manager.send_routes()
 
     def handleDisconnection(self, availability: bool):
         if(not availability):
             print("handling disconnection!")
+
             self.gui.transition_to(DisconnectedState())
             self.gui.handleGui()
         else:
             pass 
     
     def startPlanning(self):
+        # self.gui.main_view.set_position_signal.disconnect()
         self.gui.transition_to(PlannerState())
         self.gui.handleGui()
 
@@ -107,10 +157,32 @@ class ActiveState(State):
 class PlannerState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_planner()
-        self.gui.main_view.finish_planning.connect(self.finishPlanning)
 
-        self.gui.gui_manager.update_pose.connect(self.gui.main_view.map_view.update_robot_pose)
+        self.connect_and_store(
+            self.gui.gui_manager.send_route_names,
+            self.gui.main_view.active_view.load__routes
+        )
+
+        self.connect_and_store(
+            self.gui.main_view.finish_planning,
+            self.finishPlanning
+        )
+        self.connect_and_store(
+            self.gui.main_view.set_position_signal,
+            self.gui.main_view.active_view.planning_tools.setPoint
+        )
+        self.connect_and_store(
+            self.gui.gui_manager.update_pose,
+            self.gui.main_view.map_view.update_robot_pose
+        )
+        self.connect_and_store(
+            self.gui.main_view.active_view.planning_tools.save_current_routes,
+            self.gui.gui_manager.save_routes
+        )
+
+        self.gui.gui_manager.send_routes()
 
     def finishPlanning(self):
+        self.gui.main_view.set_position_signal.disconnect(self.gui.main_view.active_view.planning_tools.setPoint)
         self.gui.transition_to(ActiveState())
         self.gui.handleGui()

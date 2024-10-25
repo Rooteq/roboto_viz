@@ -15,7 +15,7 @@ from std_srvs.srv import Trigger
 import copy
 from ament_index_python.packages import get_package_share_directory
 
-from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QTabWidget
+from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QTabWidget, QLineEdit
 # internal imports:
 from roboto_viz.map_view import MapView
 from roboto_viz.goal_arrow import GoalArrow
@@ -68,11 +68,8 @@ class MainView(QMainWindow):
         self.stacked_widget.addWidget(self.disconnected_view)
         self.stacked_widget.addWidget(self.active_view)
 
-        self.active_view.active_tools.draw_points.connect(self.draw_points)
-
-    pyqtSlot(list)
-    def draw_points(self, points: list):
-        self.map_view.display_points(points)
+        self.active_view.active_tools.draw_points.connect(self.map_view.display_points)
+        self.active_view.active_tools.stop_drawing_points.connect(self.map_view.clear_points)
 
     def switch_to_disconnected(self):
         self.stacked_widget.setCurrentWidget(self.disconnected_view)
@@ -139,11 +136,12 @@ class ActiveTools(QWidget):
     save_current_routes = pyqtSignal(dict)
 
     draw_points = pyqtSignal(list)
+    stop_drawing_points = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, routes: dict):
         super().__init__()
 
-        self.routes: dict = None
+        self.routes = routes
 
         # TABS
         main_layout = QVBoxLayout()
@@ -213,17 +211,14 @@ class ActiveTools(QWidget):
     #     # self.route_list.addItem(f"New Route {count + 1}")
     #     self.start_planning.emit()
 
-    @pyqtSlot(dict)
-    def load_routes(self, route_dict: dict):
+    def update_routes(self):
         """Load routes from received list"""
         # Clear existing routes
         self.route_list.clear()
         self.active_route = None
-
-        self.routes = route_dict
         
         # Add new routes
-        for route in list(route_dict.keys()):
+        for route in list(self.routes.keys()):
             item = QListWidgetItem(route)
             self.route_list.addItem(item)
 
@@ -232,12 +227,21 @@ class ActiveTools(QWidget):
         """Remove the currently selected route"""
         current_item = self.route_list.currentItem()
         if current_item:
+            route_name = current_item.text()
+            if route_name.startswith("✓ "):
+                route_name = route_name[2:]  # Remove the tick if present
+            
             # If removing active route, clear the active route
             if current_item == self.active_route:
                 self.active_route = None
-            self.routes.pop(current_item.text())
-            self.route_list.takeItem(self.route_list.row(current_item))
+            
+            self.routes.pop(route_name)  # Use the clean route name
+            self.update_routes()
+            # self.route_list.takeItem(self.route_list.row(current_item))
+            
             self.save_current_routes.emit(self.routes)
+            self.stop_drawing_points.emit()
+
 
     def set_active_route(self):
         """Move the selected route to the top of the list and mark it with a green tick"""
@@ -281,18 +285,56 @@ class ActiveTools(QWidget):
 
 class PlanningTools(QWidget):
     finish_planning = pyqtSignal()
-    def __init__(self):
+    save_current_routes = pyqtSignal(dict)
+    def __init__(self, routes: dict):
         super().__init__()
 
-        self.main_layout = QVBoxLayout()        
-        self.finish_planning_button = QPushButton("test")
+        self.routes: dict = routes
 
-        self.finish_planning_button.clicked.connect(lambda: self.finish_planning.emit())
+        self.new_route: list = list()
+
+        self.setup_ui()
+        
+    def setup_ui(self):
+        self.route_name = QLineEdit(self)
+        self.main_layout = QVBoxLayout()
+         
+        self.done_button = QPushButton("Done")
+        self.cancel_button = QPushButton("Cancel")
+
+        self._last_point = None  # Store last point to prevent duplicates
+
+        self.done_button.clicked.connect(self.exit_done)
+        self.cancel_button.clicked.connect(self.exit_cancel)
 
         # layout.addWidget(self.map_view, 3)
         # layout.addWidget(self.finish_planning_button, 1)
-        self.main_layout.addWidget(self.finish_planning_button)
+        self.main_layout.addWidget(self.route_name)
+        self.main_layout.addStretch()
+        self.main_layout.addWidget(self.done_button)
+        self.main_layout.addWidget(self.cancel_button)
         self.setLayout(self.main_layout)
+
+    pyqtSlot(float,float,float)
+    def setPoint(self, x, y, theta):
+        # Check if this is a duplicate point
+        new_point = [x, y, 0.0, theta]
+        if self._last_point != new_point:  # Only append if different
+            self.new_route.append(new_point)
+            self._last_point = new_point
+
+    def exit_cancel(self):
+        self.new_route.clear()
+        self.finish_planning.emit()
+    
+    def exit_done(self):
+        if self.route_name.text().strip():  # Only save if name is not empty
+            self.routes[self.route_name.text()] = self.new_route.copy()  # Make a copy
+            self.save_current_routes.emit(self.routes)
+            self.new_route.clear()
+            self._last_point = None
+            self.finish_planning.emit()
+        
 
 class ActiveView(QWidget):
     finish_planning = pyqtSignal()
@@ -304,8 +346,10 @@ class ActiveView(QWidget):
 
         self.map_view = map_view
 
-        self.active_tools = ActiveTools()
-        self.planning_tools = PlanningTools()
+        self.routes: dict = dict()
+
+        self.active_tools = ActiveTools(self.routes)
+        self.planning_tools = PlanningTools(self.routes)
 
         self.stacked_widget = QStackedWidget()
         # self.layout.addWidget(self.stacked_widget)
@@ -317,6 +361,12 @@ class ActiveView(QWidget):
         self.main_layout.addWidget(self.map_view, 3)
         self.main_layout.addWidget(self.stacked_widget, 1)
         self.setLayout(self.main_layout)
+
+    pyqtSlot(dict)
+    def load__routes(self, routes):
+        self.routes.clear()
+        self.routes.update(routes) 
+        self.active_tools.update_routes()
 
     def switch_to_active_tools(self):
         self.stacked_widget.setCurrentWidget(self.active_tools)
