@@ -202,7 +202,8 @@ class Navigator(QThread):
                 # Start navigation
 
                 # self.nav_data.navigator.goToPose(self.nav_data.goal_pose)
-                self.nav_data.navigator.goThroughPoses(points_on_route)
+                self.nav_data.navigator.followWaypoints(points_on_route)
+                # self.nav_data.navigator.goThroughPoses(points_on_route)
                 self.nav_data.navigator.waitUntilNav2Active()
                 
                 while not self.nav_data.navigator.isTaskComplete() and self._running:
@@ -210,10 +211,10 @@ class Navigator(QThread):
                     if self._new_goal is not None:
                         break  # Exit this loop to process the new goal
                         
-                    feedback = self.nav_data.navigator.getFeedback()
-                    if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
-                        self.nav_data.navigator.cancelTask()
-                        break
+                    # feedback = self.nav_data.navigator.getFeedback()
+                    # if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
+                    #     self.nav_data.navigator.cancelTask()
+                    #     break
                 
                 if self._running and self.nav_data.navigator.isTaskComplete():
                     self.finished.emit()
