@@ -149,7 +149,7 @@ class ActiveTools(QWidget):
     draw_points = pyqtSignal(list)
     stop_drawing_points = pyqtSignal()
 
-    start_nav = pyqtSignal(str)
+    start_nav = pyqtSignal(str, bool)
     stop_nav = pyqtSignal()
 
     def __init__(self, routes: dict):
@@ -204,7 +204,8 @@ class ActiveTools(QWidget):
         self.button_set_active.clicked.connect(self.set_active_route)
 
         # Change to a separate callback method, use bools for direction
-        self.button_go_to_dest.clicked.connect(self.handle_navigate)
+        self.button_go_to_dest.clicked.connect(self.handle_navigate_to_dest)
+        self.button_go_to_base.clicked.connect(self.handle_navigate_to_base)
         self.button_stop.clicked.connect(lambda: self.stop_nav.emit())
 
         # Create second tab (unchanged)
@@ -222,9 +223,13 @@ class ActiveTools(QWidget):
         # Keep track of active route, MOVE TO NAVDATA
         self.active_route = None
 
-    def handle_navigate(self):
+    def handle_navigate_to_dest(self):
         if self.active_route:
-            self.start_nav.emit(self.active_route.text()[2:])
+            self.start_nav.emit(self.active_route.text()[2:], True)
+
+    def handle_navigate_to_base(self):
+        if self.active_route:
+            self.start_nav.emit(self.active_route.text()[2:], False)
 
 
     # def add_route(self):

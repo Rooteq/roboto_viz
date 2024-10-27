@@ -153,17 +153,23 @@ class Navigator(QThread):
         self._running = True
         self._new_goal: list = None
         self._goal_lock = threading.Lock()  # For thread-safe goal updates
+
+        self._to_dest: bool = True
         
     def stop(self):
-        self._running = False
+        # self._running = False
         if self.nav_data.navigator.isTaskComplete() is False:
             self.nav_data.navigator.cancelTask()
-        self.wait()
+        # self.wait() # wait needed?
 
-    def set_goal(self, route: str):
+    def set_goal(self, route: str, to_dest: bool):
         """Set a new goal, replacing any existing one"""
         with self._goal_lock:
-            self._new_goal = self.nav_data.routes[route]
+            self._to_dest = to_dest
+            # self._running = True
+            self._new_goal = deepcopy(self.nav_data.routes[route])
+            if not to_dest:
+                self._new_goal.reverse()
             # Cancel current navigation if there is one
             if not self.nav_data.navigator.isTaskComplete():
                 self.nav_data.navigator.cancelTask()
@@ -192,8 +198,13 @@ class Navigator(QThread):
                     goal_pose.pose.position.y = point[1]
                     goal_pose.pose.position.z = 0.0
 
-                    q = quaternion_from_euler(0,0,point[3])
-                    goal_pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+                    if self._to_dest:
+                        q = quaternion_from_euler(0,0,point[3])
+                        goal_pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+                    else:
+                        q = quaternion_from_euler(0,0,(point[3] + math.pi))
+                        goal_pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+
                     points_on_route.append(deepcopy(goal_pose))
 
                 # Update goal pose
@@ -311,6 +322,10 @@ class GuiManager(QThread):
         self.update_pose.emit(x, y, theta)
 
     pyqtSlot(str)
-    def handle_set_route(self, route: str):
-        print("New goal set!")
-        self.navigator.set_goal(route)
+    def handle_set_route(self, route: str, to_dest: bool):
+        print(f"New goal set!, To_dest: {to_dest}")
+        self.navigator.set_goal(route, to_dest)
+
+    pyqtSlot()
+    def stop_nav(self):
+        self.navigator.stop()

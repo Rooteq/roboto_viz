@@ -130,6 +130,11 @@ class ActiveState(State):
         )
 
         self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.stop_nav,
+            self.gui.gui_manager.stop_nav
+        )
+
+        self.connect_and_store(
             self.gui.gui_manager.update_pose,
             self.gui.main_view.active_view.map_view.update_robot_pose
         )
