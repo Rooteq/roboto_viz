@@ -17,7 +17,7 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.duration import Duration
 
 import math
-
+from enum import Enum
 from roboto_viz.route_manager import RouteManager
 from typing import Dict, List, Tuple
 
@@ -25,39 +25,54 @@ from copy import deepcopy
 
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 
+class LState(Enum):
+    UNCONFIGURED = 0
+    INACTIVE = 1
+    ACTIVE = 2
+
 class ManagerNode(LifecycleNode):
     def __init__(self):
         super().__init__('gui_manager_node')
         self.cli = self.create_client(Trigger, 'trigger_service')
         self.twist_callback = None
 
-        self.srv_available: bool = False
-        
-        self.service_response_callback = None
+
+        #CALLBACKS: 
         self.service_availability_callback = None
         self.listener_pose_callback = None
         self.disconnect_callback = None
+        self.connect_callback = None
 
-        self.listener_active = False
+        #INTERNAL STATES:
+        self.srv_available: bool = False
+        self.pose_subscriber: bool = None
+
+        self._current_state: LState = LState.UNCONFIGURED
+        self._current_state = LState.UNCONFIGURED
+
         self.check_service_timer = self.create_timer(1.0, self.check_service_availability)
-
-        self.pose_subscriber = None
-
         self.get_logger().info("Initialized Lifecycle node!")
 
     # On configure start sending service calls, activates service when receives callback (activates either setting initPos or just activates)
     # Call on_configure when the service is avaiable and the button for connection is clicked
     def on_configure(self, previous_state: LifecycleState):
+        self.get_logger().info("configure")
         self.service_call_timer = self.create_timer(2.0, self.periodic_service_call)
+
+        self._current_state = LState.INACTIVE
+
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, previous_state):
-        self.destroy_timer(self.service_call_timer)
         self.get_logger().info("cleanup")
+        self.destroy_timer(self.service_call_timer)
+
+        self._current_state = LState.UNCONFIGURED
+
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, previous_state):
-        self.get_logger().info("creating subscription")
+        self.get_logger().info("activate")
         if self.pose_subscriber is None:
             self.pose_subscriber = self.create_subscription(
                 TwistStamped,
@@ -65,15 +80,18 @@ class ManagerNode(LifecycleNode):
                 self.pose_callback,
                 10
             )
+
+        self._current_state = LState.ACTIVE
+
         return super().on_activate(previous_state)
 
     def on_deactivate(self, state):
+        self.get_logger().info('deactivate')
         if self.pose_subscriber is not None:
             self.destroy_subscription(self.pose_subscriber)
             self.pose_subscriber = None
-            self.get_logger().info('Destroyed subscriber')
 
-            self.listener_active = False
+        self._current_state = LState.INACTIVE
 
         return super().on_deactivate(state)
 
@@ -81,24 +99,14 @@ class ManagerNode(LifecycleNode):
         if self.cli.service_is_ready():
             self.send_request()
         else:
-            # pass
-            # self.get_logger().info('Service is not available for periodic call')
             self.trigger_deactivate()
             self.trigger_cleanup()
+            self.disconnect_callback()
 
     def check_service_availability(self):
         available = self.cli.service_is_ready()
-        if available:
-            self.srv_available = True
-            self.service_availability_callback(available)
+        self.service_availability_callback(available)
         
-        if not available and self.srv_available:
-            self.srv_available = False
-            self.listener_active = False
-            self.service_availability_callback(available)
-        
-
-
     def send_request(self):
         req = Trigger.Request()
         future = self.cli.call_async(req)
@@ -108,27 +116,18 @@ class ManagerNode(LifecycleNode):
         try:
             response = future.result()
             if response.success:
-                if not self.listener_active:
+                if self._current_state == LState.INACTIVE:
                     self.trigger_activate()
-                
-                self.listener_active = True
+                    self.connect_callback()
             else:
                 self.get_logger().info('Service call failed. Twist listener remains inactive.')
-                self.listener_active = False
-            if self.service_response_callback:
-                self.service_response_callback(response.success)
         except Exception as e:
             self.get_logger().error(f'Service call failed: {str(e)}')
-            if self.service_response_callback:
-                self.service_response_callback(False)
 
     def pose_callback(self, msg: TwistStamped):
-        # if self.listener_active and self.twist_callback:
         self.listener_pose_callback(msg)
 
 class NavData(QObject):
-    # send_routes = pyqtSignal(list)
-
     def __init__(self):
         super().__init__()
         self.route_manager = RouteManager()
@@ -226,10 +225,26 @@ class Navigator(QThread):
 
 class GuiManager(QThread):
     service_response = pyqtSignal(bool)
-    service_availability = pyqtSignal(bool)
     update_pose = pyqtSignal(float, float, float)
 
-    trigger_disconnect = pyqtSignal(bool)
+    """ 
+    DISCONNECTED STATE:
+        service availability dictates if user should be able to connect 
+        after calling the self.trigger_configure() the gui should send trigger_connection() which would change the app state to active
+
+        trigger_disconnection disconnected
+    ACTIVE STATE:
+        service availability disconnected
+        trigger_connection disconnected
+        
+        trigger_disconnection should change the app state to disconnected (service availabilty connected in DISCONNECTED STATE)
+
+    PLANNING STATE:
+        as ACTIVE_STATE
+    """
+    service_availability = pyqtSignal(bool) #Periodic call
+    trigger_disconnect = pyqtSignal()
+    trigger_connection = pyqtSignal()
 
     send_route_names = pyqtSignal(dict)
 
@@ -252,6 +267,7 @@ class GuiManager(QThread):
     def save_routes(self, new_routes: dict):
         self.nav_data.save_routes(new_routes)
 
+    @pyqtSlot()
     def trigger_configure(self):
         self.node.trigger_configure()
 
@@ -263,10 +279,12 @@ class GuiManager(QThread):
     def run(self):
         self.node = ManagerNode()
         self.executor.add_node(self.node)
-        self.node.service_response_callback = self.emit_service_response
+
         self.node.service_availability_callback = self.emit_service_availability
         self.node.listener_pose_callback = self.emit_pose 
         self.node.disconnect_callback = self.emit_disconnect_call
+        self.node.connect_callback = self.emit_connect_call
+
         self.executor.spin()
 
     def stop(self):
@@ -277,21 +295,20 @@ class GuiManager(QThread):
             self.node.destroy_node()
         self.executor.shutdown()
 
-    def emit_service_response(self, success):
-        self.service_response.emit(success)
-
     def emit_service_availability(self, available):
         self.service_availability.emit(available)
+
+    def emit_disconnect_call(self):
+        self.trigger_disconnect.emit()
     
+    def emit_connect_call(self):
+        self.trigger_connection.emit()
+
     def emit_pose(self, msg: TwistStamped):
         x = msg.twist.linear.x
         y = msg.twist.linear.y
         theta = -msg.twist.angular.z
-        # print("emitting pose!")
         self.update_pose.emit(x, y, theta)
-
-    def emit_disconnect_call(self):
-        self.trigger_disconnect.emit(True)
 
     pyqtSlot(str)
     def handle_set_route(self, route: str):

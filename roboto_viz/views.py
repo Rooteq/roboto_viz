@@ -111,6 +111,7 @@ class DisconnectedView(QWidget):
         super().__init__()
         # self.main_view = main_view
         self.setup_ui()
+        self.wait_for_connection: bool = False
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -128,9 +129,16 @@ class DisconnectedView(QWidget):
         self.on_connection.emit("connect on Widget")
 
     def set_availability(self, available):
-        status = "Available" if available else "Not Available"
-        self.service_state.setText(f"Service: {status}")
-        self.connect_button.setEnabled(available)
+        if not self.wait_for_connection:
+            status = "Available" if available else "Not Available"
+            self.service_state.setText(f"Service: {status}")
+            self.connect_button.setEnabled(available)
+
+    def waiting_for_connection(self, state: bool):
+        if state:
+            self.connect_button.setEnabled(False)
+            self.service_state.setText("Service: connecting")
+        self.wait_for_connection = state
 
 class ActiveTools(QWidget):
     on_disconnect = pyqtSignal()
