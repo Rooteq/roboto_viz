@@ -107,6 +107,9 @@ class DisconnectedState(State):
         # )
 
     def handleConfigure(self):
+        self.gui.gui_manager.nav_data.route_manager.load_map("robots_map")
+        self.gui.main_view.load_map("test")
+        self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot("test")
         self.gui.gui_manager.trigger_configure()
         self.gui.main_view.disconnected_view.waiting_for_connection(True)
 
@@ -118,6 +121,7 @@ class DisconnectedState(State):
 class ActiveState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_active()
+
 
         self.connect_and_store(
             self.gui.gui_manager.trigger_disconnect,

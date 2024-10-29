@@ -20,9 +20,10 @@ from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QLab
 from roboto_viz.map_view import MapView
 from roboto_viz.goal_arrow import GoalArrow
 from roboto_viz.robot_item import RobotItem
-
+from pathlib import Path
 
 class MainView(QMainWindow):
+    map_loaded_signal = pyqtSignal(bool, str)  # success, error_message
     connection_signal = pyqtSignal(str)
     disconnection_signal = pyqtSignal(str)
     set_position_signal = pyqtSignal(float, float, float)
@@ -41,23 +42,13 @@ class MainView(QMainWindow):
         self.disconnected_view = DisconnectedView()
         # self.planner_view = PlannerView()
         self.active_view = ActiveView(self.map_view)
-
+        self.maps_dir = Path.home() / ".robotroutes" / "maps"
+        self.current_map_path = None
+        self.current_yaml_path = None
         self.setup_ui()
 
 
     def setup_ui(self):
-        package_name = 'roboto_diffbot'
-        package_path = get_package_share_directory(package_name)
-        self.image_path = os.path.join(package_path, 'sim', 'map', 'my_map.pgm')
-        self.origin_path = os.path.join(package_path, 'sim', 'map', 'my_map.yaml')
-        
-        with open(self.origin_path, 'r') as file:
-            origin_data = yaml.safe_load(file)
-
-        self.map_origin = origin_data['origin']
-
-        self.map_view.load_image(self.image_path, self.map_origin)
-
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
@@ -73,6 +64,60 @@ class MainView(QMainWindow):
 
         self.active_view.planning_tools.draw_points.connect(self.map_view.display_points)
         self.active_view.planning_tools.stop_drawing_points.connect(self.map_view.clear_points)
+
+    def load_map(self, map_name: str) -> tuple[bool, str]:
+        """
+        Load a map from the .robotroutes/maps directory.
+        
+        Args:
+            map_name: Name of the map (without extension)
+            
+        Returns:
+            tuple[bool, str]: (Success flag, Error message if failed or empty string if successful)
+        """
+        try:
+            # Construct paths
+            map_path = self.maps_dir / f"{map_name}.pgm"
+            yaml_path = self.maps_dir / f"{map_name}.yaml"
+            
+            # Check if files exist
+            if not map_path.exists():
+                error_msg = f"Map file not found: {map_path}"
+                self.map_loaded_signal.emit(False, error_msg)
+                return False, error_msg
+                
+            if not yaml_path.exists():
+                error_msg = f"YAML file not found: {yaml_path}"
+                self.map_loaded_signal.emit(False, error_msg)
+                return False, error_msg
+            
+            # Load YAML data
+            with open(yaml_path, 'r') as file:
+                yaml_data = yaml.safe_load(file)
+                
+            if 'origin' not in yaml_data:
+                error_msg = f"Invalid YAML file: 'origin' key not found in {yaml_path}"
+                self.map_loaded_signal.emit(False, error_msg)
+                return False, error_msg
+            
+            # Store current paths
+            self.current_map_path = map_path
+            self.current_yaml_path = yaml_path
+            
+            # Load the map into the view
+            self.map_view.load_image(str(map_path), yaml_data['origin'])
+            
+            self.map_loaded_signal.emit(True, "")
+            return True, ""
+            
+        except yaml.YAMLError as e:
+            error_msg = f"Error parsing YAML file: {str(e)}"
+            self.map_loaded_signal.emit(False, error_msg)
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Error loading map: {str(e)}"
+            self.map_loaded_signal.emit(False, error_msg)
+            return (False, error_msg)
 
     def switch_to_disconnected(self):
         self.stacked_widget.setCurrentWidget(self.disconnected_view)

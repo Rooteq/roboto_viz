@@ -1,10 +1,12 @@
 import json
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 import os
+import subprocess
 
 # Type alias for clarity
 Point4D = Tuple[float, float, float, float]
+MapResult = Tuple[bool, str]  # Success flag and message
 
 class RouteManager:
     def __init__(self, app_dir_name: str = ".robotroutes"):
@@ -18,15 +20,18 @@ class RouteManager:
         self.home_dir = Path.home()
         self.config_dir = self.home_dir / app_dir_name
         self.routes_file = self.config_dir / "routes.json"
+        self.maps_dir = self.config_dir / "maps"
         
         # Ensure config directory exists
         self._setup_config_directory()
 
     def _setup_config_directory(self):
-        """Create configuration directory if it doesn't exist."""
+        """Create configuration directory and maps subdirectory if they don't exist."""
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
+            self.maps_dir.mkdir(parents=True, exist_ok=True)
             print(f"Using config directory: {self.config_dir}")
+            print(f"Using maps directory: {self.maps_dir}")
         except PermissionError:
             print(f"Error: No permission to create directory: {self.config_dir}")
             raise
@@ -132,3 +137,138 @@ class RouteManager:
     def get_file_path(self) -> str:
         """Return the current routes file path."""
         return str(self.routes_file)
+
+    def load_map(self, map_name: str) -> MapResult:
+        """
+        Save the current robot's map using nav2_map_server.
+        
+        Args:
+            map_name: Name to save the map as
+            
+        Returns:
+            Tuple[bool, str]: (Success flag, Error message if failed or empty string if successful)
+        """
+        try:
+            # Create the full path for the map
+            map_path = self.maps_dir / map_name
+            
+            # Construct the command
+            cmd = [
+                "ros2", "run", "nav2_map_server", "map_saver_cli",
+                "-f", str(map_path),
+                "--ros-args",
+                "-p", "map_subscribe_transient_local:=true"
+            ]
+            
+            # Execute the command
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            # Check if both .pgm and .yaml files were created
+            pgm_file = map_path.with_suffix('.pgm')
+            yaml_file = map_path.with_suffix('.yaml')
+            
+            if pgm_file.exists() and yaml_file.exists():
+                print(f"Successfully saved map '{map_name}' to {self.maps_dir}")
+                return True, ""
+            else:
+                return False, "Map files were not created properly"
+                
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Map saving failed: {e.stderr}"
+            print(error_msg)
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Unexpected error: {str(e)}"
+            print(error_msg)
+            return False, error_msg
+
+    def get_map_names(self) -> List[str]:
+        """
+        Get a list of all available maps in the maps directory.
+        Only returns names of maps that have both .yaml and .pgm files.
+        
+        Returns:
+            List[str]: List of valid map names without file extensions
+        """
+        try:
+            # Get all .yaml files in the maps directory
+            yaml_files = list(self.maps_dir.glob("*.yaml"))
+            
+            # Extract just the map names (without path and extension)
+            map_names = [file.stem for file in yaml_files]
+            
+            # Verify each map name has both .yaml and .pgm files
+            valid_maps = []
+            for map_name in map_names:
+                yaml_path = self.maps_dir / f"{map_name}.yaml"
+                pgm_path = self.maps_dir / f"{map_name}.pgm"
+                
+                if yaml_path.exists() and pgm_path.exists():
+                    valid_maps.append(map_name)
+                    
+            valid_maps.sort()  # Sort for consistent ordering
+            print(f"Found {len(valid_maps)} valid maps")
+            return valid_maps
+            
+        except Exception as e:
+            print(f"Error getting map names: {str(e)}")
+            return []
+    
+    
+    def load_map_onto_robot(self, map_name: str) -> MapResult:
+        """
+        Load a map onto the robot using ros2 service call command.
+        
+        Args:
+            map_name: Name of the map file (without extension)
+            
+        Returns:
+            Tuple[bool, str]: (Success flag, Error message if failed or empty string if successful)
+        """
+        try:
+            # Construct full path to map YAML file
+            map_path = self.maps_dir / f"{map_name}.yaml"
+            
+            if not map_path.exists():
+                error_msg = f"Map file not found: {map_path}"
+                print(error_msg)
+                return False, error_msg
+
+            # Construct the ros2 service call command
+            cmd = [
+                "ros2", "service", "call",
+                "/map_server/load_map",
+                "nav2_msgs/srv/LoadMap",
+                f"{{map_url: '{str(map_path)}'}}"
+            ]
+            
+            # Execute the command
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True  # This will raise CalledProcessError if the command fails
+            )
+            
+            # Check if the command was successful
+            if "success: True" in result.stdout:
+                print(f"Successfully loaded map '{map_name}' onto robot")
+                return True, ""
+            else:
+                error_msg = f"Failed to load map: {result.stdout}"
+                print(error_msg)
+                return False, error_msg
+                
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Error loading map onto robot: {e.stderr}"
+            print(error_msg)
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Unexpected error: {str(e)}"
+            print(error_msg)
+            return False, error_msg
