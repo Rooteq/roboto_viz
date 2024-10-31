@@ -134,12 +134,16 @@ class NavData(QObject):
         self.navigator: BasicNavigator = BasicNavigator('gui_navigator_node')
 
         self.routes: Dict[str, List[Tuple[float, float]]]
+        self.maps: List[str]
 
     def save_routes(self, new_routes: Dict[str, List[Tuple[float, float]]]):
         self.route_manager.save_routes(new_routes)
     
     def load_routes(self):
         self.routes = self.route_manager.load_routes()
+
+    def load_maps(self):
+        self.maps = self.route_manager.get_map_names()
 
         # self.send_routes.emit(list(self.routes.keys()))
 
@@ -258,6 +262,7 @@ class GuiManager(QThread):
     trigger_connection = pyqtSignal()
 
     send_route_names = pyqtSignal(dict)
+    send_map_names = pyqtSignal(list)
 
     def __init__(self):
         super().__init__()
@@ -269,6 +274,13 @@ class GuiManager(QThread):
         # self.nav_data.send_routes.connect(lambda: self.send_route_names)
 
         self.navigator.start()
+
+    def send_maps(self):
+        self.nav_data.load_maps()
+        self.nav_data.route_manager.load_map("robots_map")
+        # self.nav_data.route_manager.load_map_onto_robot("test")
+        
+        self.send_map_names.emit(self.nav_data.maps)
 
     def send_routes(self):
         self.nav_data.load_routes()

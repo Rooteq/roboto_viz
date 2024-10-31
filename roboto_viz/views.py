@@ -2,7 +2,7 @@
 from __future__ import annotations
 import sys
 import os
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QStackedWidget, QLabel, QHBoxLayout, QListWidget, QListWidgetItem
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QStackedWidget, QLabel, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox
 from abc import ABC, abstractmethod
 import yaml
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, pyqtSlot
@@ -135,6 +135,10 @@ class MainView(QMainWindow):
         self.active_view.map_view.goal_pose_set.connect(self.on_set_position)
         self.active_view.start_planning.connect(self.on_start_planning)
 
+    def switch_to_configuring(self):
+        self.stacked_widget.setCurrentWidget(self.active_view)
+        self.active_view.switch_to_configuring_tab()
+
     def on_connection(self):
         self.connection_signal.emit("connect emit from MainView")
 
@@ -197,21 +201,25 @@ class ActiveTools(QWidget):
     start_nav = pyqtSignal(str, bool)
     stop_nav = pyqtSignal()
 
-    def __init__(self, routes: dict):
+    map_selected = pyqtSignal(str)
+
+    switch_to_active = pyqtSignal()
+    switch_to_configure = pyqtSignal()
+
+    def __init__(self, routes: dict, maps: list):
         super().__init__()
 
         self.routes = routes
+        self.maps = maps
 
         # TABS
         main_layout = QVBoxLayout()
-        tab_widget = QTabWidget()
+        self.tab_widget = QTabWidget()
         
-        # Create first tab
+        # Create first tab (Operation tab)
         operation_tab = QWidget()
         first_layout = QVBoxLayout(operation_tab)
         self.route_list = QListWidget()
-
-
         self.route_list.setFixedHeight(200)
         first_layout.addWidget(self.route_list)
         
@@ -229,11 +237,9 @@ class ActiveTools(QWidget):
         button_layout_2.addWidget(self.button_set_active)
         first_layout.addLayout(button_layout_2)
         
-        # Add spacing
-        # first_layout.addSpacing(20)
         first_layout.addStretch()
 
-        # Add the original navigation buttons
+        # Add the navigation buttons
         self.button_go_to_base = QPushButton("Go to base")
         self.button_go_to_dest = QPushButton("Go to dest")
         self.button_stop = QPushButton("Stop")
@@ -241,7 +247,7 @@ class ActiveTools(QWidget):
         first_layout.addWidget(self.button_go_to_dest)
         first_layout.addWidget(self.button_stop)
         
-        tab_widget.addTab(operation_tab, "Operation")
+        self.tab_widget.addTab(operation_tab, "Operation")
         
         # Connect button signals to slots
         self.button_add.clicked.connect(lambda: self.start_planning.emit())
@@ -253,21 +259,65 @@ class ActiveTools(QWidget):
         self.button_go_to_base.clicked.connect(self.handle_navigate_to_base)
         self.button_stop.clicked.connect(lambda: self.stop_nav.emit())
 
-        # Create second tab (unchanged)
-        planning_tab = QWidget()
-        second_layout = QVBoxLayout(planning_tab)
-        for i in range(2):
-            button = QPushButton(f"Button {i+1} (Tab 2)")
-            second_layout.addWidget(button)
-        tab_widget.addTab(planning_tab, "Planning")
+        self.tab_widget.addTab(operation_tab, "Operation")
         
-        main_layout.addWidget(tab_widget)
+        # Create second tab (Configuration tab)
+        config_tab = QWidget()
+        config_layout = QVBoxLayout(config_tab)
         
+        # Add map selection combo box
+        map_layout = QVBoxLayout()
+        map_label = QLabel("Select Map:")
+        self.map_combo = QComboBox()
+        self.map_combo.addItems(self.maps)
+        self.map_combo.currentTextChanged.connect(self.on_map_selected)
+        
+        map_layout.addWidget(map_label)
+        map_layout.addWidget(self.map_combo)
+        config_layout.addLayout(map_layout)
+        config_layout.addStretch()
+        
+        self.tab_widget.addTab(config_tab, "Configuration")
+        
+        main_layout.addWidget(self.tab_widget)
         self.setLayout(main_layout)
 
-        # Keep track of active route, MOVE TO NAVDATA
-        self.active_route = None
+        # Connect button signals
+        self.button_add.clicked.connect(lambda: self.start_planning.emit())
+        self.button_remove.clicked.connect(self.remove_route)
+        self.button_set_active.clicked.connect(self.set_active_route)
+        self.button_go_to_dest.clicked.connect(self.handle_navigate_to_dest)
+        self.button_go_to_base.clicked.connect(self.handle_navigate_to_base)
+        self.button_stop.clicked.connect(lambda: self.stop_nav.emit())
 
+        self.tab_widget.currentChanged.connect(self.emit_based_on_tab)
+
+    def emit_based_on_tab(self, index: int):
+        if index == 0:
+            self.switch_to_active.emit()
+        if index == 1:
+            self.switch_to_configure.emit()
+
+    def update_maps(self, maps: list):
+        """Update the map combo box with new maps"""
+        current_map = self.map_combo.currentText()
+        self.map_combo.clear()
+        self.map_combo.addItems(maps)
+        
+        # Try to restore the previously selected map
+        index = self.map_combo.findText(current_map)
+        if index >= 0:
+            self.map_combo.setCurrentIndex(index)
+
+    def on_map_selected(self, map_name: str):
+        """Handle map selection"""
+        if map_name:
+            print(f"selected: {map_name}")
+            self.map_selected.emit(map_name)
+
+
+        # Keep track of active route
+        self.active_route = None
     def handle_navigate_to_dest(self):
         if self.active_route:
             self.start_nav.emit(self.active_route.text()[2:], True)
@@ -428,8 +478,9 @@ class ActiveView(QWidget):
         self.map_view = map_view
 
         self.routes: dict = dict()
+        self.maps: list = list()
 
-        self.active_tools = ActiveTools(self.routes)
+        self.active_tools = ActiveTools(self.routes, self.maps)
         self.planning_tools = PlanningTools(self.routes)
 
         self.stacked_widget = QStackedWidget()
@@ -449,11 +500,22 @@ class ActiveView(QWidget):
         self.routes.update(routes) 
         self.active_tools.update_routes()
 
+    pyqtSlot(list)
+    def load_maps(self, maps: list):
+        self.maps = maps.copy()  # Make a copy of the list
+        self.active_tools.update_maps(self.maps)  # Update maps in ActiveTools
+
     def switch_to_active_tools(self):
         self.stacked_widget.setCurrentWidget(self.active_tools)
         
         self.active_tools.on_disconnect.connect(lambda: self.on_disconnection.emit())
         self.active_tools.start_planning.connect(lambda: self.start_planning.emit())
+
+    def switch_to_configuring_tab(self):
+        self.active_tools.tab_widget.setCurrentIndex(1)
+
+    def switch_to_active(self): #OPTIMIZE
+        self.active_tools.tab_widget.setCurrentIndex(0)
 
     def switch_to_planning(self):
         self.stacked_widget.setCurrentWidget(self.planning_tools)

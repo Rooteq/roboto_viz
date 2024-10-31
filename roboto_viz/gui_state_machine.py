@@ -97,31 +97,60 @@ class DisconnectedState(State):
             self.handleConnection
         )
 
-        # self.connect_and_store(
-        #     self.gui.gui_manager.send_route_names,
-        #     self.gui.main_view.active_view.load__routes
-        # )
-        # self.connect_and_store(
-        #     self.gui.main_view.active_view.active_tools.save_current_routes,
-        #     self.gui.gui_manager.save_routes
-        # )
+        self.connect_and_store(
+            self.gui.gui_manager.send_map_names,
+            self.gui.main_view.active_view.load_maps
+        )
 
     def handleConfigure(self):
         self.gui.gui_manager.nav_data.route_manager.load_map("robots_map")
-        self.gui.main_view.load_map("test")
-        self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot("test")
+        # self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot("test")
+        self.gui.gui_manager.send_maps()
+        self.gui.main_view.load_map("robots_map")
         self.gui.gui_manager.trigger_configure()
         self.gui.main_view.disconnected_view.waiting_for_connection(True)
 
     def handleConnection(self):
-        self.gui.transition_to(ActiveState())
+        self.gui.transition_to(ConfiguringState())
         self.gui.main_view.disconnected_view.waiting_for_connection(False)
+        self.gui.handleGui()
+
+
+class ConfiguringState(State):
+    def handleGui(self):
+        self.gui.main_view.switch_to_configuring()
+
+        self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.switch_to_active,
+            self.handle_activate
+        )
+
+        self.connect_and_store(
+            self.gui.gui_manager.update_pose,
+            self.gui.main_view.active_view.map_view.update_robot_pose
+        )
+
+        self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.map_selected,
+            self.gui.main_view.load_map # KEEP IT IN MAIN_VIEW!!
+        )
+
+        self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.map_selected,
+            self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot # KEEP IT IN MAIN_VIEW!!
+        )
+    def handle_activate(self):
+        self.gui.transition_to(ActiveState())
         self.gui.handleGui()
 
 class ActiveState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_active()
 
+        self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.switch_to_configure,
+            self.handle_configuring
+        )
 
         self.connect_and_store(
             self.gui.gui_manager.trigger_disconnect,
@@ -167,6 +196,10 @@ class ActiveState(State):
     def startPlanning(self):
         # self.gui.main_view.set_position_signal.disconnect()
         self.gui.transition_to(PlannerState())
+        self.gui.handleGui()
+
+    def handle_configuring(self):
+        self.gui.transition_to(ConfiguringState())
         self.gui.handleGui()
 
 #TODO: handleDisconnection in the planner mode
