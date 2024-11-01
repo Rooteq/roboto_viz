@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout,
 import threading
 from nav2_simple_commander.robot_navigator import BasicNavigator
 
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from rclpy.duration import Duration
 
 import math
@@ -36,6 +36,8 @@ class ManagerNode(LifecycleNode):
         self.cli = self.create_client(Trigger, 'trigger_service')
         self.twist_callback = None
 
+        self.pose_subscriber = None
+        self.init_pose_pub = None
 
         #CALLBACKS: 
         self.service_availability_callback = None
@@ -45,13 +47,48 @@ class ManagerNode(LifecycleNode):
 
         #INTERNAL STATES:
         self.srv_available: bool = False
-        self.pose_subscriber: bool = None
+        
 
         self._current_state: LState = LState.UNCONFIGURED
         self._current_state = LState.UNCONFIGURED
 
         self.check_service_timer = self.create_timer(1.0, self.check_service_availability)
         self.get_logger().info("Initialized Lifecycle node!")
+
+    def set_initial_pose(self, x: float, y: float, orientation_w: float):
+        """
+        Publish the initial pose for AMCL localization
+        Args:
+            x: x position in map frame
+            y: y position in map frame
+            orientation_w: w quaternion component (default 1.0 for no rotation)
+        """
+        msg = PoseWithCovarianceStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+        
+        # Set the pose
+        msg.pose.pose.position.x = x
+        msg.pose.pose.position.y = y
+        msg.pose.pose.position.z = 0.0  # Assuming 2D navigation
+        
+        # Set orientation (default is no rotation)
+        q = quaternion_from_euler(0,0,orientation_w)
+        msg.pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+        
+        # Set covariance matrix (you might want to adjust these values)
+        msg.pose.covariance = [
+            0.25, 0.0,  0.0,  0.0,  0.0,  0.0,
+            0.0,  0.25, 0.0,  0.0,  0.0,  0.0,
+            0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+            0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+            0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+            0.0,  0.0,  0.0,  0.0,  0.0,  0.06853891945200942
+        ]
+        
+        # Publish the message
+        self.init_pose_pub.publish(msg)
+        self.get_logger().info(f'Published initial pose: x={x}, y={y}, w={orientation_w}')
 
     # On configure start sending service calls, activates service when receives callback (activates either setting initPos or just activates)
     # Call on_configure when the service is avaiable and the button for connection is clicked
@@ -81,6 +118,15 @@ class ManagerNode(LifecycleNode):
                 10
             )
 
+        if self.init_pose_pub is None:
+            self.init_pose_pub = self.create_lifecycle_publisher(
+                PoseWithCovarianceStamped,
+                'initialpose',
+                10
+            )
+            self.get_logger().info("Created initial pose publisher")
+            
+
         self._current_state = LState.ACTIVE
 
         return super().on_activate(previous_state)
@@ -90,6 +136,12 @@ class ManagerNode(LifecycleNode):
         if self.pose_subscriber is not None:
             self.destroy_subscription(self.pose_subscriber)
             self.pose_subscriber = None
+            self.get_logger().info("Destroyed pose subscriber")
+
+        if self.init_pose_pub is not None:
+            self.destroy_lifecycle_publisher(self.init_pose_pub)
+            self.init_pose_pub = None
+            self.get_logger().info("Destroyed initial pose publisher")
 
         self._current_state = LState.INACTIVE
 
@@ -298,6 +350,10 @@ class GuiManager(QThread):
     def trigger_deactivate(self):
         self.node.trigger_deactivate()
         self.node.trigger_shutdown()
+    
+    @pyqtSlot(float,float,float)
+    def set_init_pose(self, x, y, w):
+        self.node.set_initial_pose(x,y,w)
 
     def run(self):
         self.node = ManagerNode()

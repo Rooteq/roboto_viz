@@ -121,6 +121,11 @@ class ConfiguringState(State):
         self.gui.main_view.switch_to_configuring()
 
         self.connect_and_store(
+            self.gui.main_view.set_position_signal,
+            self.gui.gui_manager.set_init_pose
+        )
+
+        self.connect_and_store(
             self.gui.main_view.active_view.active_tools.switch_to_active,
             self.handle_activate
         )
@@ -216,10 +221,12 @@ class PlannerState(State):
             self.gui.main_view.finish_planning,
             self.finishPlanning
         )
+
         self.connect_and_store(
             self.gui.main_view.set_position_signal,
             self.gui.main_view.active_view.planning_tools.setPoint
         )
+
         self.connect_and_store(
             self.gui.gui_manager.update_pose,
             self.gui.main_view.map_view.update_robot_pose
