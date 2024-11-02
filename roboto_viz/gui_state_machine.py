@@ -132,7 +132,7 @@ class ConfiguringState(State):
 
         self.connect_and_store(
             self.gui.gui_manager.update_pose,
-            self.gui.main_view.active_view.map_view.update_robot_pose
+            self.gui.main_view.active_view.update_robot_pose
         )
 
         self.connect_and_store(
@@ -163,7 +163,7 @@ class ActiveState(State):
         )
 
         self.connect_and_store(
-            self.gui.main_view.active_view.active_tools.start_nav,
+            self.gui.main_view.active_view.start_nav,
             self.gui.gui_manager.handle_set_route
         )
 
@@ -174,7 +174,7 @@ class ActiveState(State):
 
         self.connect_and_store(
             self.gui.gui_manager.update_pose,
-            self.gui.main_view.active_view.map_view.update_robot_pose
+            self.gui.main_view.active_view.update_robot_pose
         )
 
         self.connect_and_store(
@@ -229,7 +229,7 @@ class PlannerState(State):
 
         self.connect_and_store(
             self.gui.gui_manager.update_pose,
-            self.gui.main_view.map_view.update_robot_pose
+            self.gui.main_view.active_view.update_robot_pose
         )
         self.connect_and_store(
             self.gui.main_view.active_view.planning_tools.save_current_routes,

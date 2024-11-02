@@ -471,6 +471,8 @@ class ActiveView(QWidget):
     finish_planning = pyqtSignal()
     on_disconnection = pyqtSignal(str)
     start_planning = pyqtSignal()
+    start_nav = pyqtSignal(str, bool, float, float)
+
 
     def __init__(self, map_view : MapView):
         super().__init__()
@@ -479,6 +481,10 @@ class ActiveView(QWidget):
 
         self.routes: dict = dict()
         self.maps: list = list()
+
+
+        self.curr_x: float = 0
+        self.curr_y: float = 0
 
         self.active_tools = ActiveTools(self.routes, self.maps)
         self.planning_tools = PlanningTools(self.routes)
@@ -493,6 +499,18 @@ class ActiveView(QWidget):
         self.main_layout.addWidget(self.map_view, 3)
         self.main_layout.addWidget(self.stacked_widget, 1)
         self.setLayout(self.main_layout)
+
+        self.active_tools.start_nav.connect(self.handle_set_route)
+
+    pyqtSlot(dict,bool)
+    def handle_set_route(self, routes, to_dest):
+        self.start_nav.emit(routes, to_dest, self.curr_x, self.curr_y)
+
+    pyqtSlot()
+    def update_robot_pose(self, x, y, theta):
+        self.map_view.update_robot_pose(x,y,theta)
+        self.curr_x = x
+        self.curr_y = y
 
     pyqtSlot(dict)
     def load__routes(self, routes):

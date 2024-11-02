@@ -211,6 +211,9 @@ class Navigator(QThread):
         self._goal_lock = threading.Lock()  # For thread-safe goal updates
 
         self._to_dest: bool = True
+
+        self.curr_x: float = 0
+        self.curr_y: float = 0
         
     def stop(self):
         # self._running = False
@@ -218,9 +221,11 @@ class Navigator(QThread):
             self.nav_data.navigator.cancelTask()
         # self.wait() # wait needed?
 
-    def set_goal(self, route: str, to_dest: bool):
+    def set_goal(self, route: str, to_dest: bool, x:float, y:float):
         """Set a new goal, replacing any existing one"""
         with self._goal_lock:
+            self.curr_x = x
+            self.curr_y = y
             self._to_dest = to_dest
             # self._running = True
             self._new_goal = deepcopy(self.nav_data.routes[route])
@@ -243,13 +248,23 @@ class Navigator(QThread):
                 continue
                 
             try:
+                # Choosing the shortest path
+                # dist: float = sys.float_info.max
+                distances = [math.dist((self.curr_x,self.curr_y), (waypoint[0], waypoint[1])) for waypoint in current_goal]
+
+                # Find the index of the closest waypoint
+                closest_index = distances.index(min(distances))
+
+                # Reorder waypoints starting from the closest one
+                waypoints = current_goal[closest_index:]
+
                 points_on_route = []
 
                 goal_pose = PoseStamped()
                 goal_pose.header.frame_id = 'map'
                 goal_pose.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
 
-                for point in current_goal:
+                for point in waypoints:
                     goal_pose.pose.position.x = point[0]
                     goal_pose.pose.position.y = point[1]
                     goal_pose.pose.position.z = 0.0
@@ -277,12 +292,14 @@ class Navigator(QThread):
                     if self._new_goal is not None:
                         break  # Exit this loop to process the new goal
                         
-                    # feedback = self.nav_data.navigator.getFeedback()
+                    feedback = self.nav_data.navigator.getFeedback()
+                    print(f"feedback: {feedback}")
                     # if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
                     #     self.nav_data.navigator.cancelTask()
                     #     break
                 
                 if self._running and self.nav_data.navigator.isTaskComplete():
+                    print(f"{self.nav_data.navigator.getResult()}")
                     self.finished.emit()
                     
             except Exception as e:
@@ -390,9 +407,9 @@ class GuiManager(QThread):
         self.update_pose.emit(x, y, theta)
 
     pyqtSlot(str)
-    def handle_set_route(self, route: str, to_dest: bool):
+    def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):
         print(f"New goal set!, To_dest: {to_dest}")
-        self.navigator.set_goal(route, to_dest)
+        self.navigator.set_goal(route, to_dest, x, y)
 
     pyqtSlot()
     def stop_nav(self):
