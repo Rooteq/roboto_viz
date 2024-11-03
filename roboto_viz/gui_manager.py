@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout,
 import threading
 from nav2_simple_commander.robot_navigator import BasicNavigator
 
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from rclpy.duration import Duration
 
 import math
@@ -38,6 +38,7 @@ class ManagerNode(LifecycleNode):
 
         self.pose_subscriber = None
         self.init_pose_pub = None
+        self.cmd_vel_pub = None
 
         #CALLBACKS: 
         self.service_availability_callback = None
@@ -48,6 +49,7 @@ class ManagerNode(LifecycleNode):
         #INTERNAL STATES:
         self.srv_available: bool = False
         
+        self.cmd_vel_msg: Twist = Twist()
 
         self._current_state: LState = LState.UNCONFIGURED
         self._current_state = LState.UNCONFIGURED
@@ -95,6 +97,9 @@ class ManagerNode(LifecycleNode):
     def on_configure(self, previous_state: LifecycleState):
         self.get_logger().info("configure")
         self.service_call_timer = self.create_timer(2.0, self.periodic_service_call)
+        
+        self.vel_pub_timer = self.create_timer(0.3, self.publish_cmd_vel)
+        self.vel_pub_timer.cancel()
 
         self._current_state = LState.INACTIVE
 
@@ -127,6 +132,13 @@ class ManagerNode(LifecycleNode):
             self.get_logger().info("Created initial pose publisher")
             
 
+        if self.cmd_vel_pub is None:
+            self.cmd_vel_pub = self.create_lifecycle_publisher(
+                Twist,
+                'cmd_vel_key',
+                10
+            )
+
         self._current_state = LState.ACTIVE
 
         return super().on_activate(previous_state)
@@ -143,6 +155,10 @@ class ManagerNode(LifecycleNode):
             self.init_pose_pub = None
             self.get_logger().info("Destroyed initial pose publisher")
 
+        if self.cmd_vel_pub is not None:
+            self.destroy_lifecycle_publisher(self.cmd_vel_pub)
+            self.cmd_vel_pub = None
+            self.get_logger().info("Destroyed cmd_vel publisher")
         self._current_state = LState.INACTIVE
 
         return super().on_deactivate(state)
@@ -178,6 +194,43 @@ class ManagerNode(LifecycleNode):
 
     def pose_callback(self, msg: TwistStamped):
         self.listener_pose_callback(msg)
+
+
+    def publish_cmd_vel(self):
+        if self.cmd_vel_pub is not None:
+            self.cmd_vel_pub.publish(self.cmd_vel_msg)
+
+    def start_publishing(self, dir: str, vel: float = 0.5):
+        if self.vel_pub_timer.is_canceled():
+            match dir:
+                case 'f':
+                    self.cmd_vel_msg.linear.x = vel
+                case 'b':
+                    self.cmd_vel_msg.linear.x = -vel
+                case 'l':
+                    self.cmd_vel_msg.angular.z = vel
+                case 'r':
+                    self.cmd_vel_msg.angular.z = -vel
+                case _:
+                    self.get_logger().info("Wrong cmd command")
+            self.vel_pub_timer.reset()  # Resets the timer if it's canceled
+        self.get_logger().info("Started publishing to cmd_vel")
+
+    def stop_publishing(self):
+
+        self.vel_pub_timer.cancel()
+
+        self.cmd_vel_msg.linear.x = 0.0
+        self.cmd_vel_msg.linear.y = 0.0
+        self.cmd_vel_msg.linear.z = 0.0
+
+        self.cmd_vel_msg.angular.x = 0.0
+        self.cmd_vel_msg.angular.y = 0.0
+        self.cmd_vel_msg.angular.z = 0.0
+
+        self.cmd_vel_pub.publish(self.cmd_vel_msg)
+
+        self.get_logger().info("Stopped publishing to cmd_vel")
 
 class NavData(QObject):
     def __init__(self):
@@ -371,6 +424,16 @@ class GuiManager(QThread):
     @pyqtSlot(float,float,float)
     def set_init_pose(self, x, y, w):
         self.node.set_initial_pose(x,y,w)
+
+    @pyqtSlot(str, float)
+    def start_cmd_vel_pub(self, dir: str, vel: float):
+        self.node.start_publishing(dir,vel)
+        print(f"keys start: {dir}")
+
+    @pyqtSlot()
+    def stop_cmd_vel_pub(self):
+        self.node.stop_publishing()
+        print("keys stop")
 
     def run(self):
         self.node = ManagerNode()

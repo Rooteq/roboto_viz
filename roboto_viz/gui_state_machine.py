@@ -103,14 +103,12 @@ class DisconnectedState(State):
         )
 
     def handleConfigure(self):
-        self.gui.gui_manager.nav_data.route_manager.load_map("robots_map")
-        # self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot("test")
-        self.gui.gui_manager.send_maps()
-        self.gui.main_view.load_map("robots_map")
-        self.gui.gui_manager.trigger_configure()
         self.gui.main_view.disconnected_view.waiting_for_connection(True)
+        self.gui.gui_manager.send_maps()
+        self.gui.gui_manager.trigger_configure()
 
     def handleConnection(self):
+        self.gui.main_view.load_map("robots_map")
         self.gui.transition_to(ConfiguringState())
         self.gui.main_view.disconnected_view.waiting_for_connection(False)
         self.gui.handleGui()
@@ -138,6 +136,16 @@ class ConfiguringState(State):
         self.connect_and_store(
             self.gui.main_view.active_view.active_tools.map_selected,
             self.gui.main_view.load_map # KEEP IT IN MAIN_VIEW!!
+        )
+
+        self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.start_keys_vel,
+            self.gui.gui_manager.start_cmd_vel_pub 
+        )
+
+        self.connect_and_store(
+            self.gui.main_view.active_view.active_tools.stop_keys_vel,
+            self.gui.gui_manager.stop_cmd_vel_pub 
         )
 
         self.connect_and_store(

@@ -2,7 +2,7 @@
 from __future__ import annotations
 import sys
 import os
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QStackedWidget, QLabel, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox
+from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QStackedWidget, QLabel, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QGridLayout
 from abc import ABC, abstractmethod
 import yaml
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, pyqtSlot
@@ -206,6 +206,9 @@ class ActiveTools(QWidget):
     switch_to_active = pyqtSignal()
     switch_to_configure = pyqtSignal()
 
+    start_keys_vel = pyqtSignal(str, float)
+    stop_keys_vel = pyqtSignal()
+
     def __init__(self, routes: dict, maps: list):
         super().__init__()
 
@@ -237,6 +240,7 @@ class ActiveTools(QWidget):
         button_layout_2.addWidget(self.button_set_active)
         first_layout.addLayout(button_layout_2)
         
+        first_layout.insertSpacing(10,20)
         first_layout.addStretch()
 
         # Add the navigation buttons
@@ -276,13 +280,49 @@ class ActiveTools(QWidget):
         map_layout.addWidget(self.map_combo)
         config_layout.addLayout(map_layout)
         config_layout.addStretch()
+
+        self.upButton =QPushButton("↑")
+        self.downButton =QPushButton("↓")
+        self.leftButton =QPushButton("←")
+        self.rightButton =QPushButton("→")
+
+        self.upButton.setFixedSize(50, 50)
+        self.leftButton.setFixedSize(50, 50)
+        self.downButton.setFixedSize(50, 50)
+        self.rightButton.setFixedSize(50, 50)
+
+        keys_grid = QGridLayout()
+        keys_grid.setSpacing(10)
+        keys_grid.addWidget(self.upButton, 0,1)
+        keys_grid.addWidget(self.leftButton, 1,0)
+        keys_grid.addWidget(self.downButton, 1,1)
+        keys_grid.addWidget(self.rightButton, 1,2)
+
+        spaced_keys_layout = QHBoxLayout()
+        spaced_keys_layout.addStretch()
+        spaced_keys_layout.addLayout(keys_grid)
+        spaced_keys_layout.addStretch()
+
+        config_layout.addLayout(spaced_keys_layout)
         
         self.tab_widget.addTab(config_tab, "Configuration")
         
         main_layout.addWidget(self.tab_widget)
         self.setLayout(main_layout)
 
-        # Connect button signals
+        # Connecting keys signals 
+
+        self.upButton.pressed.connect(lambda: self.start_keys_vel.emit('f', 0.5))
+        self.leftButton.pressed.connect(lambda: self.start_keys_vel.emit('l', 0.5))
+        self.downButton.pressed.connect(lambda: self.start_keys_vel.emit('b', 0.5))
+        self.rightButton.pressed.connect(lambda: self.start_keys_vel.emit('r', 0.5))
+        
+        self.upButton.released.connect(lambda: self.stop_keys_vel.emit())
+        self.leftButton.released.connect(lambda: self.stop_keys_vel.emit())
+        self.downButton.released.connect(lambda: self.stop_keys_vel.emit())
+        self.rightButton.released.connect(lambda: self.stop_keys_vel.emit())
+
+        # Connecting button signals
         self.button_add.clicked.connect(lambda: self.start_planning.emit())
         self.button_remove.clicked.connect(self.remove_route)
         self.button_set_active.clicked.connect(self.set_active_route)
