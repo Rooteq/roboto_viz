@@ -29,7 +29,7 @@ class MapView(QGraphicsView):
         self.goal_arrow = GoalArrow()
         self.scene.addItem(self.goal_arrow)
 
-        self.point_items = []  # Will store tuples of (ellipse, text) items
+        self.point_items = [] 
 
         self.drawing_arrow = False
 

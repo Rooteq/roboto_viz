@@ -1,33 +1,47 @@
 from PyQt5.QtWidgets import QGraphicsItem
-from PyQt5.QtGui import QPainter, QColor, QPen
-from PyQt5.QtCore import QPointF, QRectF
+from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF
+from PyQt5.QtCore import QPointF, QRectF, Qt
 import math
 
 class RobotItem(QGraphicsItem):
     def __init__(self):
         super().__init__()
-        self.arrow_color = QColor(255, 0, 0)  # Red arrow
-        self.arrow_size = 10  # Size of the arrow
-        self.setZValue(1)  # Ensure the arrow is drawn on top of the map
-
+        self.diameter = 12
+        self.setZValue(1) 
+        
     def boundingRect(self):
-        return QRectF(-self.arrow_size/2, -self.arrow_size/2, self.arrow_size, self.arrow_size)
-
-    def paint(self, painter, option, widget):
-        painter.setPen(QPen(self.arrow_color, 2))
-        painter.setBrush(self.arrow_color)
-
-        # Draw the arrow body
-        painter.drawLine(0, 0, int(self.arrow_size/2), 0)
-
-        # Draw the arrow head
-        head = QPointF(self.arrow_size/2, 0)
-        painter.drawPolygon([
-            head,
-            head + QPointF(-self.arrow_size/4, -self.arrow_size/4),
-            head + QPointF(-self.arrow_size/4, self.arrow_size/4)
+        # Make bounding rect large enough to contain both circle and arrow
+        return QRectF(-self.diameter/2, -self.diameter/2, self.diameter, self.diameter)
+        
+    def paint(self, painter: QPainter, option, widget):
+        # Set up the black pen for the circle
+        painter.scale(0.5,0.5)
+        black_pen = QPen(Qt.red)
+        black_pen.setWidth(1)
+        painter.setPen(black_pen)
+        
+        # Draw the circle
+        painter.drawEllipse(int(-self.diameter/2), int(-self.diameter/2), int(self.diameter), int(self.diameter))
+        
+        # Set up the brush and pen for the arrow
+        painter.setBrush(QBrush(Qt.red))
+        
+        # Create and draw the arrow polygon
+        arrow_polygon = QPolygonF([
+            QPointF(5, 0),      # Arrow tip
+            QPointF(-3, -3),   # Left corner
+            QPointF(-3, 3),    # Right corner
+            QPointF(5, 0)       # Back to tip to close polygon
         ])
 
+        painter.drawPolygon(arrow_polygon)
+        
     def update_pose(self, x, y, theta):
+        """
+        Update the robot's position and orientation
+        Args:
+            x, y: position in scene coordinates
+            theta: orientation in radians
+        """
         self.setPos(x, y)
         self.setRotation(math.degrees(theta))
