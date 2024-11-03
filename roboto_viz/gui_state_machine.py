@@ -14,7 +14,7 @@ from std_srvs.srv import Trigger
 from geometry_msgs.msg import Twist
 
 from roboto_viz.gui_manager import GuiManager
-from roboto_viz.views import MainView
+from roboto_viz.main_view import MainView
 
 class Gui:
     _state = None
@@ -118,6 +118,9 @@ class ConfiguringState(State):
     def handleGui(self):
         self.gui.main_view.switch_to_configuring()
 
+        # self.gui.gui_manager.stop()
+        self.gui.gui_manager.stop_nav()
+
         self.connect_and_store(
             self.gui.main_view.set_position_signal,
             self.gui.gui_manager.set_init_pose
@@ -219,6 +222,9 @@ class ActiveState(State):
 class PlannerState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_planner()
+        self.gui.main_view.map_view.clear_points() # does it even work?
+
+        self.gui.gui_manager.stop_nav()
 
         self.connect_and_store(
             self.gui.gui_manager.send_route_names,
