@@ -155,6 +155,12 @@ class ConfiguringState(State):
             self.gui.main_view.active_view.active_tools.map_selected,
             self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot # KEEP IT IN MAIN_VIEW!!
         )
+
+        self.connect_and_store(
+            self.gui.gui_manager.manualStatus,
+            self.gui.main_view.active_view.active_tools.set_current_status
+        )
+
     def handle_activate(self):
         self.gui.transition_to(ActiveState())
         self.gui.handleGui()
@@ -201,6 +207,11 @@ class ActiveState(State):
         self.connect_and_store(
             self.gui.main_view.active_view.active_tools.save_current_routes,
             self.gui.gui_manager.save_routes
+        )
+
+        self.connect_and_store(
+            self.gui.gui_manager.navigator.navStatus,
+            self.gui.main_view.active_view.active_tools.set_current_status
         )
 
         self.gui.gui_manager.send_routes()

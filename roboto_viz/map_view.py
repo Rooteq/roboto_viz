@@ -64,7 +64,6 @@ class MapView(QGraphicsView):
         self.update_view()
 
     def update_robot_pose(self, x, y, theta):
-        # print("pose update!")
         map_x = (x - self.map_origin[0]) * 20
         map_y = self.pixmap.rect().height() - ((y - self.map_origin[1]) * 20)
         
@@ -189,17 +188,3 @@ class MapView(QGraphicsView):
         for point_group in self.point_items:
             self.scene.removeItem(point_group)
         self.point_items.clear()
-
-    # def mousePressEvent(self, event) -> None:
-    #     scene_pos = self.mapToScene(event.pos())
-    #     x = (scene_pos.x() * 0.05) + self.map_origin[0]
-    #     y = (self.pixmap.rect().height() - scene_pos.y()) * 0.05 + self.map_origin[1]
-    #     self.mouse_clicked.emit(x,y)
-
-    # def mouseMoveEvent(self, event):
-    #     if self.image_item:
-    #         scene_pos = self.mapToScene(event.pos())
-    #         x = scene_pos.x()
-    #         y = scene_pos.y()
-    #         self.mouse_moved.emit(x, y)
-    #     super().mouseMoveEvent(event)
