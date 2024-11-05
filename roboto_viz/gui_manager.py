@@ -182,7 +182,7 @@ class ManagerNode(LifecycleNode):
 
     def service_callback(self, future):
         try:
-            response = future.result()
+            response: Trigger.Response = future.result()
             if response.success:
                 if self._current_state == LState.INACTIVE:
                     self.trigger_activate()
@@ -348,7 +348,7 @@ class Navigator(QThread):
                         break  # Exit this loop to process the new goal
                         
                     feedback = self.nav_data.navigator.getFeedback()
-                    print(f"feedback: {feedback}")
+                    # print(f"feedback: {feedback}")
                     # if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
                     #     self.nav_data.navigator.cancelTask()
                     #     break
