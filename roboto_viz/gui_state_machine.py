@@ -66,6 +66,8 @@ class DisconnectedState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_disconnected()
 
+
+
         self.connect_and_store_connections(
             self.gui.gui_manager.service_availability,
             self.gui.main_view.disconnected_view.set_availability
@@ -102,9 +104,6 @@ class ConfiguringState(State):
     def handleGui(self):
         self.gui.main_view.switch_to_configuring()
 
-        # self.gui.gui_manager.stop()
-        self.gui.gui_manager.stop_nav()
-
         self.connect_and_store_connections(
             self.gui.main_view.set_position_signal,
             self.gui.gui_manager.set_init_pose
@@ -139,6 +138,12 @@ class ConfiguringState(State):
             self.gui.main_view.active_view.active_tools.map_selected,
             self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot # KEEP IT IN MAIN_VIEW!!
         )
+
+        self.connect_and_store(
+            self.gui.gui_manager.manualStatus,
+            self.gui.main_view.active_view.active_tools.set_current_status
+        )
+
     def handle_activate(self):
         self.gui.transition_to(ActiveState())
         self.gui.handleGui()
@@ -187,19 +192,30 @@ class ActiveState(State):
             self.gui.gui_manager.save_routes
         )
 
+        self.connect_and_store(
+            self.gui.gui_manager.navigator.navStatus,
+            self.gui.main_view.active_view.active_tools.set_current_status
+        )
+
         self.gui.gui_manager.send_routes()
 
     def handleDisconnection(self):
         self.gui.transition_to(DisconnectedState())
+        self.gui.gui_manager.stop_nav()
+        self.gui.main_view.active_view.active_tools.set_current_status("Idle")
         self.gui.handleGui()
     
     def startPlanning(self):
         # self.gui.main_view.set_position_signal.disconnect()
         self.gui.transition_to(PlannerState())
+        self.gui.gui_manager.stop_nav()
+        self.gui.main_view.active_view.active_tools.set_current_status("Idle")
         self.gui.handleGui()
 
     def handle_configuring(self):
         self.gui.transition_to(ConfiguringState())
+        self.gui.gui_manager.stop_nav()
+        self.gui.main_view.active_view.active_tools.set_current_status("Idle")
         self.gui.handleGui()
 
 #TODO: handleDisconnection in the planner mode
@@ -207,8 +223,6 @@ class PlannerState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_planner()
         self.gui.main_view.map_view.clear_points() # does it even work?
-
-        self.gui.gui_manager.stop_nav()
 
         self.connect_and_store_connections(
             self.gui.gui_manager.send_route_names,

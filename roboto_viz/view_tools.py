@@ -1,6 +1,7 @@
 
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QTabWidget, QLineEdit, QLabel, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QGridLayout
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, pyqtSlot
+from PyQt5.QtGui import QPainter, QColor, QPen, QFont
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
 
 class ActiveTools(QWidget):
     on_disconnect = pyqtSignal()
@@ -57,6 +58,11 @@ class ActiveTools(QWidget):
         
         first_layout.insertSpacing(10,20)
         first_layout.addStretch()
+
+        statusLabel = QLabel("Status:")
+        self.status_display = StatusDisplay()
+        first_layout.addWidget(statusLabel)
+        first_layout.addWidget(self.status_display)
 
         # Add the navigation buttons
         self.button_go_to_base = QPushButton("Go to base")
@@ -135,6 +141,11 @@ class ActiveTools(QWidget):
 
         self.tab_widget.currentChanged.connect(self.emit_based_on_tab)
 
+    pyqtSlot(str)
+    def set_current_status(self, status: str):
+        """Update the status display"""
+        self.status_display.set_status(status)
+
     def emit_based_on_tab(self, index: int):
         if index == 0:
             self.switch_to_active.emit()
@@ -162,10 +173,12 @@ class ActiveTools(QWidget):
     def handle_navigate_to_dest(self):
         if self.active_route_name:
             self.start_nav.emit(self.active_route_name, True)
+            self.set_current_status("Nav to dest")
 
     def handle_navigate_to_base(self):
         if self.active_route_name:
             self.start_nav.emit(self.active_route_name, False)
+            self.set_current_status("Nav to base")
 
     def update_routes(self):
         """Load routes from received list while preserving active route"""
@@ -301,3 +314,81 @@ class PlanningTools(QWidget):
             self.stop_drawing_points.emit()
             self.finish_planning.emit()
         
+class LEDIndicator(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        self._color = QColor(Qt.green)
+        self._flashing = False
+        self._flash_state = True
+        
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._toggle_flash)
+        self.timer.setInterval(300)
+        
+    def _toggle_flash(self):
+        self._flash_state = not self._flash_state
+        self.update()
+        
+    def setFlashing(self, enable, color=None):
+        self._flashing = enable
+        if color:
+            self._color = QColor(color)
+        if enable:
+            self.timer.start()
+        else:
+            self.timer.stop()
+            self._flash_state = True
+        self.update()
+        
+    def setColor(self, color):
+        self._color = QColor(color)
+        self.update()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Draw LED border
+        pen = QPen(Qt.black)
+        pen.setWidth(1)
+        painter.setPen(pen)
+        
+        if self._flashing and not self._flash_state:
+            painter.setBrush(Qt.black)
+        else:
+            painter.setBrush(self._color)
+            
+        painter.drawEllipse(4, 4, 24, 24)
+
+class StatusDisplay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.led = LEDIndicator()
+        self.status_label = QLabel("Idle")
+        font = QFont()
+        font.setPointSize(15)
+        font.setBold(True)
+        self.status_label.setFont(font)
+        # self.status_label.setStyleSheet("font-weight: bold;")
+        
+        layout.addWidget(self.led)
+        layout.addWidget(self.status_label)
+        layout.addStretch()
+        
+        self.setLayout(layout)
+        
+    def set_status(self, status: str):
+        self.status_label.setText(status)
+        
+        if status in ["Idle", "At base", "At destination"]:
+            self.led.setFlashing(False)
+            self.led.setColor(Qt.green)
+        elif status in ["Nav to base", "Nav to dest", "Manual move"]:
+            self.led.setFlashing(True, QColor(255, 165, 0))  # Orange color
+        elif status == "Failed":
+            self.led.setFlashing(True)
+            self.led.setColor(Qt.red)

@@ -11,7 +11,7 @@ from geometry_msgs.msg import TwistStamped, Quaternion
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer, pyqtSlot, QObject
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel
 import threading
-from nav2_simple_commander.robot_navigator import BasicNavigator
+from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from rclpy.duration import Duration
@@ -182,7 +182,7 @@ class ManagerNode(LifecycleNode):
 
     def service_callback(self, future):
         try:
-            response = future.result()
+            response: Trigger.Response = future.result()
             if response.success:
                 if self._current_state == LState.INACTIVE:
                     self.trigger_activate()
@@ -253,6 +253,8 @@ class NavData(QObject):
         # self.send_routes.emit(list(self.routes.keys()))
 
 class Navigator(QThread):
+    navStatus = pyqtSignal(str)
+
     finished = pyqtSignal()  # Emitted when a goal is reached
     navigation_status = pyqtSignal(str)  # Optional: to inform GUI about status
 
@@ -346,12 +348,22 @@ class Navigator(QThread):
                         break  # Exit this loop to process the new goal
                         
                     feedback = self.nav_data.navigator.getFeedback()
-                    print(f"feedback: {feedback}")
+                    # print(f"feedback: {feedback}")
                     # if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
                     #     self.nav_data.navigator.cancelTask()
                     #     break
                 
                 if self._running and self.nav_data.navigator.isTaskComplete():
+                    if self.nav_data.navigator.getResult() is TaskResult.SUCCEEDED:
+                        if self._to_dest:
+                            self.navStatus.emit("At base")
+                        else:
+                            self.navStatus.emit("At destination")
+                    elif self.nav_data.navigator.getResult() is TaskResult.CANCELED:
+                        self.navStatus.emit("Idle")
+                    elif self.nav_data.navigator.getResult() is TaskResult.FAILED:
+                        self.navStatus.emit("Failed")
+
                     print(f"{self.nav_data.navigator.getResult()}")
                     self.finished.emit()
                     
@@ -361,6 +373,8 @@ class Navigator(QThread):
 
 
 class GuiManager(QThread):
+    manualStatus = pyqtSignal(str)
+
     service_response = pyqtSignal(bool)
     update_pose = pyqtSignal(float, float, float)
 
@@ -408,7 +422,7 @@ class GuiManager(QThread):
         self.nav_data.load_routes()
         self.send_route_names.emit(self.nav_data.routes)
 
-    pyqtSignal(dict)
+    pyqtSlot(dict)
     def save_routes(self, new_routes: dict):
         self.nav_data.save_routes(new_routes)
 
@@ -427,13 +441,15 @@ class GuiManager(QThread):
 
     @pyqtSlot(str, float)
     def start_cmd_vel_pub(self, dir: str, vel: float):
+        self.manualStatus.emit("Manual move")
+
         self.node.start_publishing(dir,vel)
-        print(f"keys start: {dir}")
 
     @pyqtSlot()
     def stop_cmd_vel_pub(self):
+        self.manualStatus.emit("Idle")
+
         self.node.stop_publishing()
-        print("keys stop")
 
     def run(self):
         self.node = ManagerNode()
