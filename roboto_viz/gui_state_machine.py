@@ -1,7 +1,7 @@
+from __future__ import annotations
 from roboto_viz.gui_manager import GuiManager
 from roboto_viz.main_view import MainView
 
-from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import rclpy
@@ -52,7 +52,7 @@ class State(ABC):
                 pass
         self._connections.clear()
 
-    def connect_and_store_connections_connections(self, signal, slot):
+    def connect_and_store_connections(self, signal, slot):
         """Connect a signal to a slot and store the connection"""
         connection = signal.connect(slot)
         self._connections.append(signal)
@@ -139,7 +139,7 @@ class ConfiguringState(State):
             self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot # KEEP IT IN MAIN_VIEW!!
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.manualStatus,
             self.gui.main_view.active_view.active_tools.set_current_status
         )
@@ -192,7 +192,7 @@ class ActiveState(State):
             self.gui.gui_manager.save_routes
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.navigator.navStatus,
             self.gui.main_view.active_view.active_tools.set_current_status
         )
