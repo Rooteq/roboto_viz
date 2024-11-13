@@ -1,30 +1,17 @@
-# model should be the guiController -> is notifies view of any changes (updates the position for example), the Gui class is a controller to be fair xdd
-
-from __future__ import annotations
-import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QStackedWidget
-from abc import ABC, abstractmethod
-
-from PyQt5.QtCore import pyqtSignal, QObject
-
-import rclpy
-from rclpy.node import Node
-from rclpy.executors import MultiThreadedExecutor
-from std_srvs.srv import Trigger
-from geometry_msgs.msg import Twist
-
 from roboto_viz.gui_manager import GuiManager
 from roboto_viz.main_view import MainView
+
+from __future__ import annotations
+from abc import ABC, abstractmethod
+
+import rclpy
 
 class Gui:
     _state = None
 
     def __init__(self) -> None:
         rclpy.init()
-        # self.transition_to(state)
-
         self.transition_to(DisconnectedState())
-
         self.gui_manager: GuiManager = GuiManager()
         self.main_view: MainView = MainView()
 
@@ -41,9 +28,6 @@ class Gui:
 
     def handleGui(self):
         self._state.handleGui()
-
-    def request2(self):
-        self._state.handle2()
 
 class State(ABC):
     def __init__(self):
@@ -68,7 +52,7 @@ class State(ABC):
                 pass
         self._connections.clear()
 
-    def connect_and_store(self, signal, slot):
+    def connect_and_store_connections_connections(self, signal, slot):
         """Connect a signal to a slot and store the connection"""
         connection = signal.connect(slot)
         self._connections.append(signal)
@@ -82,22 +66,22 @@ class DisconnectedState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_disconnected()
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.service_availability,
             self.gui.main_view.disconnected_view.set_availability
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.connection_signal,
             self.handleConfigure
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.trigger_connection,
             self.handleConnection
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.send_map_names,
             self.gui.main_view.active_view.load_maps
         )
@@ -121,37 +105,37 @@ class ConfiguringState(State):
         # self.gui.gui_manager.stop()
         self.gui.gui_manager.stop_nav()
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.set_position_signal,
             self.gui.gui_manager.set_init_pose
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.switch_to_active,
             self.handle_activate
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.update_pose,
             self.gui.main_view.active_view.update_robot_pose
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.map_selected,
             self.gui.main_view.load_map # KEEP IT IN MAIN_VIEW!!
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.start_keys_vel,
             self.gui.gui_manager.start_cmd_vel_pub 
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.stop_keys_vel,
             self.gui.gui_manager.stop_cmd_vel_pub 
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.map_selected,
             self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot # KEEP IT IN MAIN_VIEW!!
         )
@@ -163,42 +147,42 @@ class ActiveState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_active()
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.switch_to_configure,
             self.handle_configuring
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.trigger_disconnect,
             self.handleDisconnection
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.start_nav,
             self.gui.gui_manager.handle_set_route
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.stop_nav,
             self.gui.gui_manager.stop_nav
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.update_pose,
             self.gui.main_view.active_view.update_robot_pose
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.start_planning,
             self.startPlanning
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.send_route_names,
             self.gui.main_view.active_view.load__routes
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.save_current_routes,
             self.gui.gui_manager.save_routes
         )
@@ -226,26 +210,26 @@ class PlannerState(State):
 
         self.gui.gui_manager.stop_nav()
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.send_route_names,
             self.gui.main_view.active_view.load__routes
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.finish_planning,
             self.finishPlanning
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.set_position_signal,
             self.gui.main_view.active_view.planning_tools.setPoint
         )
 
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.gui_manager.update_pose,
             self.gui.main_view.active_view.update_robot_pose
         )
-        self.connect_and_store(
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.planning_tools.save_current_routes,
             self.gui.gui_manager.save_routes
         )
