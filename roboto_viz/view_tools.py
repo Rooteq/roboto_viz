@@ -275,6 +275,7 @@ class ActiveTools(QWidget):
         statusLabel.setFont(label_font)
         map_label.setFont(label_font)
 
+        # Update the list style to include active state
         list_style = """
             QListWidget {
                 border: 2px solid #bdc3c7;
@@ -345,19 +346,17 @@ class ActiveTools(QWidget):
     def handle_navigate_to_dest(self):
         if self.active_route_name:
             self.start_nav.emit(self.active_route_name, True)
-            self.set_current_status("Nav to dest")
+            # self.set_current_status("Nav to dest")
 
     def handle_navigate_to_base(self):
         if self.active_route_name:
             self.start_nav.emit(self.active_route_name, False)
-            self.set_current_status("Nav to base")
+            # self.set_current_status("Nav to base")
 
     def update_routes(self):
         """Load routes from received list while preserving active route"""
         current_selection = self.route_list.currentItem()
         currently_selected_name = current_selection.text() if current_selection else None
-        if currently_selected_name and currently_selected_name.startswith("✓ "):
-            currently_selected_name = currently_selected_name[2:]
         
         # Clear existing routes
         self.route_list.clear()
@@ -365,18 +364,21 @@ class ActiveTools(QWidget):
         # Add new routes, maintaining active route if it still exists
         for route_name in list(self.routes.keys()):
             item = QListWidgetItem()
-            display_name = route_name
+            item.setText(route_name)  # Just the name, no check mark
             
-            # If this was the active route and still exists, mark it active
+            # If this is the active route, give it a distinct background
             if route_name == self.active_route_name:
-                display_name = "✓ " + route_name
-                item.setForeground(Qt.green)
+                font = QFont()
+                # font.setPixelSize(20)
+                font.setBold(True)
+                item.setBackground(Qt.white)  # Green background for active route
+                item.setForeground(Qt.black)  # White text for better contrast
+                item.setFont(font)
                 self.route_list.insertItem(0, item)
             else:
-                item.setForeground(Qt.black)
+                item.setBackground(QColor("white"))  # Normal background
+                item.setForeground(QColor("#2c3e50"))  # Dark text for normal routes
                 self.route_list.addItem(item)
-                
-            item.setText(display_name)
             
             # Restore selection if possible
             if route_name == currently_selected_name:
@@ -390,31 +392,11 @@ class ActiveTools(QWidget):
             # Redraw points for active route
             self.draw_points.emit(self.routes[self.active_route_name])
 
-
-    def remove_route(self):
-        """Remove the currently selected route"""
-        current_item = self.route_list.currentItem()
-        if current_item:
-            route_name = current_item.text()
-            if route_name.startswith("✓ "):
-                route_name = route_name[2:]
-            
-            # Clear active route if removing it
-            if route_name == self.active_route_name:
-                self.active_route_name = None
-            
-            self.routes.pop(route_name)
-            self.update_routes()
-            self.save_current_routes.emit(self.routes)
-            self.stop_drawing_points.emit()
-
     def set_active_route(self):
         """Set the selected route as active"""
         current_item = self.route_list.currentItem()
         if current_item:
-            route_name = current_item.text()
-            if route_name.startswith("✓ "):
-                route_name = route_name[2:]
+            route_name = current_item.text()  # No need to strip check mark anymore
             
             # Update active route name
             self.active_route_name = route_name
@@ -425,6 +407,21 @@ class ActiveTools(QWidget):
             # Draw points for the active route
             if route_name in self.routes:
                 self.draw_points.emit(self.routes[route_name])
+
+    def remove_route(self):
+        """Remove the currently selected route"""
+        current_item = self.route_list.currentItem()
+        if current_item:
+            route_name = current_item.text()  # No need to strip check mark anymore
+            
+            # Clear active route if removing it
+            if route_name == self.active_route_name:
+                self.active_route_name = None
+            
+            self.routes.pop(route_name)
+            self.update_routes()
+            self.save_current_routes.emit(self.routes)
+            self.stop_drawing_points.emit()
             
 
 class PlanningTools(QWidget):

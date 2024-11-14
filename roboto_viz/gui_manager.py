@@ -214,7 +214,7 @@ class ManagerNode(LifecycleNode):
                 case _:
                     self.get_logger().info("Wrong cmd command")
             self.vel_pub_timer.reset()  # Resets the timer if it's canceled
-        self.get_logger().info("Started publishing to cmd_vel")
+        # self.get_logger().info("Started publishing to cmd_vel")
 
     def stop_publishing(self):
 
@@ -274,7 +274,8 @@ class Navigator(QThread):
         # self._running = False
         if self.nav_data.navigator.isTaskComplete() is False:
             self.nav_data.navigator.cancelTask()
-        # self.wait() # wait needed?
+            self.navStatus.emit("Idle")
+
 
     def set_goal(self, route: str, to_dest: bool, x:float, y:float):
         """Set a new goal, replacing any existing one"""
@@ -289,6 +290,11 @@ class Navigator(QThread):
             # Cancel current navigation if there is one
             if not self.nav_data.navigator.isTaskComplete():
                 self.nav_data.navigator.cancelTask()
+            
+            if to_dest == True:
+                self.navStatus.emit("Nav to dest")
+            else:
+                self.navStatus.emit("Nav to base")
         
     def run(self):
         while self._running:
@@ -359,8 +365,6 @@ class Navigator(QThread):
                             self.navStatus.emit("At base")
                         else:
                             self.navStatus.emit("At destination")
-                    elif self.nav_data.navigator.getResult() is TaskResult.CANCELED:
-                        self.navStatus.emit("Idle")
                     elif self.nav_data.navigator.getResult() is TaskResult.FAILED:
                         self.navStatus.emit("Failed")
 
