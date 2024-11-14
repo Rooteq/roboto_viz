@@ -66,7 +66,7 @@ class DisconnectedState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_disconnected()
 
-
+        self.gui.main_view.map_view.enable_drawing = False
 
         self.connect_and_store_connections(
             self.gui.gui_manager.service_availability,
@@ -91,11 +91,12 @@ class DisconnectedState(State):
     def handleConfigure(self):
         self.gui.main_view.disconnected_view.waiting_for_connection(True)
         self.gui.gui_manager.send_maps()
+        self.gui.gui_manager.send_routes()
         self.gui.gui_manager.trigger_configure()
 
     def handleConnection(self):
         self.gui.main_view.load_map("robots_map")
-        self.gui.transition_to(ConfiguringState())
+        self.gui.transition_to(ActiveState())
         self.gui.main_view.disconnected_view.waiting_for_connection(False)
         self.gui.handleGui()
 
@@ -104,10 +105,8 @@ class ConfiguringState(State):
     def handleGui(self):
         self.gui.main_view.switch_to_configuring()
 
-        self.connect_and_store_connections(
-            self.gui.main_view.set_position_signal,
-            self.gui.gui_manager.set_init_pose
-        )
+        self.gui.main_view.map_view.enable_drawing = True
+
 
         self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.switch_to_active,
@@ -144,6 +143,11 @@ class ConfiguringState(State):
             self.gui.main_view.active_view.active_tools.set_current_status
         )
 
+        self.connect_and_store_connections(
+            self.gui.main_view.set_position_signal,
+            self.gui.gui_manager.set_init_pose
+        )
+
     def handle_activate(self):
         self.gui.transition_to(ActiveState())
         self.gui.handleGui()
@@ -151,6 +155,8 @@ class ConfiguringState(State):
 class ActiveState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_active()
+
+        self.gui.main_view.map_view.enable_drawing = False
 
         self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.switch_to_configure,
@@ -222,7 +228,9 @@ class ActiveState(State):
 class PlannerState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_planner()
-        self.gui.main_view.map_view.clear_points() # does it even work?
+        self.gui.main_view.map_view.clear_points()
+
+        self.gui.main_view.map_view.enable_drawing = True
 
         self.connect_and_store_connections(
             self.gui.gui_manager.send_route_names,

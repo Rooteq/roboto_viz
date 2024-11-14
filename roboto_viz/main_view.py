@@ -68,21 +68,10 @@ class MainView(QMainWindow):
         self.active_view.planning_tools.stop_drawing_points.connect(self.map_view.clear_points)
 
     def load_map(self, map_name: str) -> tuple[bool, str]:
-        """
-        Load a map from the .robotroutes/maps directory.
-        
-        Args:
-            map_name: Name of the map (without extension)
-            
-        Returns:
-            tuple[bool, str]: (Success flag, Error message if failed or empty string if successful)
-        """
         try:
-            # Construct paths
             map_path = self.maps_dir / f"{map_name}.pgm"
             yaml_path = self.maps_dir / f"{map_name}.yaml"
             
-            # Check if files exist
             if not map_path.exists():
                 error_msg = f"Map file not found: {map_path}"
                 self.map_loaded_signal.emit(False, error_msg)
@@ -93,7 +82,6 @@ class MainView(QMainWindow):
                 self.map_loaded_signal.emit(False, error_msg)
                 return False, error_msg
             
-            # Load YAML data
             with open(yaml_path, 'r') as file:
                 yaml_data = yaml.safe_load(file)
                 
@@ -127,9 +115,7 @@ class MainView(QMainWindow):
 
     def switch_to_planner(self):
         self.active_view.switch_to_planning()
-        # self.stacked_widget.setCurrentWidget(self.planner_view)
         self.active_view.finish_planning.connect(self.on_finish_planning)
-        # self.connected_view.on_disconnection.connect(self.on_disconnection)
 
     def switch_to_active(self):
         self.stacked_widget.setCurrentWidget(self.active_view)

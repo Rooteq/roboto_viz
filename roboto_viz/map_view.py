@@ -31,6 +31,8 @@ class MapView(QGraphicsView):
 
         self.point_items = [] 
 
+        self._enable_drawing = False
+
         self.drawing_arrow = False
 
     def load_image(self, image_path, origin_data):
@@ -71,17 +73,26 @@ class MapView(QGraphicsView):
         self.scene.update()
 
     def mousePressEvent(self, event):
+        if self.enable_drawing == False:
+            return
+
         if event.button() == Qt.LeftButton:
             self.drawing_arrow = True
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(scene_pos, scene_pos)
 
     def mouseMoveEvent(self, event):
+        if self.enable_drawing == False:
+            return
+
         if self.drawing_arrow:
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
 
     def mouseReleaseEvent(self, event):
+        if self.enable_drawing == False:
+            return
+            
         if event.button() == Qt.LeftButton and self.drawing_arrow:
             self.drawing_arrow = False
             scene_pos = self.mapToScene(event.pos())
@@ -90,8 +101,8 @@ class MapView(QGraphicsView):
             # Convert to map coordinates
             start_x = (self.goal_arrow.start_point.x() * 0.05) + self.map_origin[0]
             start_y = (self.pixmap.rect().height() - self.goal_arrow.start_point.y()) * 0.05 + self.map_origin[1]
-            end_x = (scene_pos.x() * 0.05) + self.map_origin[0]
-            end_y = (self.pixmap.rect().height() - scene_pos.y()) * 0.05 + self.map_origin[1]
+            # end_x = (scene_pos.x() * 0.05) + self.map_origin[0]
+            # end_y = (self.pixmap.rect().height() - scene_pos.y()) * 0.05 + self.map_origin[1]
             
             # Calculate angle
             angle = self.goal_arrow.get_angle()
@@ -110,30 +121,23 @@ class MapView(QGraphicsView):
         Args:
             points: List of (x,y,z,w) coordinates where w is the rotation in radians
         """
-        # Clear existing points first
         self.clear_points()
         
-        # Define point appearance
         point_radius = 5
         point_color = QColor(64, 64, 64)  # Gray
         
-        # Define direction indicator rectangle
         rect_width = 8
         rect_height = 1
         
-        # Create small font for numbers
         font = QFont()
         font.setPointSize(4)
         
         for i, point in enumerate(points):
-            # Convert map coordinates to scene coordinates
             map_x = (point[0] - self.map_origin[0]) * 20
             map_y = self.pixmap.rect().height() - ((point[1] - self.map_origin[1]) * 20)
             
-            # Create group to hold all elements of the point
             point_group = QGraphicsItemGroup()
             
-            # Create the circular background
             ellipse = QGraphicsEllipseItem(
                 map_x - point_radius/2,
                 map_y - point_radius/2,
@@ -144,7 +148,6 @@ class MapView(QGraphicsView):
             ellipse.setPen(QPen(point_color))
             point_group.addToGroup(ellipse)
             
-            # Create direction indicator rectangle
             rect = QGraphicsRectItem(
                 map_x - rect_width/2,
                 map_y - rect_height/2,
@@ -161,24 +164,19 @@ class MapView(QGraphicsView):
             rect.setRotation(rotation_degrees)
             point_group.addToGroup(rect)
             
-            # Create the number label
             text = QGraphicsTextItem(str(i))
             text.setFont(font)
             text.setDefaultTextColor(Qt.white)
             
-            # Get the exact bounding rectangle of the text
             text_bounds = text.boundingRect()
             
-            # Position text so its center aligns with dot's center
             text_x = map_x - text_bounds.width()/2
             text_y = map_y - text_bounds.height()/2
             text.setPos(text_x, text_y)
             point_group.addToGroup(text)
             
-            # Add group to scene
             self.scene.addItem(point_group)
             
-            # Store group for later removal
             self.point_items.append(point_group)
 
     def clear_points(self):
@@ -188,3 +186,11 @@ class MapView(QGraphicsView):
         for point_group in self.point_items:
             self.scene.removeItem(point_group)
         self.point_items.clear()
+
+    @property
+    def enable_drawing(self):
+        return self._enable_drawing
+
+    @enable_drawing.setter
+    def enable_drawing(self, value: bool):
+        self._enable_drawing = value

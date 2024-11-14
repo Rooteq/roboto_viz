@@ -28,13 +28,90 @@ class ActiveTools(QWidget):
 
         self.routes = routes
         self.maps = maps
-        
-        self.active_route_name = None  # Store the name of active route
 
+        self.active_route_name = None 
+
+        button_style = """
+            QPushButton {
+                min-height: 40px;
+                font-size: 14px;
+                padding: 5px 10px;
+                font-weight: bold;
+                border: 2px solid #2c3e50;
+                border-radius: 5px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+        """
+        
+
+        stop_button_style = """
+            QPushButton {
+                min-height: 40px;
+                font-size: 14px;
+                padding: 5px 10px;
+                font-weight: bold;
+                border: 2px solid #c0392b;
+                border-radius: 5px;
+                background-color: #e74c3c;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+                border-color: #962d22;
+            }
+            QPushButton:pressed {
+                background-color: #962d22;
+                border-color: #6d2018;
+            }
+        """ 
+
+        tab_style = """
+            QTabWidget::pane {
+                border: 2px solid #2c3e50;
+                border-radius: 5px;
+                background: white;
+            }
+
+            QTabBar::tab {
+                background: #ecf0f1;
+                border: 2px solid #2c3e50;
+                border-bottom: none;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+                min-width: 120px;
+                min-height: 35px;
+                padding: 5px;
+                margin-right: 2px;
+                font-size: 14px;
+                font-weight: bold;
+                color: #2c3e50;
+            }
+
+            QTabBar::tab:selected {
+                background: white;
+                margin-bottom: -2px;
+                padding-bottom: 7px;
+            }
+
+            QTabBar::tab:hover:!selected {
+                background: #d0d3d4;
+            }
+        """
+        
         # TABS
         main_layout = QVBoxLayout()
         self.tab_widget = QTabWidget()
-        
+        self.tab_widget.setStyleSheet(tab_style)
+
         # Create first tab (Operation tab)
         operation_tab = QWidget()
         first_layout = QVBoxLayout(operation_tab)
@@ -140,6 +217,101 @@ class ActiveTools(QWidget):
         self.button_stop.clicked.connect(lambda: self.stop_nav.emit())
 
         self.tab_widget.currentChanged.connect(self.emit_based_on_tab)
+
+        self.button_add.setStyleSheet(button_style)
+        self.button_remove.setStyleSheet(button_style)
+        self.button_set_active.setStyleSheet(button_style)
+        self.button_go_to_base.setStyleSheet(button_style)
+        self.button_go_to_dest.setStyleSheet(button_style)
+        
+        # Apply special style to stop button
+        self.button_stop.setStyleSheet(stop_button_style)
+
+        direction_button_style = """
+            QPushButton {
+                min-height: 60px;
+                min-width: 60px;
+                font-size: 20px;
+                font-weight: bold;
+                border: 2px solid #2980b9;
+                border-radius: 5px;
+                background-color: #3498db;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+                border-color: #2472a4;
+            }
+            QPushButton:pressed {
+                background-color: #2472a4;
+                border-color: #1a5276;
+            }
+        """
+        
+        self.upButton.setStyleSheet(direction_button_style)
+        self.leftButton.setStyleSheet(direction_button_style)
+        self.downButton.setStyleSheet(direction_button_style)
+        self.rightButton.setStyleSheet(direction_button_style)
+        
+        # Update fixed sizes for direction buttons
+        self.upButton.setFixedSize(60, 60)
+        self.leftButton.setFixedSize(60, 60)
+        self.downButton.setFixedSize(60, 60)
+        self.rightButton.setFixedSize(60, 60)
+
+        # Make the route list font bigger
+        route_list_font = QFont()
+        route_list_font.setPointSize(12)
+        self.route_list.setFont(route_list_font)
+
+        # Make the map combo box font bigger
+        map_combo_font = QFont()
+        map_combo_font.setPointSize(12)
+        self.map_combo.setFont(map_combo_font)
+
+        # Make labels bigger
+        label_font = QFont()
+        label_font.setPointSize(12)
+        statusLabel.setFont(label_font)
+        map_label.setFont(label_font)
+
+        list_style = """
+            QListWidget {
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                padding: 5px;
+                background-color: white;
+            }
+            QListWidget::item {
+                height: 30px;
+                border-radius: 3px;
+                padding: 5px;
+            }
+            QListWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+            QListWidget::item:hover:!selected {
+                background-color: #ecf0f1;
+            }
+        """
+        self.route_list.setStyleSheet(list_style)
+
+        # Add some vertical spacing between major sections
+        first_layout.setSpacing(10)
+        config_layout.setSpacing(10)
+
+        # Style the status label
+        status_label_style = """
+            QLabel {
+                font-size: 14px;
+                font-weight: bold;
+                color: #2c3e50;
+                padding: 5px;
+            }
+        """
+        statusLabel.setStyleSheet(status_label_style)
+        map_label.setStyleSheet(status_label_style)
 
     pyqtSlot(str)
     def set_current_status(self, status: str):
@@ -274,7 +446,13 @@ class PlanningTools(QWidget):
     def setup_ui(self):
         self.route_name = QLineEdit(self)
         self.main_layout = QVBoxLayout()
-         
+
+        self.route_name_label = QLabel("Route Name:")
+        label_font = QFont()
+        label_font.setPointSize(12)
+        self.route_name_label.setFont(label_font)
+
+
         self.done_button = QPushButton("Done")
         self.cancel_button = QPushButton("Cancel")
 
@@ -285,11 +463,50 @@ class PlanningTools(QWidget):
 
         # layout.addWidget(self.map_view, 3)
         # layout.addWidget(self.finish_planning_button, 1)
+        self.main_layout.addWidget(self.route_name_label)
         self.main_layout.addWidget(self.route_name)
         self.main_layout.addStretch()
         self.main_layout.addWidget(self.done_button)
         self.main_layout.addWidget(self.cancel_button)
         self.setLayout(self.main_layout)
+
+
+        button_style = """
+            QPushButton {
+                min-height: 40px;
+                font-size: 14px;
+                padding: 5px 10px;
+                font-weight: bold;
+                border: 2px solid #2c3e50;
+                border-radius: 5px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+        """
+        
+        self.done_button.setStyleSheet(button_style)
+        self.cancel_button.setStyleSheet(button_style)
+        
+        # Make the route name input bigger
+        route_name_style = """
+            QLineEdit {
+                min-height: 40px;
+                font-size: 14px;
+                padding: 5px 10px;
+                border: 2px solid #bdc3c7;
+                border-radius: 5px;
+                background-color: white;
+            }
+        """
+        self.route_name.setStyleSheet(route_name_style)
 
     pyqtSlot(float,float,float)
     def setPoint(self, x, y, theta):
