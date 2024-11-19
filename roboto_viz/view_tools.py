@@ -129,7 +129,7 @@ class ActiveTools(QWidget):
         
         # Create button layout for second row
         button_layout_2 = QHBoxLayout()
-        self.button_set_active = QPushButton("Set Active")
+        self.button_set_active = QPushButton("Set selection as active")
         button_layout_2.addWidget(self.button_set_active)
         first_layout.addLayout(button_layout_2)
         
