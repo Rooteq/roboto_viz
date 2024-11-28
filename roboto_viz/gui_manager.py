@@ -167,7 +167,8 @@ class ManagerNode(LifecycleNode):
         if self.cli.service_is_ready():
             self.send_request()
         else:
-            self.trigger_deactivate()
+            if(self._current_state != LState.INACTIVE):
+                self.trigger_deactivate()
             self.trigger_cleanup()
             self.disconnect_callback()
 

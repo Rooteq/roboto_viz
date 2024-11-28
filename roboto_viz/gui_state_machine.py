@@ -7,13 +7,13 @@ from abc import ABC, abstractmethod
 import rclpy
 
 class Gui:
-    _state = None
-
     def __init__(self) -> None:
         rclpy.init()
-        self.transition_to(DisconnectedState())
+
+        self._state = None
         self.gui_manager: GuiManager = GuiManager()
         self.main_view: MainView = MainView()
+        self.transition_to(DisconnectedState())
 
     def setup(self):
         self.handleGui()
@@ -32,7 +32,7 @@ class Gui:
 class State(ABC):
     def __init__(self):
         super().__init__()
-        self._connections = []  # Store signal connections
+        self._connections = []
     
     @property
     def gui(self) -> Gui:
@@ -87,6 +87,15 @@ class DisconnectedState(State):
             self.gui.gui_manager.send_map_names,
             self.gui.main_view.active_view.load_maps
         )
+
+        self.connect_and_store_connections(
+            self.gui.gui_manager.trigger_disconnect,
+            self.handleDisconnection
+        )
+
+    def handleDisconnection(self):
+        self.gui.main_view.disconnected_view.waiting_for_connection(False)
+        self.gui.handleGui()
 
     def handleConfigure(self):
         self.gui.main_view.disconnected_view.waiting_for_connection(True)

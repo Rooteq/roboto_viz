@@ -1,6 +1,7 @@
-from PyQt5.QtWidgets import QStackedWidget, QVBoxLayout, QWidget, QPushButton, QTabWidget, QLineEdit, QLabel, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QGridLayout
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, pyqtSlot
+from PyQt5.QtWidgets import QStackedWidget, QVBoxLayout, QWidget, QPushButton, QLabel, QHBoxLayout
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from roboto_viz.view_tools import ActiveTools, PlanningTools
+from PyQt5.QtGui import QFont
 
 from roboto_viz.map_view import MapView
 
@@ -79,25 +80,80 @@ class ActiveView(QWidget):
         self.planning_tools.finish_planning.connect(lambda: self.finish_planning.emit())
 
 
+
 class DisconnectedView(QWidget):
     on_connection = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
-        # self.main_view = main_view
-        self.setup_ui()
         self.wait_for_connection: bool = False
+        self.setup_ui()
 
     def setup_ui(self):
-        layout = QVBoxLayout(self)
+        # Define styles matching the other widgets
+        button_style = """
+            QPushButton {
+                min-height: 40px;
+                font-size: 14px;
+                padding: 5px 10px;
+                font-weight: bold;
+                border: 2px solid #2c3e50;
+                border-radius: 5px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+            QPushButton:disabled {
+                background-color: #f5f6f7;
+                border-color: #bdc3c7;
+                color: #95a5a6;
+            }
+        """
 
+        label_style = """
+            QLabel {
+                font-size: 14px;
+                font-weight: bold;
+                color: #2c3e50;
+                padding: 5px;
+                min-height: 30px;
+            }
+        """
+
+        # Create layout with proper spacing
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Create and style the service state label
         self.service_state = QLabel("Service: Not Available")
+        self.service_state.setStyleSheet(label_style)
+        self.service_state.setAlignment(Qt.AlignCenter)
         
+        # Create and style the connect button
         self.connect_button = QPushButton("Connect")
+        self.connect_button.setStyleSheet(button_style)
         self.connect_button.clicked.connect(self.on_connect)
         self.connect_button.setEnabled(False)
 
+        # Set fonts
+        font = QFont()
+        font.setPointSize(12)
+        self.service_state.setFont(font)
+        self.connect_button.setFont(font)
+
+        # Add widgets to layout with some spacing
+        layout.addStretch()
         layout.addWidget(self.service_state)
         layout.addWidget(self.connect_button)
+        layout.addStretch()
 
     def on_connect(self):
         self.on_connection.emit("connect on Widget")
@@ -112,5 +168,4 @@ class DisconnectedView(QWidget):
         if state:
             self.connect_button.setEnabled(False)
             self.service_state.setText("Service: connecting")
-        self.wait_for_connection = state
-
+            self.wait_for_connection = state
