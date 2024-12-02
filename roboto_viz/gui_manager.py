@@ -310,14 +310,8 @@ class Navigator(QThread):
                 continue
                 
             try:
-                # Choosing the shortest path
-                # dist: float = sys.float_info.max
                 distances = [math.dist((self.curr_x,self.curr_y), (waypoint[0], waypoint[1])) for waypoint in current_goal]
-
-                # Find the index of the closest waypoint
                 closest_index = distances.index(min(distances))
-
-                # Reorder waypoints starting from the closest one
                 waypoints = current_goal[closest_index:]
 
                 points_on_route = []
