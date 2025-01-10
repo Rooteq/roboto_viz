@@ -232,7 +232,7 @@ class ManagerNode(LifecycleNode):
         self.cmd_vel_pub.publish(self.cmd_vel_msg)
 
         self.get_logger().info("Stopped publishing to cmd_vel")
-
+        
 class NavData(QObject):
     def __init__(self):
         super().__init__()
@@ -241,8 +241,10 @@ class NavData(QObject):
 
         self.routes: Dict[str, List[Tuple[float, float]]]
         self.maps: List[str]
+        self.current_map: str = None
 
     def save_routes(self, new_routes: Dict[str, List[Tuple[float, float]]]):
+        self.routes = new_routes
         self.route_manager.save_routes(new_routes)
     
     def load_routes(self):
@@ -251,7 +253,11 @@ class NavData(QObject):
     def load_maps(self):
         self.maps = self.route_manager.get_map_names()
 
-        # self.send_routes.emit(list(self.routes.keys()))
+    def set_current_map(self, map_name: str):
+        """Set current map and load its routes"""
+        self.current_map = map_name
+        self.route_manager.set_current_map(map_name)
+        self.load_routes()  # Reload routes for new map
 
 class Navigator(QThread):
     navStatus = pyqtSignal(str)
@@ -411,20 +417,37 @@ class GuiManager(QThread):
         self.navigator.start()
 
     def send_maps(self):
+        """Load and send available maps"""
         self.nav_data.load_maps()
-        self.nav_data.route_manager.load_map("robots_map")
-        # self.nav_data.route_manager.load_map_onto_robot("test")
+        # Load default map if needed
+        if self.nav_data.maps:
+            default_map = "robots_map"
+            if default_map in self.nav_data.maps:
+                self.nav_data.route_manager.load_map_onto_robot(default_map)
+                self.nav_data.set_current_map(default_map)
+            else:
+                # If default map doesn't exist, use first available map
+                self.nav_data.set_current_map(self.nav_data.maps[0])
         
         self.send_map_names.emit(self.nav_data.maps)
 
+
     def send_routes(self):
+        """Send routes for current map"""
         self.nav_data.load_routes()
         self.send_route_names.emit(self.nav_data.routes)
 
-    pyqtSlot(dict)
+    @pyqtSlot(dict)
     def save_routes(self, new_routes: dict):
+        """Save routes for current map"""
         self.nav_data.save_routes(new_routes)
 
+    @pyqtSlot(str)
+    def handle_map_selected(self, map_name: str):
+        """Handle map selection from GUI"""
+        self.nav_data.set_current_map(map_name)
+        self.send_routes()  # Send updated routes for new map
+        
     @pyqtSlot()
     def trigger_configure(self):
         self.node.trigger_configure()

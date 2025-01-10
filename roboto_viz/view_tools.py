@@ -335,13 +335,17 @@ class ActiveTools(QWidget):
         index = self.map_combo.findText(current_map)
         if index >= 0:
             self.map_combo.setCurrentIndex(index)
-
+            
     def on_map_selected(self, map_name: str):
-        """Handle map selection"""
-        if map_name:
-            print(f"selected: {map_name}")
-            self.map_selected.emit(map_name)
-
+            """Handle map selection"""
+            if map_name:
+                print(f"selected: {map_name}")
+                self.map_selected.emit(map_name)
+                # Clear current routes when map changes
+                self.routes.clear()
+                self.active_route_name = None
+                self.update_routes()
+                self.stop_drawing_points.emit()
 
     def handle_navigate_to_dest(self):
         if self.active_route_name:

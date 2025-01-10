@@ -22,6 +22,9 @@ class RouteManager:
         self.routes_file = self.config_dir / "routes.json"
         self.maps_dir = self.config_dir / "maps"
         
+        # Current active map
+        self.current_map = None
+        
         # Ensure config directory exists
         self._setup_config_directory()
 
@@ -41,7 +44,7 @@ class RouteManager:
 
     def load_routes(self) -> Dict[str, List[Point4D]]:
         """
-        Load routes from the JSON file in the config directory.
+        Load routes from the JSON file for the current map.
         Creates a new file if it doesn't exist.
         
         Returns:
@@ -60,11 +63,14 @@ class RouteManager:
                     json.dump(data, f, indent=2)
                 print(f"Created new routes file: '{self.routes_file}'")
             
+            # Get routes for current map
+            map_routes = data.get(self.current_map, {}) if self.current_map else {}
+            
             # Convert lists to tuples for coordinates
             routes = {
                 name: [tuple(point) if len(point) == 4 else tuple(point + [0.0] * (4 - len(point)))
                       for point in points]
-                for name, points in data.items()
+                for name, points in map_routes.items()
             }
             return routes
             
@@ -80,7 +86,7 @@ class RouteManager:
 
     def save_routes(self, routes: Dict[str, List[Point4D]]) -> bool:
         """
-        Save routes to the JSON file.
+        Save routes to the JSON file for the current map.
         
         Args:
             routes: Dictionary of routes with 4D points to save
@@ -89,15 +95,23 @@ class RouteManager:
             bool: True if save was successful, False otherwise
         """
         try:
+            # First load all existing routes
+            if self.routes_file.exists():
+                with open(self.routes_file, 'r') as f:
+                    all_routes = json.load(f)
+            else:
+                all_routes = {}
+            
             # Convert tuples to lists for JSON serialization
-            data = {
-                name: [list(point) for point in points]
-                for name, points in routes.items()
-            }
+            if self.current_map:
+                all_routes[self.current_map] = {
+                    name: [list(point) for point in points]
+                    for name, points in routes.items()
+                }
             
             with open(self.routes_file, 'w') as f:
-                json.dump(data, f, indent=2)
-            print(f"Successfully saved routes to '{self.routes_file}'")
+                json.dump(all_routes, f, indent=2)
+            print(f"Successfully saved routes for map '{self.current_map}' to '{self.routes_file}'")
             return True
             
         except Exception as e:
@@ -106,7 +120,7 @@ class RouteManager:
 
     def add_route(self, name: str, points: List[Point4D]) -> bool:
         """
-        Add a new route to the existing routes.
+        Add a new route to the existing routes for the current map.
         
         Args:
             name: Name of the new route
@@ -115,6 +129,10 @@ class RouteManager:
         Returns:
             bool: True if route was added successfully, False otherwise
         """
+        if not self.current_map:
+            print("Error: No map selected")
+            return False
+
         # Validate points
         if not all(len(point) == 4 for point in points):
             print("Error: All points must have 4 coordinates (x,y,z,w)")
@@ -125,7 +143,7 @@ class RouteManager:
         
         # Check if route name already exists
         if name in routes:
-            print(f"Error: Route '{name}' already exists")
+            print(f"Error: Route '{name}' already exists for map '{self.current_map}'")
             return False
         
         # Add new route
@@ -137,6 +155,16 @@ class RouteManager:
     def get_file_path(self) -> str:
         """Return the current routes file path."""
         return str(self.routes_file)
+
+    def set_current_map(self, map_name: str):
+        """
+        Set the current active map and load its routes.
+        
+        Args:
+            map_name: Name of the map to set as current
+        """
+        self.current_map = map_name
+        print(f"Set current map to: {map_name}")
 
     def load_map(self, map_name: str) -> MapResult:
         """

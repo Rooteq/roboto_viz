@@ -128,6 +128,16 @@ class ConfiguringState(State):
         )
 
         self.connect_and_store_connections(
+            self.gui.gui_manager.send_map_names,
+            self.gui.main_view.active_view.active_tools.update_maps
+        )
+
+        self.connect_and_store_connections(
+            self.gui.main_view.active_view.active_tools.map_selected,
+            self.gui.gui_manager.handle_map_selected # KEEP IT IN MAIN_VIEW!!
+        )
+
+        self.connect_and_store_connections(
             self.gui.main_view.active_view.active_tools.map_selected,
             self.gui.main_view.load_map # KEEP IT IN MAIN_VIEW!!
         )
