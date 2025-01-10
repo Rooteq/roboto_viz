@@ -98,7 +98,15 @@ class MainView(QMainWindow):
             self.map_view.load_image(str(map_path), yaml_data['origin'])
             
             self.map_loaded_signal.emit(True, "")
+        
+            print(f"map name is {map_name}")
+
+            if map_name == 'pokoj1':
+                self.set_position_signal.emit(3.0,3.0,0.0)
+            if map_name == 'sypialnia':
+                self.set_position_signal.emit(1.0,1.0,0.0)
             return True, ""
+        
             
         except yaml.YAMLError as e:
             error_msg = f"Error parsing YAML file: {str(e)}"
@@ -108,6 +116,7 @@ class MainView(QMainWindow):
             error_msg = f"Error loading map: {str(e)}"
             self.map_loaded_signal.emit(False, error_msg)
             return (False, error_msg)
+
 
     def switch_to_disconnected(self):
         self.stacked_widget.setCurrentWidget(self.disconnected_view)
