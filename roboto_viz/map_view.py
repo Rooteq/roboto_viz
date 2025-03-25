@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItemGroup, QGraphicsRectItem
 from PyQt5.QtGui import QMouseEvent, QPixmap, QPainter, QTransform
 from PyQt5.QtCore import QRectF, pyqtSignal, Qt
-from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsTextItem
+from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsTextItem, QGraphicsLineItem
 from PyQt5.QtGui import QPen, QBrush, QColor, QFont
 from PyQt5.QtCore import Qt, QPointF
 
@@ -30,6 +30,7 @@ class MapView(QGraphicsView):
         self.scene.addItem(self.goal_arrow)
 
         self.point_items = [] 
+        self.line_items = []  # New list to store the line items
 
         self._enable_drawing = False
 
@@ -118,6 +119,8 @@ class MapView(QGraphicsView):
     def display_points(self, points):
         """
         Display numbered gray dots with direction indicators at the specified points.
+        Connect consecutive points with green lines.
+        
         Args:
             points: List of (x,y,z,w) coordinates where w is the rotation in radians
         """
@@ -125,6 +128,8 @@ class MapView(QGraphicsView):
         
         point_radius = 5
         point_color = QColor(64, 64, 64)  # Gray
+        line_color = QColor(0, 255, 0)    # Green
+        line_width = 2
         
         rect_width = 8
         rect_height = 1
@@ -132,9 +137,14 @@ class MapView(QGraphicsView):
         font = QFont()
         font.setPointSize(4)
         
+        # Store map coordinates for drawing lines
+        map_coordinates = []
+        
+        # First, create all the point markers
         for i, point in enumerate(points):
             map_x = (point[0] - self.map_origin[0]) * 20
             map_y = self.pixmap.rect().height() - ((point[1] - self.map_origin[1]) * 20)
+            map_coordinates.append((map_x, map_y))
             
             point_group = QGraphicsItemGroup()
             
@@ -175,17 +185,37 @@ class MapView(QGraphicsView):
             text.setPos(text_x, text_y)
             point_group.addToGroup(text)
             
+            point_group.setZValue(2)
             self.scene.addItem(point_group)
-            
             self.point_items.append(point_group)
+        
+        # Now draw lines connecting consecutive points
+        if len(map_coordinates) > 1:
+            for i in range(len(map_coordinates) - 1):
+                start_x, start_y = map_coordinates[i]
+                end_x, end_y = map_coordinates[i + 1]
+                
+                line = QGraphicsLineItem(start_x, start_y, end_x, end_y)
+                pen = QPen(line_color)
+                pen.setWidth(line_width)
+                line.setPen(pen)
+                
+                line.setZValue(1)
+
+                self.scene.addItem(line)
+                self.line_items.append(line)
 
     def clear_points(self):
         """
-        Remove all point markers from the map.
+        Remove all point markers and connecting lines from the map.
         """
         for point_group in self.point_items:
             self.scene.removeItem(point_group)
         self.point_items.clear()
+        
+        for line in self.line_items:
+            self.scene.removeItem(line)
+        self.line_items.clear()
 
     @property
     def enable_drawing(self):
