@@ -35,6 +35,31 @@ class MapView(QGraphicsView):
         self._enable_drawing = False
 
         self.drawing_arrow = False
+        
+        # Variables for panning
+        self.panning = False
+        self.last_pan_point = None
+        
+        # Zoom variables
+        self.zoom_factor = 1.15  # How fast to zoom in/out
+        self.current_zoom = 1.0
+        self.min_zoom = 0.1      # Allow zooming out further
+        self.max_zoom = 100.0    # Allow extreme zoom levels
+        
+        # Set drag mode to make panning work with right mouse button
+        self.setDragMode(QGraphicsView.NoDrag)
+        
+        # Important settings for proper zooming
+        self.setRenderHint(QPainter.Antialiasing)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        
+        # Disable the scrollbars to allow zooming beyond the scene boundaries
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # Allow the view to extend beyond the scene
+        self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
 
     def load_image(self, image_path, origin_data):
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
@@ -51,15 +76,20 @@ class MapView(QGraphicsView):
             view_rect = self.viewport().rect()
             scene_rect = self.pixmap.rect()
             
+            # Calculate scale to fit the image in view
             scale_x = view_rect.width() / scene_rect.width()
             scale_y = view_rect.height() / scene_rect.height()
-            scale = min(scale_x, scale_y)
+            scale = min(scale_x, scale_y) * 0.95  # Add some margin
             
+            # Reset transform and apply new scale
+            self.resetTransform()
             transform = QTransform()
             transform.scale(scale, scale)
             
             self.setTransform(transform)
+            self.current_zoom = scale
             
+            # Center on the image
             self.centerOn(self.image_item)
 
     def resizeEvent(self, event):
@@ -74,27 +104,58 @@ class MapView(QGraphicsView):
         self.scene.update()
 
     def mousePressEvent(self, event):
-        if self.enable_drawing == False:
+        # Handle right button press for panning
+        if event.button() == Qt.RightButton:
+            self.setDragMode(QGraphicsView.ScrollHandDrag)
+            self.panning = True
+            self.last_pan_point = event.pos()
+            # Create a fake left button event to start the drag
+            fake_event = QMouseEvent(
+                event.type(), event.pos(), Qt.LeftButton,
+                Qt.LeftButton, event.modifiers()
+            )
+            super().mousePressEvent(fake_event)
             return
-
-        if event.button() == Qt.LeftButton:
+            
+        # Handle left button for drawing
+        if event.button() == Qt.LeftButton and self.enable_drawing:
             self.drawing_arrow = True
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(scene_pos, scene_pos)
-
-    def mouseMoveEvent(self, event):
-        if self.enable_drawing == False:
-            return
-
-        if self.drawing_arrow:
-            scene_pos = self.mapToScene(event.pos())
-            self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
-
-    def mouseReleaseEvent(self, event):
-        if self.enable_drawing == False:
             return
             
-        if event.button() == Qt.LeftButton and self.drawing_arrow:
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.panning:
+            # Pan is handled by ScrollHandDrag mode
+            fake_event = QMouseEvent(
+                event.type(), event.pos(), Qt.LeftButton,
+                Qt.LeftButton, event.modifiers()
+            )
+            super().mouseMoveEvent(fake_event)
+            return
+            
+        if self.drawing_arrow and self.enable_drawing:
+            scene_pos = self.mapToScene(event.pos())
+            self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
+            return
+            
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.RightButton and self.panning:
+            self.panning = False
+            self.setDragMode(QGraphicsView.NoDrag)
+            # Create a fake left button event to end the drag
+            fake_event = QMouseEvent(
+                event.type(), event.pos(), Qt.LeftButton,
+                Qt.LeftButton, event.modifiers()
+            )
+            super().mouseReleaseEvent(fake_event)
+            return
+            
+        if event.button() == Qt.LeftButton and self.drawing_arrow and self.enable_drawing:
             self.drawing_arrow = False
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
@@ -102,8 +163,6 @@ class MapView(QGraphicsView):
             # Convert to map coordinates
             start_x = (self.goal_arrow.start_point.x() * 0.05) + self.map_origin[0]
             start_y = (self.pixmap.rect().height() - self.goal_arrow.start_point.y()) * 0.05 + self.map_origin[1]
-            # end_x = (scene_pos.x() * 0.05) + self.map_origin[0]
-            # end_y = (self.pixmap.rect().height() - scene_pos.y()) * 0.05 + self.map_origin[1]
             
             # Calculate angle
             angle = self.goal_arrow.get_angle()
@@ -112,6 +171,45 @@ class MapView(QGraphicsView):
 
             # Emit the goal pose
             self.goal_pose_set.emit(start_x, start_y, angle)
+            return
+            
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event):
+        """
+        Handle zoom with mouse wheel
+        """
+        # Calculate zoom factor based on wheel delta
+        zoomInFactor = self.zoom_factor
+        zoomOutFactor = 1 / zoomInFactor
+
+        # Save the scene pos
+        oldPos = self.mapToScene(event.pos())
+
+        # Get mouse wheel direction
+        zoom_in = event.angleDelta().y() > 0
+        
+        # Check zoom before applying to prevent any scaling limitations
+        if zoom_in:
+            # Don't enforce max zoom - allow unlimited zooming in
+            self.scale(zoomInFactor, zoomInFactor)
+            self.current_zoom *= zoomInFactor
+        else:
+            # Only limit zooming out
+            new_zoom = self.current_zoom * zoomOutFactor
+            if new_zoom >= self.min_zoom:
+                self.scale(zoomOutFactor, zoomOutFactor)
+                self.current_zoom = new_zoom
+                
+        # Get the new position
+        newPos = self.mapToScene(event.pos())
+        
+        # Move scene to keep mouse position fixed
+        delta = newPos - oldPos
+        self.translate(delta.x(), delta.y())
+                
+        # Accept the event to prevent it from being propagated
+        event.accept()
 
     def clear_goal_arrow(self):
         self.goal_arrow.hide_arrow()
@@ -216,6 +314,13 @@ class MapView(QGraphicsView):
         for line in self.line_items:
             self.scene.removeItem(line)
         self.line_items.clear()
+        
+    def reset_zoom(self):
+        """
+        Reset zoom level to the original scale that fits the viewport
+        """
+        self.resetTransform()
+        self.update_view()
 
     @property
     def enable_drawing(self):
