@@ -35,8 +35,12 @@ class MainView(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        # self.showFullScreen()
         self.setWindowTitle("Robot Control")
-        self.setGeometry(100, 100, 300, 200)
+        self.setFixedSize(1024, 550)  # Ensure window fits your screen exactly
+        self.showFullScreen()
+
+        # self.setGeometry(100, 100, 300, 200)
         
         # self.map_view = MapView()
         self.map_view: MapView = MapView()
