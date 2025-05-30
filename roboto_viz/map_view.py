@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItemGroup, QGraphicsRectItem
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItemGroup, QGraphicsRectItem, QPushButton, QHBoxLayout, QWidget
 from PyQt5.QtGui import QMouseEvent, QPixmap, QPainter, QTransform
 from PyQt5.QtCore import QRectF, pyqtSignal, Qt
 from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsTextItem, QGraphicsLineItem
@@ -60,6 +60,50 @@ class MapView(QGraphicsView):
         
         # Allow the view to extend beyond the scene
         self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
+        
+        # Create control buttons
+        self.zoom_in_btn = QPushButton("+", self)
+        self.zoom_out_btn = QPushButton("-", self)
+        self.pan_btn = QPushButton("pan", self)
+        self.pan_btn.setCheckable(True)
+        
+        # Style the buttons
+        button_style = """
+            QPushButton {
+                background-color: white;
+                border: 1px solid gray;
+                border-radius: 2px;
+                padding: 5px;
+                min-width: 30px;
+                min-height: 30px;
+            }
+            QPushButton:checked {
+                background-color: lightgray;
+            }
+        """
+        self.zoom_in_btn.setStyleSheet(button_style)
+        self.zoom_out_btn.setStyleSheet(button_style)
+        self.pan_btn.setStyleSheet(button_style)
+        
+        # Create layout for buttons
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.zoom_in_btn)
+        button_layout.addWidget(self.zoom_out_btn)
+        button_layout.addWidget(self.pan_btn)
+        button_layout.setSpacing(5)
+        button_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Create container widget for buttons
+        button_container = QWidget(self)
+        button_container.setLayout(button_layout)
+        
+        # Connect button signals
+        self.zoom_in_btn.clicked.connect(self.zoom_in)
+        self.zoom_out_btn.clicked.connect(self.zoom_out)
+        self.pan_btn.clicked.connect(self.toggle_pan_mode)
+        
+        # Add pan mode flag
+        self.left_pan_mode = False
 
     def load_image(self, image_path, origin_data):
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
@@ -109,7 +153,6 @@ class MapView(QGraphicsView):
             self.setDragMode(QGraphicsView.ScrollHandDrag)
             self.panning = True
             self.last_pan_point = event.pos()
-            # Create a fake left button event to start the drag
             fake_event = QMouseEvent(
                 event.type(), event.pos(), Qt.LeftButton,
                 Qt.LeftButton, event.modifiers()
@@ -117,8 +160,15 @@ class MapView(QGraphicsView):
             super().mousePressEvent(fake_event)
             return
             
-        # Handle left button for drawing
-        if event.button() == Qt.LeftButton and self.enable_drawing:
+        # Handle left button for panning when in pan mode
+        if event.button() == Qt.LeftButton and self.left_pan_mode:
+            self.setDragMode(QGraphicsView.ScrollHandDrag)
+            self.panning = True
+            super().mousePressEvent(event)
+            return
+            
+        # Handle left button for drawing when not in pan mode
+        if event.button() == Qt.LeftButton and self.enable_drawing and not self.left_pan_mode:
             self.drawing_arrow = True
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(scene_pos, scene_pos)
@@ -144,18 +194,21 @@ class MapView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.RightButton and self.panning:
+        if (event.button() == Qt.RightButton or 
+            (event.button() == Qt.LeftButton and self.left_pan_mode)) and self.panning:
             self.panning = False
             self.setDragMode(QGraphicsView.NoDrag)
-            # Create a fake left button event to end the drag
-            fake_event = QMouseEvent(
-                event.type(), event.pos(), Qt.LeftButton,
-                Qt.LeftButton, event.modifiers()
-            )
-            super().mouseReleaseEvent(fake_event)
+            if event.button() == Qt.RightButton:
+                fake_event = QMouseEvent(
+                    event.type(), event.pos(), Qt.LeftButton,
+                    Qt.LeftButton, event.modifiers()
+                )
+                super().mouseReleaseEvent(fake_event)
+            else:
+                super().mouseReleaseEvent(event)
             return
             
-        if event.button() == Qt.LeftButton and self.drawing_arrow and self.enable_drawing:
+        if event.button() == Qt.LeftButton and self.drawing_arrow and self.enable_drawing and not self.left_pan_mode:
             self.drawing_arrow = False
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
@@ -164,12 +217,9 @@ class MapView(QGraphicsView):
             start_x = (self.goal_arrow.start_point.x() * 0.05) + self.map_origin[0]
             start_y = (self.pixmap.rect().height() - self.goal_arrow.start_point.y()) * 0.05 + self.map_origin[1]
             
-            # Calculate angle
             angle = self.goal_arrow.get_angle()
             
             self.clear_goal_arrow()
-
-            # Emit the goal pose
             self.goal_pose_set.emit(start_x, start_y, angle)
             return
             
@@ -329,3 +379,19 @@ class MapView(QGraphicsView):
     @enable_drawing.setter
     def enable_drawing(self, value: bool):
         self._enable_drawing = value
+
+    def zoom_in(self):
+        """Zoom in by the zoom factor"""
+        self.scale(self.zoom_factor, self.zoom_factor)
+        self.current_zoom *= self.zoom_factor
+        
+    def zoom_out(self):
+        """Zoom out by the zoom factor"""
+        new_zoom = self.current_zoom / self.zoom_factor
+        if new_zoom >= self.min_zoom:
+            self.scale(1/self.zoom_factor, 1/self.zoom_factor)
+            self.current_zoom = new_zoom
+            
+    def toggle_pan_mode(self):
+        """Toggle panning mode for left mouse button"""
+        self.left_pan_mode = self.pan_btn.isChecked()
