@@ -317,34 +317,6 @@ class Navigator(QThread):
                 continue
                 
             try:
-                # First, try to undock the robot if it's already docked
-                # This ensures the robot is free to move before starting navigation
-                if self._docked is True:
-                    try:
-                        print("Attempting to undock robot before starting navigation")
-                        self.nav_data.navigator.undockRobot()
-                        
-                        # Wait for undocking to complete
-                        self.nav_data.navigator.waitUntilNav2Active()
-                        while not self.nav_data.navigator.isTaskComplete() and self._running:
-                            # Check if there's a new goal during undocking
-                            if self._new_goal is not None:
-                                break  # Exit this loop to process the new goal
-                            self.msleep(100)  # Small delay to prevent CPU hogging
-                        
-                        if self.nav_data.navigator.isTaskComplete():
-                            if self.nav_data.navigator.getResult() is TaskResult.SUCCEEDED:
-                                print("Robot undocked successfully")
-                                self._docked = False
-                            else:
-                                print(f"Undocking failed with result: {self.nav_data.navigator.getResult()}")
-                    except Exception as undock_error:
-                        print(f"Undocking failed or robot was already undocked: {undock_error}")
-                
-                # If we received a new goal during undocking, restart the loop
-                if self._new_goal is not None:
-                    continue
-                    
                 distances = [math.dist((self.curr_x, self.curr_y), (waypoint[0], waypoint[1])) for waypoint in current_goal]
                 closest_index = distances.index(min(distances))
                 waypoints = current_goal[closest_index:]
@@ -377,42 +349,14 @@ class Navigator(QThread):
                         break  # Exit this loop to process the new goal
                         
                     feedback = self.nav_data.navigator.getFeedback()
-                    # print(f"feedback: {feedback}")
-                    # if Duration.from_msg(feedback.navigation_time) > Duration(seconds=600.0):
-                    #     self.nav_data.navigator.cancelTask()
-                    #     break
                     self.msleep(100)  # Small delay to prevent CPU hogging
                 
                 if self._running and self.nav_data.navigator.isTaskComplete():
                     if self.nav_data.navigator.getResult() is TaskResult.SUCCEEDED:
                         if self._to_dest:
-                            self.navStatus.emit("At base")
-                            # Try to dock the robot if we're at the base
-                        else:
                             self.navStatus.emit("At destination")
-
-                        try:
-                            robot_id = "tag0"
-                            print(f"Attempting to dock robot with ID: {robot_id}")
-                            self.nav_data.navigator.dockRobotByID(robot_id, False)
-                            
-                            # Wait for docking to complete
-                            self.nav_data.navigator.waitUntilNav2Active()
-                            while not self.nav_data.navigator.isTaskComplete() and self._running:
-                                # Check if there's a new goal during docking
-                                if self._new_goal is not None:
-                                    break  # Exit this loop to process the new goal
-                                self.msleep(100)  # Small delay to prevent CPU hogging
-                            
-                            if self.nav_data.navigator.isTaskComplete():
-                                if self.nav_data.navigator.getResult() is TaskResult.SUCCEEDED:
-                                    print(f"Robot docked successfully")
-                                    self._docked = True
-                                else:
-                                    print(f"Docking failed with result: {self.nav_data.navigator.getResult()}")
-                        except Exception as dock_error:
-                            print(f"Failed to dock robot: {dock_error}")
-
+                        else:
+                            self.navStatus.emit("At base")
                     elif self.nav_data.navigator.getResult() is TaskResult.FAILED:
                         self.navStatus.emit("Failed")
                         print(f"Navigation result: {self.nav_data.navigator.getResult()}")
