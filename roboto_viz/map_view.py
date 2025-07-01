@@ -177,11 +177,20 @@ class MapView(QGraphicsView):
         if event.button() == Qt.LeftButton and self.enable_drawing and not self.left_pan_mode:
             scene_pos = self.mapToScene(event.pos())
             
-            # If we're in editing mode, add a node instead of drawing an arrow
+            # If we're in editing mode, check if we clicked on an existing item first
             if self.editing_mode and self.current_route_graphics:
-                print(f"DEBUG: Left click in editing mode - adding node at scene position: {scene_pos.x()}, {scene_pos.y()}")
-                self.current_route_graphics.add_node_at_position(scene_pos.x(), scene_pos.y())
-                return
+                # Check if we clicked on an existing graphics item (node, control handle, etc.)
+                item_at_pos = self.itemAt(event.pos())
+                if item_at_pos and item_at_pos != self.image_item:
+                    # We clicked on an existing item, let the item handle the event
+                    print(f"DEBUG: Clicked on existing item: {type(item_at_pos).__name__}")
+                    super().mousePressEvent(event)
+                    return
+                else:
+                    # We clicked on empty space, add a new node
+                    print(f"DEBUG: Left click in editing mode - adding node at scene position: {scene_pos.x()}, {scene_pos.y()}")
+                    self.current_route_graphics.add_node_at_position(scene_pos.x(), scene_pos.y())
+                    return
             else:
                 print(f"DEBUG: Left click in drawing mode - editing_mode: {self.editing_mode}, current_route_graphics: {self.current_route_graphics}")
                 if self.editing_mode:
@@ -205,6 +214,11 @@ class MapView(QGraphicsView):
             super().mouseMoveEvent(fake_event)
             return
             
+        # In editing mode, allow item dragging to work properly
+        if self.editing_mode:
+            super().mouseMoveEvent(event)
+            return
+            
         if self.drawing_arrow and self.enable_drawing and not self.editing_mode:
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
@@ -225,6 +239,11 @@ class MapView(QGraphicsView):
                 super().mouseReleaseEvent(fake_event)
             else:
                 super().mouseReleaseEvent(event)
+            return
+            
+        # In editing mode, let items handle the release event
+        if self.editing_mode:
+            super().mouseReleaseEvent(event)
             return
             
         if event.button() == Qt.LeftButton and self.drawing_arrow and self.enable_drawing and not self.left_pan_mode and not self.editing_mode:

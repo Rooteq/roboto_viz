@@ -9,7 +9,7 @@ class BezierNode(QGraphicsEllipseItem):
     Visual representation of a route node that can be moved and edited.
     """
     def __init__(self, x: float, y: float, index: int, parent=None):
-        radius = 8
+        radius = 4
         super().__init__(x - radius, y - radius, radius * 2, radius * 2, parent)
         
         self.index = index
@@ -24,7 +24,7 @@ class BezierNode(QGraphicsEllipseItem):
         # Add number label
         self.text_item = QGraphicsTextItem(str(index), self)
         font = QFont()
-        font.setPointSize(8)
+        font.setPointSize(6)
         font.setBold(True)
         self.text_item.setFont(font)
         self.text_item.setDefaultTextColor(Qt.white)
@@ -38,26 +38,23 @@ class BezierNode(QGraphicsEllipseItem):
     def itemChange(self, change, value):
         """Handle position changes"""
         if change == QGraphicsItem.ItemPositionHasChanged:
-            # Notify parent about position change
+            # Notify parent about position change - use the center position
             if hasattr(self.parentItem(), 'node_moved'):
-                self.parentItem().node_moved(self.index, value.x(), value.y())
+                center_pos = value + QPointF(4, 4)  # Add radius to get center position
+                self.parentItem().node_moved(self.index, center_pos.x(), center_pos.y())
         return super().itemChange(change, value)
     
     def mousePressEvent(self, event):
         """Handle mouse press for selection"""
-        if event.button() == Qt.RightButton:
-            # Right click for context menu (delete node)
-            if hasattr(self.parentItem(), 'delete_node'):
-                self.parentItem().delete_node(self.index)
-        else:
-            super().mousePressEvent(event)
+        # Remove right-click delete functionality to allow clicking in vicinity
+        super().mousePressEvent(event)
 
 class ControlHandle(QGraphicsEllipseItem):
     """
     Visual representation of Bezier control points.
     """
     def __init__(self, x: float, y: float, node_index: int, is_out: bool, parent=None):
-        radius = 4
+        radius = 2
         super().__init__(x - radius, y - radius, radius * 2, radius * 2, parent)
         
         self.node_index = node_index
@@ -75,10 +72,11 @@ class ControlHandle(QGraphicsEllipseItem):
     def itemChange(self, change, value):
         """Handle position changes"""
         if change == QGraphicsItem.ItemPositionHasChanged:
-            # Notify parent about control point movement
+            # Notify parent about control point movement - use the center position
             if hasattr(self.parentItem(), 'control_moved'):
+                center_pos = value + QPointF(2, 2)  # Add radius to get center position
                 self.parentItem().control_moved(
-                    self.node_index, self.is_out, value.x(), value.y())
+                    self.node_index, self.is_out, center_pos.x(), center_pos.y())
         return super().itemChange(change, value)
 
 class BezierCurve(QGraphicsPathItem):
@@ -239,7 +237,9 @@ class BezierRouteGraphics(QGraphicsItemGroup):
         """Handle node movement"""
         world_x, world_y = self.map_to_world_coords(map_x, map_y)
         self.bezier_route.move_node(index, world_x, world_y)
-        self.update_graphics()  # Refresh all graphics
+        
+        # Update only the affected curves and control lines without recreating everything
+        self.update_node_connections(index)
         
     def control_moved(self, node_index: int, is_out: bool, map_x: float, map_y: float):
         """Handle control point movement"""
@@ -257,8 +257,8 @@ class BezierRouteGraphics(QGraphicsItemGroup):
         if not is_out and node_index > 0:
             self.update_curve(node_index - 1)
             
-        # Update control lines
-        self.update_graphics()
+        # Update only the control line for this specific control point
+        self.update_control_line(node_index, is_out, map_x, map_y)
         
     def delete_node(self, index: int):
         """Delete a node"""
@@ -271,6 +271,75 @@ class BezierRouteGraphics(QGraphicsItemGroup):
         new_node = RouteNode(world_x, world_y)
         self.bezier_route.add_node(new_node)
         self.update_graphics()
+        
+    def update_node_connections(self, node_index: int):
+        """Update curves and control lines connected to a specific node without recreating all graphics"""
+        if node_index >= len(self.bezier_route.nodes):
+            return
+            
+        node = self.bezier_route.nodes[node_index]
+        map_x, map_y = self.world_to_map_coords(node.x, node.y)
+        
+        # Update control lines connected to this node
+        control_line_index = 0
+        for i, bezier_node in enumerate(self.bezier_route.nodes):
+            if i == node_index:
+                # Update control lines for this node
+                if bezier_node.control_in and control_line_index < len(self.control_lines):
+                    cx, cy = self.world_to_map_coords(bezier_node.control_in[0], bezier_node.control_in[1])
+                    self.control_lines[control_line_index].setLine(map_x, map_y, cx, cy)
+                    control_line_index += 1
+                    
+                if bezier_node.control_out and control_line_index < len(self.control_lines):
+                    cx, cy = self.world_to_map_coords(bezier_node.control_out[0], bezier_node.control_out[1])
+                    self.control_lines[control_line_index].setLine(map_x, map_y, cx, cy)
+                    control_line_index += 1
+            else:
+                # Skip control lines for other nodes
+                if bezier_node.control_in:
+                    control_line_index += 1
+                if bezier_node.control_out:
+                    control_line_index += 1
+        
+        # Update curves connected to this node
+        # Update curve from previous node to this node
+        if node_index > 0:
+            self.update_curve(node_index - 1)
+            
+        # Update curve from this node to next node
+        if node_index < len(self.bezier_route.nodes) - 1:
+            self.update_curve(node_index)
+
+    def update_control_line(self, node_index: int, is_out: bool, control_x: float, control_y: float):
+        """Update a specific control line without recreating all graphics"""
+        if node_index >= len(self.bezier_route.nodes):
+            return
+            
+        node = self.bezier_route.nodes[node_index]
+        node_map_x, node_map_y = self.world_to_map_coords(node.x, node.y)
+        
+        # Find the correct control line index
+        control_line_index = 0
+        for i, bezier_node in enumerate(self.bezier_route.nodes):
+            if i == node_index:
+                if is_out:
+                    # If we're looking for the out control, skip the in control if it exists
+                    if bezier_node.control_in:
+                        control_line_index += 1
+                    # Now we're at the out control line
+                    if control_line_index < len(self.control_lines):
+                        self.control_lines[control_line_index].setLine(node_map_x, node_map_y, control_x, control_y)
+                else:
+                    # We're looking for the in control, which comes first
+                    if control_line_index < len(self.control_lines):
+                        self.control_lines[control_line_index].setLine(node_map_x, node_map_y, control_x, control_y)
+                break
+            else:
+                # Count control lines for previous nodes
+                if bezier_node.control_in:
+                    control_line_index += 1
+                if bezier_node.control_out:
+                    control_line_index += 1
 
 # Import the RouteNode here to avoid circular imports
 from roboto_viz.route_manager import RouteNode
