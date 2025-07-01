@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import QStackedWidget, QVBoxLayout, QWidget, QPushButton, Q
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from roboto_viz.view_tools import ActiveTools, PlanningTools
 from PyQt5.QtGui import QFont
+from roboto_viz.route_manager import BezierRoute
 
 from roboto_viz.map_view import MapView
 
@@ -39,6 +40,15 @@ class ActiveView(QWidget):
         self.setLayout(self.main_layout)
 
         self.active_tools.start_nav.connect(self.handle_set_route)
+        
+        # Connect route drawing signals
+        self.active_tools.draw_route.connect(self.map_view.display_bezier_route)
+        self.active_tools.stop_drawing_points.connect(self.map_view.clear_route)
+        
+        # Connect planning tools signals
+        self.planning_tools.start_route_editing.connect(lambda: self.map_view.start_route_editing())
+        self.planning_tools.stop_route_editing.connect(self.map_view.stop_route_editing)
+        self.planning_tools.get_current_route.connect(self.handle_get_current_route)
 
     pyqtSlot(dict,bool)
     def handle_set_route(self, routes, to_dest):
@@ -75,9 +85,18 @@ class ActiveView(QWidget):
 
     def switch_to_planning(self):
         self.stacked_widget.setCurrentWidget(self.planning_tools)
+        
+        # Start planning mode
+        self.planning_tools.start_planning_mode()
 
         # self.stacked_widget.setCurrentWidget(self.planning_tools)
         self.planning_tools.finish_planning.connect(lambda: self.finish_planning.emit())
+        
+    def handle_get_current_route(self):
+        """Get current route from map view and save it"""
+        current_route = self.map_view.get_current_route()
+        if current_route:
+            self.planning_tools.save_route(current_route)
 
 
 

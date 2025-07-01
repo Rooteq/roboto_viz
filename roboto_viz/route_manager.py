@@ -3,10 +3,200 @@ from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 import os
 import subprocess
+import math
 
 # Type alias for clarity
 Point4D = Tuple[float, float, float, float]
 MapResult = Tuple[bool, str]  # Success flag and message
+
+class RouteNode:
+    """
+    Represents a single node in a route with position and optional control points for Bezier curves.
+    """
+    def __init__(self, x: float, y: float, orientation: float = 0.0, 
+                 control_in: Optional[Tuple[float, float]] = None,
+                 control_out: Optional[Tuple[float, float]] = None):
+        self.x = x
+        self.y = y
+        self.orientation = orientation  # in radians
+        self.control_in = control_in    # Control point for incoming curve
+        self.control_out = control_out  # Control point for outgoing curve
+        
+    def to_dict(self) -> dict:
+        """Convert node to dictionary for JSON serialization"""
+        return {
+            'x': self.x,
+            'y': self.y,
+            'orientation': self.orientation,
+            'control_in': self.control_in,
+            'control_out': self.control_out
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'RouteNode':
+        """Create node from dictionary"""
+        return cls(
+            x=data['x'],
+            y=data['y'],
+            orientation=data.get('orientation', 0.0),
+            control_in=data.get('control_in'),
+            control_out=data.get('control_out')
+        )
+
+class BezierRoute:
+    """
+    Represents a route made of nodes connected with Bezier curves.
+    """
+    def __init__(self, nodes: List[RouteNode] = None):
+        self.nodes = nodes or []
+    
+    def add_node(self, node: RouteNode):
+        """Add a node to the route"""
+        self.nodes.append(node)
+        self._auto_generate_control_points()
+    
+    def remove_node(self, index: int):
+        """Remove node at index"""
+        if 0 <= index < len(self.nodes):
+            del self.nodes[index]
+            self._auto_generate_control_points()
+    
+    def move_node(self, index: int, new_x: float, new_y: float):
+        """Move node to new position"""
+        if 0 <= index < len(self.nodes):
+            self.nodes[index].x = new_x
+            self.nodes[index].y = new_y
+            self._auto_generate_control_points()
+    
+    def _auto_generate_control_points(self):
+        """Automatically generate control points for smooth curves"""
+        if len(self.nodes) < 2:
+            return
+            
+        for i in range(len(self.nodes)):
+            node = self.nodes[i]
+            
+            # Calculate control points based on neighboring nodes
+            if i == 0:
+                # First node - only outgoing control
+                if len(self.nodes) > 1:
+                    next_node = self.nodes[1]
+                    dx = next_node.x - node.x
+                    dy = next_node.y - node.y
+                    length = math.sqrt(dx*dx + dy*dy) * 0.3  # 30% of distance
+                    angle = math.atan2(dy, dx)
+                    node.control_out = (
+                        node.x + length * math.cos(angle),
+                        node.y + length * math.sin(angle)
+                    )
+                    node.control_in = None
+            elif i == len(self.nodes) - 1:
+                # Last node - only incoming control
+                prev_node = self.nodes[i-1]
+                dx = node.x - prev_node.x
+                dy = node.y - prev_node.y
+                length = math.sqrt(dx*dx + dy*dy) * 0.3
+                angle = math.atan2(dy, dx)
+                node.control_in = (
+                    node.x - length * math.cos(angle),
+                    node.y - length * math.sin(angle)
+                )
+                node.control_out = None
+            else:
+                # Middle node - both controls
+                prev_node = self.nodes[i-1]
+                next_node = self.nodes[i+1]
+                
+                # Calculate smooth tangent
+                dx_in = node.x - prev_node.x
+                dy_in = node.y - prev_node.y
+                dx_out = next_node.x - node.x
+                dy_out = next_node.y - node.y
+                
+                # Average direction for smooth curve
+                avg_angle = math.atan2(dy_in + dy_out, dx_in + dx_out)
+                
+                in_length = math.sqrt(dx_in*dx_in + dy_in*dy_in) * 0.3
+                out_length = math.sqrt(dx_out*dx_out + dy_out*dy_out) * 0.3
+                
+                node.control_in = (
+                    node.x - in_length * math.cos(avg_angle),
+                    node.y - in_length * math.sin(avg_angle)
+                )
+                node.control_out = (
+                    node.x + out_length * math.cos(avg_angle),
+                    node.y + out_length * math.sin(avg_angle)
+                )
+    
+    def generate_waypoints(self, points_per_segment: int = 20) -> List[Point4D]:
+        """
+        Generate dense waypoints along the Bezier curves for navigation.
+        Returns list of (x, y, z, orientation) tuples.
+        """
+        if len(self.nodes) < 2:
+            # Single node or empty route
+            return [(node.x, node.y, 0.0, node.orientation) for node in self.nodes]
+        
+        waypoints = []
+        
+        for i in range(len(self.nodes) - 1):
+            start_node = self.nodes[i]
+            end_node = self.nodes[i + 1]
+            
+            # Generate points along Bezier curve
+            for j in range(points_per_segment):
+                t = j / points_per_segment
+                
+                # Cubic Bezier calculation
+                p0 = (start_node.x, start_node.y)
+                p1 = start_node.control_out or (start_node.x, start_node.y)
+                p2 = end_node.control_in or (end_node.x, end_node.y)
+                p3 = (end_node.x, end_node.y)
+                
+                x, y = self._cubic_bezier_point(t, p0, p1, p2, p3)
+                
+                # Calculate orientation as tangent to curve
+                if j < points_per_segment - 1:
+                    t_next = (j + 1) / points_per_segment
+                    x_next, y_next = self._cubic_bezier_point(t_next, p0, p1, p2, p3)
+                    orientation = math.atan2(y_next - y, x_next - x)
+                else:
+                    orientation = end_node.orientation
+                
+                waypoints.append((x, y, 0.0, orientation))
+        
+        # Add final node
+        final_node = self.nodes[-1]
+        waypoints.append((final_node.x, final_node.y, 0.0, final_node.orientation))
+        
+        return waypoints
+    
+    def _cubic_bezier_point(self, t: float, p0: Tuple[float, float], 
+                           p1: Tuple[float, float], p2: Tuple[float, float], 
+                           p3: Tuple[float, float]) -> Tuple[float, float]:
+        """Calculate point on cubic Bezier curve at parameter t (0-1)"""
+        u = 1 - t
+        tt = t * t
+        uu = u * u
+        uuu = uu * u
+        ttt = tt * t
+        
+        x = uuu * p0[0] + 3 * uu * t * p1[0] + 3 * u * tt * p2[0] + ttt * p3[0]
+        y = uuu * p0[1] + 3 * uu * t * p1[1] + 3 * u * tt * p2[1] + ttt * p3[1]
+        
+        return (x, y)
+    
+    def to_dict(self) -> dict:
+        """Convert route to dictionary for JSON serialization"""
+        return {
+            'nodes': [node.to_dict() for node in self.nodes]
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'BezierRoute':
+        """Create route from dictionary"""
+        nodes = [RouteNode.from_dict(node_data) for node_data in data.get('nodes', [])]
+        return cls(nodes)
 
 class RouteManager:
     def __init__(self, app_dir_name: str = ".robotroutes"):
@@ -42,13 +232,13 @@ class RouteManager:
             print(f"Error creating config directory: {str(e)}")
             raise
 
-    def load_routes(self) -> Dict[str, List[Point4D]]:
+    def load_routes(self) -> Dict[str, BezierRoute]:
         """
         Load routes from the JSON file for the current map.
         Creates a new file if it doesn't exist.
         
         Returns:
-            Dict[str, List[Point4D]]: Dictionary of routes with 4D points (x,y,z,w)
+            Dict[str, BezierRoute]: Dictionary of BezierRoute objects
         """
         try:
             # Try to open and read the file
@@ -66,12 +256,22 @@ class RouteManager:
             # Get routes for current map
             map_routes = data.get(self.current_map, {}) if self.current_map else {}
             
-            # Convert lists to tuples for coordinates
-            routes = {
-                name: [tuple(point) if len(point) == 4 else tuple(point + [0.0] * (4 - len(point)))
-                      for point in points]
-                for name, points in map_routes.items()
-            }
+            # Convert to BezierRoute objects
+            routes = {}
+            for name, route_data in map_routes.items():
+                # Check if it's new node-based format or old point-based format
+                if isinstance(route_data, dict) and 'nodes' in route_data:
+                    # New format - BezierRoute
+                    routes[name] = BezierRoute.from_dict(route_data)
+                elif isinstance(route_data, list):
+                    # Old format - convert points to simple nodes
+                    bezier_route = BezierRoute()
+                    for point in route_data:
+                        if len(point) >= 4:
+                            node = RouteNode(point[0], point[1], point[3])
+                            bezier_route.add_node(node)
+                    routes[name] = bezier_route
+            
             return routes
             
         except json.JSONDecodeError as e:
@@ -84,12 +284,12 @@ class RouteManager:
             print(f"Error loading routes: {str(e)}")
             return {}
 
-    def save_routes(self, routes: Dict[str, List[Point4D]]) -> bool:
+    def save_routes(self, routes: Dict[str, BezierRoute]) -> bool:
         """
         Save routes to the JSON file for the current map.
         
         Args:
-            routes: Dictionary of routes with 4D points to save
+            routes: Dictionary of BezierRoute objects to save
             
         Returns:
             bool: True if save was successful, False otherwise
@@ -102,11 +302,11 @@ class RouteManager:
             else:
                 all_routes = {}
             
-            # Convert tuples to lists for JSON serialization
+            # Convert BezierRoute objects to dictionaries for JSON serialization
             if self.current_map:
                 all_routes[self.current_map] = {
-                    name: [list(point) for point in points]
-                    for name, points in routes.items()
+                    name: route.to_dict()
+                    for name, route in routes.items()
                 }
             
             with open(self.routes_file, 'w') as f:
@@ -118,24 +318,19 @@ class RouteManager:
             print(f"Error saving routes: {str(e)}")
             return False
 
-    def add_route(self, name: str, points: List[Point4D]) -> bool:
+    def add_route(self, name: str, route: BezierRoute) -> bool:
         """
         Add a new route to the existing routes for the current map.
         
         Args:
             name: Name of the new route
-            points: List of 4D points (x,y,z,w) for the route
+            route: BezierRoute object to add
             
         Returns:
             bool: True if route was added successfully, False otherwise
         """
         if not self.current_map:
             print("Error: No map selected")
-            return False
-
-        # Validate points
-        if not all(len(point) == 4 for point in points):
-            print("Error: All points must have 4 coordinates (x,y,z,w)")
             return False
 
         # First load existing routes
@@ -147,7 +342,7 @@ class RouteManager:
             return False
         
         # Add new route
-        routes[name] = points
+        routes[name] = route
         
         # Save updated routes
         return self.save_routes(routes)

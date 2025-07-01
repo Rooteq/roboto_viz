@@ -18,7 +18,7 @@ from rclpy.duration import Duration
 
 import math
 from enum import Enum
-from roboto_viz.route_manager import RouteManager
+from roboto_viz.route_manager import RouteManager, BezierRoute
 from typing import Dict, List, Tuple
 
 from copy import deepcopy
@@ -239,11 +239,11 @@ class NavData(QObject):
         self.route_manager = RouteManager()
         self.navigator: BasicNavigator = BasicNavigator('gui_navigator_node')
 
-        self.routes: Dict[str, List[Tuple[float, float]]]
+        self.routes: Dict[str, 'BezierRoute']  # Changed to BezierRoute objects
         self.maps: List[str]
         self.current_map: str = None
 
-    def save_routes(self, new_routes: Dict[str, List[Tuple[float, float]]]):
+    def save_routes(self, new_routes: Dict[str, 'BezierRoute']):
         self.routes = new_routes
         self.route_manager.save_routes(new_routes)
     
@@ -291,18 +291,26 @@ class Navigator(QThread):
             self.curr_x = x
             self.curr_y = y
             self._to_dest = to_dest
-            # self._running = True
-            self._new_goal = deepcopy(self.nav_data.routes[route])
-            if not to_dest:
-                self._new_goal.reverse()
-            # Cancel current navigation if there is one
-            if not self.nav_data.navigator.isTaskComplete():
-                self.nav_data.navigator.cancelTask()
             
-            if to_dest == True:
-                self.navStatus.emit("Nav to dest")
+            # Get the BezierRoute object and convert to waypoints
+            if route in self.nav_data.routes:
+                bezier_route = self.nav_data.routes[route]
+                waypoints = bezier_route.generate_waypoints(points_per_segment=20)
+                self._new_goal = waypoints
+                
+                if not to_dest:
+                    self._new_goal.reverse()
+                    
+                # Cancel current navigation if there is one
+                if not self.nav_data.navigator.isTaskComplete():
+                    self.nav_data.navigator.cancelTask()
+                
+                if to_dest == True:
+                    self.navStatus.emit("Nav to dest")
+                else:
+                    self.navStatus.emit("Nav to base")
             else:
-                self.navStatus.emit("Nav to base")
+                print(f"Route '{route}' not found in routes")
 
     def run(self):
         while self._running:
@@ -365,7 +373,7 @@ class Navigator(QThread):
                     
             except Exception as e:
                 print(f"Navigation error: {e}")
-                self.navigation_status.emit(f"Error: {str(e)}")
+                self.navStatus.emit("Navigation Error")
 
 class GuiManager(QThread):
     manualStatus = pyqtSignal(str)

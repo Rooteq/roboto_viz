@@ -9,6 +9,8 @@ import math
 
 from roboto_viz.robot_item import RobotItem
 from roboto_viz.goal_arrow import GoalArrow
+from roboto_viz.route_manager import BezierRoute
+from roboto_viz.bezier_graphics import BezierRouteGraphics
 
 
 class MapView(QGraphicsView):
@@ -105,6 +107,10 @@ class MapView(QGraphicsView):
         # Add pan mode flag
         self.left_pan_mode = False
 
+        # Route editing variables
+        self.editing_mode = False
+        self.current_route_graphics = None
+
     def load_image(self, image_path, origin_data):
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
 
@@ -169,10 +175,23 @@ class MapView(QGraphicsView):
             
         # Handle left button for drawing when not in pan mode
         if event.button() == Qt.LeftButton and self.enable_drawing and not self.left_pan_mode:
-            self.drawing_arrow = True
             scene_pos = self.mapToScene(event.pos())
-            self.goal_arrow.set_points(scene_pos, scene_pos)
-            return
+            
+            # If we're in editing mode, add a node instead of drawing an arrow
+            if self.editing_mode and self.current_route_graphics:
+                print(f"DEBUG: Left click in editing mode - adding node at scene position: {scene_pos.x()}, {scene_pos.y()}")
+                self.current_route_graphics.add_node_at_position(scene_pos.x(), scene_pos.y())
+                return
+            else:
+                print(f"DEBUG: Left click in drawing mode - editing_mode: {self.editing_mode}, current_route_graphics: {self.current_route_graphics}")
+                if self.editing_mode:
+                    print(f"DEBUG: No current_route_graphics available!")
+                    return
+                
+                # Original arrow drawing logic for non-editing mode
+                self.drawing_arrow = True
+                self.goal_arrow.set_points(scene_pos, scene_pos)
+                return
             
         super().mousePressEvent(event)
 
@@ -186,7 +205,7 @@ class MapView(QGraphicsView):
             super().mouseMoveEvent(fake_event)
             return
             
-        if self.drawing_arrow and self.enable_drawing:
+        if self.drawing_arrow and self.enable_drawing and not self.editing_mode:
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
             return
@@ -208,7 +227,7 @@ class MapView(QGraphicsView):
                 super().mouseReleaseEvent(event)
             return
             
-        if event.button() == Qt.LeftButton and self.drawing_arrow and self.enable_drawing and not self.left_pan_mode:
+        if event.button() == Qt.LeftButton and self.drawing_arrow and self.enable_drawing and not self.left_pan_mode and not self.editing_mode:
             self.drawing_arrow = False
             scene_pos = self.mapToScene(event.pos())
             self.goal_arrow.set_points(self.goal_arrow.start_point, scene_pos)
@@ -395,3 +414,73 @@ class MapView(QGraphicsView):
     def toggle_pan_mode(self):
         """Toggle panning mode for left mouse button"""
         self.left_pan_mode = self.pan_btn.isChecked()
+
+    def clear_route(self):
+        """Clear the current route graphics"""
+        # Skip clearing route graphics if in editing mode to preserve the current editing session
+        if self.editing_mode:
+            print(f"DEBUG: Skipping route clear - in editing mode")
+            return
+            
+        if hasattr(self, 'current_route_graphics') and self.current_route_graphics:
+            self.scene.removeItem(self.current_route_graphics)
+            self.current_route_graphics = None
+
+    def display_bezier_route(self, bezier_route: BezierRoute, force_update: bool = False):
+        """
+        Display a bezier route with interactive nodes and curves.
+        
+        Args:
+            bezier_route: BezierRoute object to display
+            force_update: If True, display route even in editing mode (used for starting editing)
+        """
+        print(f"DEBUG: display_bezier_route called with bezier_route: {bezier_route}, force_update: {force_update}")
+        
+        # Skip displaying routes when in editing mode unless forced (to preserve the current editing session)
+        if self.editing_mode and not force_update:
+            print(f"DEBUG: Skipping route display - in editing mode and not forced")
+            return
+            
+        self.clear_route()
+        
+        if bezier_route:
+            # Check if we have a map loaded
+            if hasattr(self, 'pixmap') and self.pixmap and hasattr(self, 'map_origin'):
+                print(f"DEBUG: Creating BezierRouteGraphics with map_origin: {self.map_origin}")
+                # Create graphics even for empty routes so users can add nodes
+                self.current_route_graphics = BezierRouteGraphics(
+                    bezier_route, self.map_origin, self.pixmap.rect().height()
+                )
+                self.scene.addItem(self.current_route_graphics)
+                print(f"DEBUG: Created current_route_graphics: {self.current_route_graphics}")
+            else:
+                print(f"DEBUG: No map loaded - cannot create route graphics yet")
+                print(f"DEBUG: Has pixmap: {hasattr(self, 'pixmap')}, Has map_origin: {hasattr(self, 'map_origin')}")
+        else:
+            print(f"DEBUG: No bezier_route provided")
+
+    def start_route_editing(self, bezier_route: BezierRoute = None):
+        """
+        Start editing mode for creating/modifying routes.
+        
+        Args:
+            bezier_route: Existing route to edit, or None to create new
+        """
+        print(f"DEBUG: start_route_editing called with bezier_route: {bezier_route}")
+        self.editing_mode = True
+        self.enable_drawing = True
+        print(f"DEBUG: Set editing_mode={self.editing_mode}, enable_drawing={self.enable_drawing}")
+        
+        if bezier_route is None:
+            # Create new empty route
+            bezier_route = BezierRoute()
+            print(f"DEBUG: Created new empty BezierRoute: {bezier_route}")
+            
+        # Force update to create graphics even in editing mode
+        self.display_bezier_route(bezier_route, force_update=True)
+        
+    def stop_route_editing(self):
+        """Stop route editing mode"""
+        self.editing_mode = False
+        self.enable_drawing = False
+        self.clear_route()

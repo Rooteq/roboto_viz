@@ -2,6 +2,7 @@
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QTabWidget, QLineEdit, QLabel, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QGridLayout
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
+from roboto_viz.route_manager import BezierRoute, RouteNode
 
 class ActiveTools(QWidget):
     on_disconnect = pyqtSignal()
@@ -9,7 +10,7 @@ class ActiveTools(QWidget):
 
     save_current_routes = pyqtSignal(dict)
 
-    draw_points = pyqtSignal(list)
+    draw_route = pyqtSignal(object)  # BezierRoute object
     stop_drawing_points = pyqtSignal()
 
     start_nav = pyqtSignal(str, bool)
@@ -335,17 +336,19 @@ class ActiveTools(QWidget):
         index = self.map_combo.findText(current_map)
         if index >= 0:
             self.map_combo.setCurrentIndex(index)
-            
+
     def on_map_selected(self, map_name: str):
-            """Handle map selection"""
-            if map_name:
-                print(f"selected: {map_name}")
-                self.map_selected.emit(map_name)
-                # Clear current routes when map changes
-                self.routes.clear()
-                self.active_route_name = None
-                self.update_routes()
-                self.stop_drawing_points.emit()
+        """Handle map selection"""
+        if map_name:
+            print(f"selected: {map_name}")
+            self.map_selected.emit(map_name)
+            # Clear current routes when map changes
+            self.routes.clear()
+            self.active_route_name = None
+            self.update_routes()
+            # Only stop drawing if not in planning mode
+            # (Planning mode should preserve the current route graphics)
+            self.stop_drawing_points.emit()
 
     def handle_navigate_to_dest(self):
         if self.active_route_name:
@@ -393,8 +396,8 @@ class ActiveTools(QWidget):
             self.active_route_name = None
             self.stop_drawing_points.emit()
         elif self.active_route_name:
-            # Redraw points for active route
-            self.draw_points.emit(self.routes[self.active_route_name])
+            # Redraw route for active route
+            self.draw_route.emit(self.routes[self.active_route_name])
 
     def set_active_route(self):
         """Set the selected route as active"""
@@ -408,9 +411,9 @@ class ActiveTools(QWidget):
             # Update display
             self.update_routes()
             
-            # Draw points for the active route
+            # Draw route for the active route
             if route_name in self.routes:
-                self.draw_points.emit(self.routes[route_name])
+                self.draw_route.emit(self.routes[route_name])
 
     def remove_route(self):
         """Remove the currently selected route"""
@@ -432,15 +435,15 @@ class PlanningTools(QWidget):
     finish_planning = pyqtSignal()
     save_current_routes = pyqtSignal(dict)
 
-    draw_points = pyqtSignal(list)
-    stop_drawing_points = pyqtSignal()
+    start_route_editing = pyqtSignal()
+    stop_route_editing = pyqtSignal()
+    get_current_route = pyqtSignal()
 
     def __init__(self, routes: dict):
         super().__init__()
 
         self.routes: dict = routes
-
-        self.new_route: list = list()
+        self.current_bezier_route = BezierRoute()
 
         self.setup_ui()
         
@@ -453,24 +456,24 @@ class PlanningTools(QWidget):
         label_font.setPointSize(12)
         self.route_name_label.setFont(label_font)
 
+        # Instructions
+        self.instructions_label = QLabel("Click on map to add nodes.\nDrag nodes to move them.\nRight-click nodes to delete.")
+        self.instructions_label.setWordWrap(True)
+        self.instructions_label.setStyleSheet("color: #555; font-size: 10px; padding: 10px;")
 
         self.done_button = QPushButton("Done")
         self.cancel_button = QPushButton("Cancel")
 
-        self._last_point = None  # Store last point to prevent duplicates
-
         self.done_button.clicked.connect(self.exit_done)
         self.cancel_button.clicked.connect(self.exit_cancel)
 
-        # layout.addWidget(self.map_view, 3)
-        # layout.addWidget(self.finish_planning_button, 1)
         self.main_layout.addWidget(self.route_name_label)
         self.main_layout.addWidget(self.route_name)
+        self.main_layout.addWidget(self.instructions_label)
         self.main_layout.addStretch()
         self.main_layout.addWidget(self.done_button)
         self.main_layout.addWidget(self.cancel_button)
         self.setLayout(self.main_layout)
-
 
         button_style = """
             QPushButton {
@@ -509,27 +512,29 @@ class PlanningTools(QWidget):
         """
         self.route_name.setStyleSheet(route_name_style)
 
-    pyqtSlot(float,float,float)
-    def setPoint(self, x, y, theta):
-        # Check if this is a duplicate point
-        new_point = [x, y, 0.0, theta]
-        if self._last_point != new_point:  # Only append if different
-            self.new_route.append(new_point)
-            self._last_point = new_point
-            self.draw_points.emit(self.new_route)
+    def start_planning_mode(self):
+        """Start route planning mode"""
+        self.current_bezier_route = BezierRoute()
+        self.route_name.clear()
+        self.start_route_editing.emit()
 
     def exit_cancel(self):
-        self.new_route.clear()
-        self.stop_drawing_points.emit()
+        self.current_bezier_route = BezierRoute()
+        self.stop_route_editing.emit()
         self.finish_planning.emit()
     
     def exit_done(self):
         if self.route_name.text().strip():  # Only save if name is not empty
-            self.routes[self.route_name.text()] = self.new_route.copy()  # Make a copy
+            # Get the current route from the map view
+            self.get_current_route.emit()  # This should trigger a callback
+            
+    def save_route(self, bezier_route: BezierRoute):
+        """Called when route should be saved"""
+        if bezier_route and self.route_name.text().strip():
+            self.routes[self.route_name.text()] = bezier_route
             self.save_current_routes.emit(self.routes)
-            self.new_route.clear()
-            self._last_point = None
-            self.stop_drawing_points.emit()
+            self.current_bezier_route = BezierRoute()
+            self.stop_route_editing.emit()
             self.finish_planning.emit()
         
 class LEDIndicator(QWidget):

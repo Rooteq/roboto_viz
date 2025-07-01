@@ -65,11 +65,9 @@ class MainView(QMainWindow):
         self.stacked_widget.addWidget(self.disconnected_view)
         self.stacked_widget.addWidget(self.active_view)
 
-        self.active_view.active_tools.draw_points.connect(self.map_view.display_points)
-        self.active_view.active_tools.stop_drawing_points.connect(self.map_view.clear_points)
-
-        self.active_view.planning_tools.draw_points.connect(self.map_view.display_points)
-        self.active_view.planning_tools.stop_drawing_points.connect(self.map_view.clear_points)
+        # Note: Route drawing is already handled in views.py
+        # self.active_view.active_tools.draw_route -> map_view.display_bezier_route
+        # self.active_view.active_tools.stop_drawing_points -> map_view.clear_route
 
     def load_map(self, map_name: str) -> tuple[bool, str]:
         try:

@@ -247,7 +247,7 @@ class ActiveState(State):
 class PlannerState(State):
     def handleGui(self) -> None:
         self.gui.main_view.switch_to_planner()
-        self.gui.main_view.map_view.clear_points()
+        self.gui.main_view.map_view.clear_route()  # Clear route visualization for fresh start
 
         self.gui.main_view.map_view.enable_drawing = True
 
@@ -261,11 +261,8 @@ class PlannerState(State):
             self.finishPlanning
         )
 
-        self.connect_and_store_connections(
-            self.gui.main_view.set_position_signal,
-            self.gui.main_view.active_view.planning_tools.setPoint
-        )
-
+        # Note: setPoint connection removed - users now click directly on map to add nodes
+        
         self.connect_and_store_connections(
             self.gui.gui_manager.update_pose,
             self.gui.main_view.active_view.update_robot_pose
@@ -278,6 +275,6 @@ class PlannerState(State):
         self.gui.gui_manager.send_routes()
 
     def finishPlanning(self):
-        self.gui.main_view.set_position_signal.disconnect(self.gui.main_view.active_view.planning_tools.setPoint)
+        # Note: setPoint disconnection removed - connection no longer exists
         self.gui.transition_to(ActiveState())
         self.gui.handleGui()
