@@ -33,6 +33,12 @@ class BezierNode(QGraphicsEllipseItem):
         text_rect = self.text_item.boundingRect()
         self.text_item.setPos(-text_rect.width()/2, -text_rect.height()/2)
         
+        # IMPORTANT: Make sure text doesn't interfere with mouse events
+        self.text_item.setFlag(QGraphicsItem.ItemIsMovable, False)
+        self.text_item.setFlag(QGraphicsItem.ItemIsSelectable, False)
+        self.text_item.setFlag(QGraphicsItem.ItemStacksBehindParent, True)  # Add this
+        self.text_item.setAcceptedMouseButtons(Qt.NoButton)
+        
         self.setZValue(10)  # Higher than curves
         
     def itemChange(self, change, value):
@@ -46,8 +52,19 @@ class BezierNode(QGraphicsEllipseItem):
     
     def mousePressEvent(self, event):
         """Handle mouse press for selection"""
+        print(f"DEBUG: BezierNode.mousePressEvent called for node {self.index}")
         # Remove right-click delete functionality to allow clicking in vicinity
         super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move for dragging"""
+        print(f"DEBUG: BezierNode.mouseMoveEvent called for node {self.index}")
+        super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release"""
+        print(f"DEBUG: BezierNode.mouseReleaseEvent called for node {self.index}")
+        super().mouseReleaseEvent(event)
 
 class ControlHandle(QGraphicsEllipseItem):
     """

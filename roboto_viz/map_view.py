@@ -182,8 +182,9 @@ class MapView(QGraphicsView):
                 # Check if we clicked on an existing graphics item (node, control handle, etc.)
                 item_at_pos = self.itemAt(event.pos())
                 if item_at_pos and item_at_pos != self.image_item:
-                    # We clicked on an existing item, let the item handle the event
+                    # We clicked on an existing item - let it handle all mouse events
                     print(f"DEBUG: Clicked on existing item: {type(item_at_pos).__name__}")
+                    # Just pass the event through to let the item handle it
                     super().mousePressEvent(event)
                     return
                 else:
