@@ -14,6 +14,7 @@ import threading
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
+from nav_msgs.msg import Path
 from rclpy.duration import Duration
 
 import math
@@ -21,7 +22,6 @@ from enum import Enum
 from roboto_viz.route_manager import RouteManager, BezierRoute
 from typing import Dict, List, Tuple
 
-from copy import deepcopy
 
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 
@@ -328,27 +328,37 @@ class Navigator(QThread):
                 distances = [math.dist((self.curr_x, self.curr_y), (waypoint[0], waypoint[1])) for waypoint in current_goal]
                 closest_index = distances.index(min(distances))
                 waypoints = current_goal[closest_index:]
-                points_on_route = []
-                goal_pose = PoseStamped()
-                goal_pose.header.frame_id = 'map'
-                goal_pose.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
+                
+                # Create Path message for followPath
+                path_msg = Path()
+                path_msg.header.frame_id = 'map'
+                path_msg.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
                 
                 for point in waypoints:
-                    goal_pose.pose.position.x = point[0]
-                    goal_pose.pose.position.y = point[1]
-                    goal_pose.pose.position.z = 0.0
+                    pose_stamped = PoseStamped()
+                    pose_stamped.header.frame_id = 'map'
+                    pose_stamped.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
+                    
+                    pose_stamped.pose.position.x = point[0]
+                    pose_stamped.pose.position.y = point[1]
+                    pose_stamped.pose.position.z = 0.0
                     
                     if self._to_dest:
                         q = quaternion_from_euler(0, 0, point[3])
-                        goal_pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+                        pose_stamped.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
                     else:
+                        # Reverse direction by adding 180 degrees (pi radians)
                         q = quaternion_from_euler(0, 0, (point[3] + math.pi))
-                        goal_pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+                        pose_stamped.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
                     
-                    points_on_route.append(deepcopy(goal_pose))
+                    path_msg.poses.append(pose_stamped)
                 
-                # Start waypoint navigation
-                self.nav_data.navigator.followWaypoints(points_on_route)
+                # Start path navigation with specific controller and goal checker
+                self.nav_data.navigator.followPath(
+                    path_msg,
+                    controller_id='FollowPath',
+                    goal_checker_id='goal_checker'
+                )
                 self.nav_data.navigator.waitUntilNav2Active()
                 
                 while not self.nav_data.navigator.isTaskComplete() and self._running:
@@ -356,7 +366,6 @@ class Navigator(QThread):
                     if self._new_goal is not None:
                         break  # Exit this loop to process the new goal
                         
-                    feedback = self.nav_data.navigator.getFeedback()
                     self.msleep(100)  # Small delay to prevent CPU hogging
                 
                 if self._running and self.nav_data.navigator.isTaskComplete():
