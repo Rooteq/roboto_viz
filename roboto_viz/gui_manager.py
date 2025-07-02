@@ -298,8 +298,7 @@ class Navigator(QThread):
                 waypoints = bezier_route.generate_waypoints(points_per_segment=20)
                 self._new_goal = waypoints
                 
-                if not to_dest:
-                    self._new_goal.reverse()
+                # Don't reverse here - let the run() method handle direction
                     
                 # Cancel current navigation if there is one
                 if not self.nav_data.navigator.isTaskComplete():
@@ -325,33 +324,43 @@ class Navigator(QThread):
                 continue
                 
             try:
-                distances = [math.dist((self.curr_x, self.curr_y), (waypoint[0], waypoint[1])) for waypoint in current_goal]
+                # Simplify direction logic: just reverse path order for return trip
+                if self._to_dest:
+                    # Going to destination: use waypoints in original order
+                    waypoints = current_goal
+                else:
+                    # Going to base: use waypoints in reverse order
+                    waypoints = list(reversed(current_goal))
+                
+                # Find closest waypoint to start from
+                distances = [math.dist((self.curr_x, self.curr_y), (waypoint[0], waypoint[1])) for waypoint in waypoints]
                 closest_index = distances.index(min(distances))
-                waypoints = current_goal[closest_index:]
+                waypoints = waypoints[closest_index:]
                 
                 # Create Path message for followPath
                 path_msg = Path()
                 path_msg.header.frame_id = 'map'
-                path_msg.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
+                # Don't set timestamp - let nav2 handle it
+                
+                print(f"DEBUG: Creating path with {len(waypoints)} waypoints")
                 
                 for point in waypoints:
                     pose_stamped = PoseStamped()
                     pose_stamped.header.frame_id = 'map'
-                    pose_stamped.header.stamp = self.nav_data.navigator.get_clock().now().to_msg()
+                    # Don't set timestamp - let nav2 handle it
                     
                     pose_stamped.pose.position.x = point[0]
                     pose_stamped.pose.position.y = point[1]
                     pose_stamped.pose.position.z = 0.0
                     
-                    if self._to_dest:
-                        q = quaternion_from_euler(0, 0, point[3])
-                        pose_stamped.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
-                    else:
-                        # Reverse direction by adding 180 degrees (pi radians)
-                        q = quaternion_from_euler(0, 0, (point[3] + math.pi))
-                        pose_stamped.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+                    # Use original orientations without modification - let the controller handle direction
+                    q = quaternion_from_euler(0, 0, point[3])
+                    pose_stamped.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
                     
                     path_msg.poses.append(pose_stamped)
+                
+                # Wait for nav2 to be active first
+                self.nav_data.navigator.waitUntilNav2Active()
                 
                 # Start path navigation with specific controller and goal checker
                 self.nav_data.navigator.followPath(
@@ -359,7 +368,6 @@ class Navigator(QThread):
                     controller_id='FollowPath',
                     goal_checker_id='goal_checker'
                 )
-                self.nav_data.navigator.waitUntilNav2Active()
                 
                 while not self.nav_data.navigator.isTaskComplete() and self._running:
                     # Check if there's a new goal
@@ -370,6 +378,7 @@ class Navigator(QThread):
                 
                 if self._running and self.nav_data.navigator.isTaskComplete():
                     if self.nav_data.navigator.getResult() is TaskResult.SUCCEEDED:
+                        print(f"DEBUG: Navigation completed, _to_dest = {self._to_dest}")
                         if self._to_dest:
                             self.navStatus.emit("At destination")
                         else:
