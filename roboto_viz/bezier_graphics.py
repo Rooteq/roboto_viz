@@ -49,13 +49,14 @@ class BezierNode(QGraphicsEllipseItem):
     def itemChange(self, change, value):
         """Handle position changes"""
         if change == QGraphicsItem.ItemPositionHasChanged:
-            # Notify parent about position change - use the center position
-            if hasattr(self.parentItem(), 'node_moved'):
-                # The position value is the top-left corner, add radius to get center
-                center_x = value.x() + 4  # radius is 4
-                center_y = value.y() + 4  # radius is 4
-                print(f"DEBUG: Node {self.index} moved to center position: {center_x}, {center_y}")
-                self.parentItem().node_moved(self.index, center_x, center_y)
+            # Notify route graphics about position change - use the center position
+            if hasattr(self, 'route_graphics') and self.route_graphics:
+                # Use the actual scene coordinates instead of the value parameter
+                # The value parameter is relative to parent, but we need scene coordinates
+                scene_pos = self.mapToScene(self.rect().center())
+                
+                print(f"DEBUG: Node {self.index} moved to scene position: {scene_pos.x()}, {scene_pos.y()}")
+                self.route_graphics.node_moved(self.index, scene_pos.x(), scene_pos.y())
         return super().itemChange(change, value)
     
     def mousePressEvent(self, event):
@@ -64,32 +65,7 @@ class BezierNode(QGraphicsEllipseItem):
         if event.button() == Qt.LeftButton:
             print(f"DEBUG: *** START DRAGGING node {self.index} at {event.pos()} ***")
             self.setSelected(True)
-            self.drag_start_pos = event.pos()
-            self.initial_pos = self.pos()
-            event.accept()  # Accept to prevent further processing
-        else:
-            super().mousePressEvent(event)
-    
-    def mouseMoveEvent(self, event):
-        """Handle mouse move for dragging"""
-        if hasattr(self, 'drag_start_pos') and (event.buttons() & Qt.LeftButton):
-            print(f"DEBUG: BezierNode.mouseMoveEvent called for node {self.index}")
-            # Calculate the new position based on mouse movement
-            delta = event.pos() - self.drag_start_pos
-            new_pos = self.initial_pos + delta
-            self.setPos(new_pos)
-            # itemChange will be called automatically and handle the route update
-        else:
-            super().mouseMoveEvent(event)
-    
-    def mouseReleaseEvent(self, event):
-        """Handle mouse release"""
-        print(f"DEBUG: BezierNode.mouseReleaseEvent called for node {self.index}")
-        if event.button() == Qt.LeftButton and hasattr(self, 'drag_start_pos'):
-            print(f"DEBUG: *** STOP DRAGGING node {self.index} ***")
-            delattr(self, 'drag_start_pos')
-            delattr(self, 'initial_pos')
-        super().mouseReleaseEvent(event)
+        super().mousePressEvent(event)
 
 class ControlHandle(QGraphicsEllipseItem):
     """
@@ -118,13 +94,13 @@ class ControlHandle(QGraphicsEllipseItem):
     def itemChange(self, change, value):
         """Handle position changes"""
         if change == QGraphicsItem.ItemPositionHasChanged:
-            # Notify parent about control point movement - use the center position
-            if hasattr(self.parentItem(), 'control_moved'):
-                # The position value is the top-left corner, add radius to get center
-                center_x = value.x() + 2  # radius is 2
-                center_y = value.y() + 2  # radius is 2
-                self.parentItem().control_moved(
-                    self.node_index, self.is_out, center_x, center_y)
+            # Notify route graphics about control point movement - use the center position
+            if hasattr(self, 'route_graphics') and self.route_graphics:
+                # Use the actual scene coordinates instead of the value parameter
+                scene_pos = self.mapToScene(self.rect().center())
+                
+                self.route_graphics.control_moved(
+                    self.node_index, self.is_out, scene_pos.x(), scene_pos.y())
         return super().itemChange(change, value)
     
     def mousePressEvent(self, event):
@@ -133,32 +109,7 @@ class ControlHandle(QGraphicsEllipseItem):
         if event.button() == Qt.LeftButton:
             print(f"DEBUG: *** START DRAGGING control handle {self.node_index} ***")
             self.setSelected(True)
-            self.drag_start_pos = event.pos()
-            self.initial_pos = self.pos()
-            event.accept()  # Accept to prevent further processing
-        else:
-            super().mousePressEvent(event)
-    
-    def mouseMoveEvent(self, event):
-        """Handle mouse move for dragging"""
-        if hasattr(self, 'drag_start_pos') and (event.buttons() & Qt.LeftButton):
-            print(f"DEBUG: ControlHandle.mouseMoveEvent called for handle {self.node_index}")
-            # Calculate the new position based on mouse movement
-            delta = event.pos() - self.drag_start_pos
-            new_pos = self.initial_pos + delta
-            self.setPos(new_pos)
-            # itemChange will be called automatically and handle the route update
-        else:
-            super().mouseMoveEvent(event)
-    
-    def mouseReleaseEvent(self, event):
-        """Handle mouse release"""
-        print(f"DEBUG: ControlHandle.mouseReleaseEvent called for handle {self.node_index}")
-        if event.button() == Qt.LeftButton and hasattr(self, 'drag_start_pos'):
-            print(f"DEBUG: *** STOP DRAGGING control handle {self.node_index} ***")
-            delattr(self, 'drag_start_pos')
-            delattr(self, 'initial_pos')
-        super().mouseReleaseEvent(event)
+        super().mousePressEvent(event)
 
 class BezierCurve(QGraphicsPathItem):
     """
@@ -233,7 +184,6 @@ class BezierRouteGraphics(QGraphicsItemGroup):
         """Update all visual elements based on current route data"""
         # Clear existing items
         for item in self.node_items + self.curve_items + self.control_handles + self.control_lines:
-            self.removeFromGroup(item)
             if item.scene():
                 item.scene().removeItem(item)
         
@@ -245,43 +195,51 @@ class BezierRouteGraphics(QGraphicsItemGroup):
         if not self.bezier_route.nodes:
             return
             
-        # Create node items
+        # Get the scene to add items to
+        scene = self.scene()
+        if not scene:
+            return
+            
+        # Create node items - add directly to scene
         for i, node in enumerate(self.bezier_route.nodes):
             map_x, map_y = self.world_to_map_coords(node.x, node.y)
-            node_item = BezierNode(map_x, map_y, i, self)
+            node_item = BezierNode(map_x, map_y, i, None)  # No parent - will be added to scene
+            node_item.route_graphics = self  # Store reference to this graphics object
             self.node_items.append(node_item)
-            self.addToGroup(node_item)
+            scene.addItem(node_item)
             
             # Create control handles if they exist
             if node.control_in:
                 cx, cy = self.world_to_map_coords(node.control_in[0], node.control_in[1])
-                control_in = ControlHandle(cx, cy, i, False, self)
+                control_in = ControlHandle(cx, cy, i, False, None)
+                control_in.route_graphics = self
                 self.control_handles.append(control_in)
-                self.addToGroup(control_in)
+                scene.addItem(control_in)
                 
                 # Control line
-                line = ControlLine(self)
+                line = ControlLine()
                 line.setLine(map_x, map_y, cx, cy)
                 self.control_lines.append(line)
-                self.addToGroup(line)
+                scene.addItem(line)
                 
             if node.control_out:
                 cx, cy = self.world_to_map_coords(node.control_out[0], node.control_out[1])
-                control_out = ControlHandle(cx, cy, i, True, self)
+                control_out = ControlHandle(cx, cy, i, True, None)
+                control_out.route_graphics = self
                 self.control_handles.append(control_out)
-                self.addToGroup(control_out)
+                scene.addItem(control_out)
                 
                 # Control line
-                line = ControlLine(self)
+                line = ControlLine()
                 line.setLine(map_x, map_y, cx, cy)
                 self.control_lines.append(line)
-                self.addToGroup(line)
+                scene.addItem(line)
         
         # Create curve items
         for i in range(len(self.bezier_route.nodes) - 1):
-            curve = BezierCurve(self)
+            curve = BezierCurve()
             self.curve_items.append(curve)
-            self.addToGroup(curve)
+            scene.addItem(curve)
             self.update_curve(i)
     
     def update_curve(self, curve_index: int):
@@ -317,6 +275,9 @@ class BezierRouteGraphics(QGraphicsItemGroup):
     def node_moved(self, index: int, map_x: float, map_y: float):
         """Handle node movement"""
         world_x, world_y = self.map_to_world_coords(map_x, map_y)
+        print(f"DEBUG: node_moved index={index}, map_coords=({map_x}, {map_y}), world_coords=({world_x}, {world_y})")
+        print(f"DEBUG: map_origin={self.map_origin}, pixmap_height={self.pixmap_height}")
+        
         self.bezier_route.move_node(index, world_x, world_y)
         
         # Update only the affected curves and control lines without recreating everything
