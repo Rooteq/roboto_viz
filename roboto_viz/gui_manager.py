@@ -342,9 +342,9 @@ class Navigator(QThread):
                 path_msg.header.frame_id = 'map'
                 # Don't set timestamp - let nav2 handle it
                 
-                print(f"DEBUG: Creating path with {len(waypoints)} waypoints")
+                print(f"DEBUG: Creating path with {len(waypoints)} waypoints, _to_dest={self._to_dest}")
                 
-                for point in waypoints:
+                for i, point in enumerate(waypoints):
                     pose_stamped = PoseStamped()
                     pose_stamped.header.frame_id = 'map'
                     # Don't set timestamp - let nav2 handle it
@@ -353,8 +353,33 @@ class Navigator(QThread):
                     pose_stamped.pose.position.y = point[1]
                     pose_stamped.pose.position.z = 0.0
                     
-                    # Use original orientations without modification - let the controller handle direction
-                    q = quaternion_from_euler(0, 0, point[3])
+                    # Calculate orientation based on direction of travel
+                    if i == len(waypoints) - 1 and len(waypoints) > 1:
+                        # For final waypoint, calculate orientation from direction to previous point
+                        prev_point = waypoints[i-1]
+                        curr_point = waypoints[i]
+                        
+                        dx = curr_point[0] - prev_point[0]
+                        dy = curr_point[1] - prev_point[1]
+                        
+                        if self._to_dest:
+                            # Going to destination: direction from previous to current
+                            orientation = math.atan2(dy, dx)
+                        # else:
+                        #     # Going back to base: direction from current to previous (reverse)
+                        #     # orientation = math.atan2(-dy, -dx)
+                            
+                        print(f"DEBUG: Final waypoint calculated orientation: {orientation} radians ({math.degrees(orientation)} degrees)")
+                    else:
+                        # For non-final waypoints, use original or reverse orientation
+                        if self._to_dest:
+                            # Going to destination: use original curve tangent
+                            orientation = point[3]
+                        else:
+                            # Going back to base: reverse the tangent direction
+                            orientation = point[3] + math.pi
+                    
+                    q = quaternion_from_euler(0, 0, orientation)
                     pose_stamped.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
                     
                     path_msg.poses.append(pose_stamped)
@@ -363,6 +388,7 @@ class Navigator(QThread):
                 self.nav_data.navigator.waitUntilNav2Active()
                 
                 # Start path navigation with specific controller and goal checker
+                # Try with precise_goal_checker to maintain orientation
                 self.nav_data.navigator.followPath(
                     path_msg,
                     controller_id='FollowPath',
