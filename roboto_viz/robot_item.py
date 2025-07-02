@@ -7,7 +7,7 @@ class RobotItem(QGraphicsItem):
     def __init__(self):
         super().__init__()
         self.diameter = 12
-        self.setZValue(3) 
+        self.setZValue(100)  # Always on top, above all route elements 
         
     def boundingRect(self):
         # Make bounding rect large enough to contain both circle and arrow

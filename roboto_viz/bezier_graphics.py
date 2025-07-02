@@ -150,7 +150,7 @@ class ControlLine(QGraphicsLineItem):
         pen.setStyle(Qt.DashLine)
         self.setPen(pen)
         
-        self.setZValue(0)  # Lowest priority
+        self.setZValue(2)
 
 class BezierRouteGraphics(QObject):
     """
