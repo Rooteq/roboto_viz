@@ -53,20 +53,21 @@ class BezierRoute:
     def add_node(self, node: RouteNode):
         """Add a node to the route"""
         self.nodes.append(node)
-        self._auto_generate_control_points()
+        self._auto_generate_control_points_selective()
     
     def remove_node(self, index: int):
         """Remove node at index"""
         if 0 <= index < len(self.nodes):
             del self.nodes[index]
-            self._auto_generate_control_points()
+            self._auto_generate_control_points_selective()
     
     def move_node(self, index: int, new_x: float, new_y: float):
         """Move node to new position"""
         if 0 <= index < len(self.nodes):
             self.nodes[index].x = new_x
             self.nodes[index].y = new_y
-            self._auto_generate_control_points()
+            # Don't auto-regenerate control points when moving nodes manually
+            # Control points are moved along with the node in the graphics layer
     
     def _auto_generate_control_points(self):
         """Automatically generate control points for smooth curves"""
@@ -127,6 +128,80 @@ class BezierRoute:
                     node.x + out_length * math.cos(avg_angle),
                     node.y + out_length * math.sin(avg_angle)
                 )
+    
+    def _auto_generate_control_points_selective(self):
+        """
+        Automatically generate control points only for nodes that don't have them,
+        preserving manually positioned control points.
+        """
+        if len(self.nodes) < 2:
+            return
+            
+        for i in range(len(self.nodes)):
+            node = self.nodes[i]
+            
+            # Only generate control points if they don't already exist
+            # This preserves manually positioned control points
+            
+            # Calculate control points based on neighboring nodes
+            if i == 0:
+                # First node - only outgoing control
+                if len(self.nodes) > 1 and node.control_out is None:
+                    next_node = self.nodes[1]
+                    dx = next_node.x - node.x
+                    dy = next_node.y - node.y
+                    length = math.sqrt(dx*dx + dy*dy) * 0.3  # 30% of distance
+                    angle = math.atan2(dy, dx)
+                    node.control_out = (
+                        node.x + length * math.cos(angle),
+                        node.y + length * math.sin(angle)
+                    )
+                # Always clear control_in for first node
+                if node.control_in is not None:
+                    node.control_in = None
+            elif i == len(self.nodes) - 1:
+                # Last node - only incoming control
+                if node.control_in is None:
+                    prev_node = self.nodes[i-1]
+                    dx = node.x - prev_node.x
+                    dy = node.y - prev_node.y
+                    length = math.sqrt(dx*dx + dy*dy) * 0.3
+                    angle = math.atan2(dy, dx)
+                    node.control_in = (
+                        node.x - length * math.cos(angle),
+                        node.y - length * math.sin(angle)
+                    )
+                # Always clear control_out for last node
+                if node.control_out is not None:
+                    node.control_out = None
+            else:
+                # Middle node - both controls (only if they don't exist)
+                if node.control_in is None or node.control_out is None:
+                    prev_node = self.nodes[i-1]
+                    next_node = self.nodes[i+1]
+                    
+                    # Calculate smooth tangent
+                    dx_in = node.x - prev_node.x
+                    dy_in = node.y - prev_node.y
+                    dx_out = next_node.x - node.x
+                    dy_out = next_node.y - node.y
+                    
+                    # Average direction for smooth curve
+                    avg_angle = math.atan2(dy_in + dy_out, dx_in + dx_out)
+                    
+                    in_length = math.sqrt(dx_in*dx_in + dy_in*dy_in) * 0.3
+                    out_length = math.sqrt(dx_out*dx_out + dy_out*dy_out) * 0.3
+                    
+                    if node.control_in is None:
+                        node.control_in = (
+                            node.x - in_length * math.cos(avg_angle),
+                            node.y - in_length * math.sin(avg_angle)
+                        )
+                    if node.control_out is None:
+                        node.control_out = (
+                            node.x + out_length * math.cos(avg_angle),
+                            node.y + out_length * math.sin(avg_angle)
+                        )
     
     def generate_waypoints(self, points_per_segment: int = 20) -> List[Point4D]:
         """
