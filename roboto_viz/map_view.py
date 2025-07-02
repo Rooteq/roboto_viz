@@ -10,7 +10,7 @@ import math
 from roboto_viz.robot_item import RobotItem
 from roboto_viz.goal_arrow import GoalArrow
 from roboto_viz.route_manager import BezierRoute
-from roboto_viz.bezier_graphics import BezierRouteGraphics
+from roboto_viz.bezier_graphics import BezierRouteGraphics, BezierNode, ControlHandle
 
 
 class MapView(QGraphicsView):
@@ -41,6 +41,12 @@ class MapView(QGraphicsView):
         # Variables for panning
         self.panning = False
         self.last_pan_point = None
+        
+        # Variable to track dragging items
+        self.dragging_item = None
+        self.dragging_item_parent = None
+        self.drag_start_scene_pos = None
+        self.drag_start_item_pos = None
         
         # Zoom variables
         self.zoom_factor = 1.15  # How fast to zoom in/out
@@ -181,10 +187,36 @@ class MapView(QGraphicsView):
             if self.editing_mode and self.current_route_graphics:
                 # Check if we clicked on an existing graphics item (node, control handle, etc.)
                 item_at_pos = self.itemAt(event.pos())
+                print(f"DEBUG: Item at mouse position: {item_at_pos}")
+                print(f"DEBUG: Item type: {type(item_at_pos).__name__ if item_at_pos else 'None'}")
+                
                 if item_at_pos and item_at_pos != self.image_item:
-                    # We clicked on an existing item - let it handle all mouse events
-                    print(f"DEBUG: Clicked on existing item: {type(item_at_pos).__name__}")
-                    # Just pass the event through to let the item handle it
+                    # We clicked on an existing item - check if it's part of our route graphics
+                    
+                    # Check if it's a direct hit on a draggable item or if its parent is
+                    current_item = item_at_pos
+                    while current_item:
+                        if isinstance(current_item, (BezierNode, ControlHandle)):
+                            print(f"DEBUG: Found draggable item: {type(current_item).__name__}")
+                            # Remove the item from its group temporarily to enable dragging
+                            parent_group = current_item.parentItem()
+                            if parent_group:
+                                parent_group.removeFromGroup(current_item)
+                                print(f"DEBUG: Removed item from group for dragging")
+                            
+                            # Store initial position for dragging calculation
+                            scene_pos = self.mapToScene(event.pos())
+                            self.drag_start_scene_pos = scene_pos
+                            self.drag_start_item_pos = current_item.pos()
+                            self.dragging_item = current_item
+                            self.dragging_item_parent = parent_group
+                            
+                            print(f"DEBUG: Starting manual drag - item pos: {current_item.pos()}, scene pos: {scene_pos}")
+                            return
+                        current_item = current_item.parentItem()
+                    
+                    # If we get here, it's not a draggable item
+                    print(f"DEBUG: Non-draggable item clicked")
                     super().mousePressEvent(event)
                     return
                 else:
@@ -206,6 +238,35 @@ class MapView(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        # If we're dragging an item, handle the movement manually
+        if self.dragging_item:
+            scene_pos = self.mapToScene(event.pos())
+            # Calculate the movement delta
+            delta = scene_pos - self.drag_start_scene_pos
+            new_pos = self.drag_start_item_pos + QPointF(delta.x(), delta.y())
+            
+            print(f"DEBUG: Manual drag - new pos: {new_pos}")
+            self.dragging_item.setPos(new_pos)
+            
+            # Trigger itemChange manually if it's a BezierNode or ControlHandle
+            if isinstance(self.dragging_item, BezierNode):
+                print(f"DEBUG: *** START DRAGGING node {self.dragging_item.index} at {new_pos} ***")
+                # Manually call the itemChange method to update the route
+                center_x = new_pos.x() + 4  # radius is 4
+                center_y = new_pos.y() + 4
+                if hasattr(self.dragging_item_parent, 'node_moved'):
+                    self.dragging_item_parent.node_moved(self.dragging_item.index, center_x, center_y)
+            elif isinstance(self.dragging_item, ControlHandle):
+                print(f"DEBUG: *** START DRAGGING control handle {self.dragging_item.node_index} ***")
+                # Manually call the itemChange method to update the route
+                center_x = new_pos.x() + 2  # radius is 2
+                center_y = new_pos.y() + 2
+                if hasattr(self.dragging_item_parent, 'control_moved'):
+                    self.dragging_item_parent.control_moved(
+                        self.dragging_item.node_index, self.dragging_item.is_out, center_x, center_y)
+            
+            return
+            
         if self.panning:
             # Pan is handled by ScrollHandDrag mode
             fake_event = QMouseEvent(
@@ -228,6 +289,22 @@ class MapView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        # If we're dragging an item, finish the drag and restore to group
+        if self.dragging_item:
+            print(f"DEBUG: *** STOP DRAGGING item ***")
+            
+            # Add the item back to its parent group
+            if self.dragging_item_parent:
+                self.dragging_item_parent.addToGroup(self.dragging_item)
+                print(f"DEBUG: Added item back to group")
+            
+            # Clear drag state
+            self.dragging_item = None
+            self.dragging_item_parent = None
+            self.drag_start_scene_pos = None
+            self.drag_start_item_pos = None
+            return
+            
         if (event.button() == Qt.RightButton or 
             (event.button() == Qt.LeftButton and self.left_pan_mode)) and self.panning:
             self.panning = False

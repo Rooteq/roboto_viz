@@ -21,6 +21,10 @@ class BezierNode(QGraphicsEllipseItem):
         self.setBrush(QBrush(QColor(50, 150, 250)))  # Blue
         self.setPen(QPen(QColor(30, 100, 200), 2))
         
+        # Enable mouse events for this item
+        self.setAcceptedMouseButtons(Qt.LeftButton | Qt.RightButton)
+        self.setAcceptHoverEvents(True)
+        
         # Add number label
         self.text_item = QGraphicsTextItem(str(index), self)
         font = QFont()
@@ -38,6 +42,7 @@ class BezierNode(QGraphicsEllipseItem):
         self.text_item.setFlag(QGraphicsItem.ItemIsSelectable, False)
         self.text_item.setFlag(QGraphicsItem.ItemStacksBehindParent, True)  # Add this
         self.text_item.setAcceptedMouseButtons(Qt.NoButton)
+        self.text_item.setAcceptHoverEvents(False)
         
         self.setZValue(10)  # Higher than curves
         
@@ -46,24 +51,44 @@ class BezierNode(QGraphicsEllipseItem):
         if change == QGraphicsItem.ItemPositionHasChanged:
             # Notify parent about position change - use the center position
             if hasattr(self.parentItem(), 'node_moved'):
-                center_pos = value + QPointF(4, 4)  # Add radius to get center position
-                self.parentItem().node_moved(self.index, center_pos.x(), center_pos.y())
+                # The position value is the top-left corner, add radius to get center
+                center_x = value.x() + 4  # radius is 4
+                center_y = value.y() + 4  # radius is 4
+                print(f"DEBUG: Node {self.index} moved to center position: {center_x}, {center_y}")
+                self.parentItem().node_moved(self.index, center_x, center_y)
         return super().itemChange(change, value)
     
     def mousePressEvent(self, event):
-        """Handle mouse press for selection"""
+        """Handle mouse press for selection and dragging"""
         print(f"DEBUG: BezierNode.mousePressEvent called for node {self.index}")
-        # Remove right-click delete functionality to allow clicking in vicinity
-        super().mousePressEvent(event)
+        if event.button() == Qt.LeftButton:
+            print(f"DEBUG: *** START DRAGGING node {self.index} at {event.pos()} ***")
+            self.setSelected(True)
+            self.drag_start_pos = event.pos()
+            self.initial_pos = self.pos()
+            event.accept()  # Accept to prevent further processing
+        else:
+            super().mousePressEvent(event)
     
     def mouseMoveEvent(self, event):
         """Handle mouse move for dragging"""
-        print(f"DEBUG: BezierNode.mouseMoveEvent called for node {self.index}")
-        super().mouseMoveEvent(event)
+        if hasattr(self, 'drag_start_pos') and (event.buttons() & Qt.LeftButton):
+            print(f"DEBUG: BezierNode.mouseMoveEvent called for node {self.index}")
+            # Calculate the new position based on mouse movement
+            delta = event.pos() - self.drag_start_pos
+            new_pos = self.initial_pos + delta
+            self.setPos(new_pos)
+            # itemChange will be called automatically and handle the route update
+        else:
+            super().mouseMoveEvent(event)
     
     def mouseReleaseEvent(self, event):
         """Handle mouse release"""
         print(f"DEBUG: BezierNode.mouseReleaseEvent called for node {self.index}")
+        if event.button() == Qt.LeftButton and hasattr(self, 'drag_start_pos'):
+            print(f"DEBUG: *** STOP DRAGGING node {self.index} ***")
+            delattr(self, 'drag_start_pos')
+            delattr(self, 'initial_pos')
         super().mouseReleaseEvent(event)
 
 class ControlHandle(QGraphicsEllipseItem):
@@ -84,6 +109,10 @@ class ControlHandle(QGraphicsEllipseItem):
         self.setBrush(QBrush(QColor(150, 150, 150)))  # Gray
         self.setPen(QPen(QColor(100, 100, 100), 1))
         
+        # Enable mouse events for this item
+        self.setAcceptedMouseButtons(Qt.LeftButton | Qt.RightButton)
+        self.setAcceptHoverEvents(True)
+        
         self.setZValue(9)  # Below nodes but above curves
         
     def itemChange(self, change, value):
@@ -91,10 +120,45 @@ class ControlHandle(QGraphicsEllipseItem):
         if change == QGraphicsItem.ItemPositionHasChanged:
             # Notify parent about control point movement - use the center position
             if hasattr(self.parentItem(), 'control_moved'):
-                center_pos = value + QPointF(2, 2)  # Add radius to get center position
+                # The position value is the top-left corner, add radius to get center
+                center_x = value.x() + 2  # radius is 2
+                center_y = value.y() + 2  # radius is 2
                 self.parentItem().control_moved(
-                    self.node_index, self.is_out, center_pos.x(), center_pos.y())
+                    self.node_index, self.is_out, center_x, center_y)
         return super().itemChange(change, value)
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press for selection and dragging"""
+        print(f"DEBUG: ControlHandle.mousePressEvent called for handle {self.node_index}")
+        if event.button() == Qt.LeftButton:
+            print(f"DEBUG: *** START DRAGGING control handle {self.node_index} ***")
+            self.setSelected(True)
+            self.drag_start_pos = event.pos()
+            self.initial_pos = self.pos()
+            event.accept()  # Accept to prevent further processing
+        else:
+            super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move for dragging"""
+        if hasattr(self, 'drag_start_pos') and (event.buttons() & Qt.LeftButton):
+            print(f"DEBUG: ControlHandle.mouseMoveEvent called for handle {self.node_index}")
+            # Calculate the new position based on mouse movement
+            delta = event.pos() - self.drag_start_pos
+            new_pos = self.initial_pos + delta
+            self.setPos(new_pos)
+            # itemChange will be called automatically and handle the route update
+        else:
+            super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release"""
+        print(f"DEBUG: ControlHandle.mouseReleaseEvent called for handle {self.node_index}")
+        if event.button() == Qt.LeftButton and hasattr(self, 'drag_start_pos'):
+            print(f"DEBUG: *** STOP DRAGGING control handle {self.node_index} ***")
+            delattr(self, 'drag_start_pos')
+            delattr(self, 'initial_pos')
+        super().mouseReleaseEvent(event)
 
 class BezierCurve(QGraphicsPathItem):
     """
