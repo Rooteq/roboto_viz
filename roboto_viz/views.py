@@ -89,8 +89,9 @@ class ActiveView(QWidget):
         # Start planning mode
         self.planning_tools.start_planning_mode()
 
-        # self.stacked_widget.setCurrentWidget(self.planning_tools)
+        # Connect signals
         self.planning_tools.finish_planning.connect(lambda: self.finish_planning.emit())
+        self.planning_tools.get_current_route.connect(self.handle_get_current_route)
         
     def handle_get_current_route(self):
         """Get current route from map view and save it"""

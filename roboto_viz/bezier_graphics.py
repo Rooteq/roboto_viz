@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QGraphicsItem, QGraphicsEllipseItem, QGraphicsPathItem, 
                              QGraphicsLineItem, QGraphicsItemGroup, QGraphicsTextItem)
 from PyQt5.QtGui import QPainterPath, QPen, QBrush, QColor, QFont
-from PyQt5.QtCore import Qt, QPointF, QRectF
+from PyQt5.QtCore import Qt, QPointF, QRectF, QObject
 import math
 
 class BezierNode(QGraphicsEllipseItem):
@@ -152,12 +152,14 @@ class ControlLine(QGraphicsLineItem):
         
         self.setZValue(0)  # Lowest priority
 
-class BezierRouteGraphics(QGraphicsItemGroup):
+class BezierRouteGraphics(QObject):
     """
     Complete visual representation of a Bezier route with nodes, curves, and controls.
     """
-    def __init__(self, bezier_route, map_origin, pixmap_height, parent=None):
+    def __init__(self, bezier_route, map_origin, pixmap_height, scene, parent=None):
         super().__init__(parent)
+        
+        self.scene_ref = scene
         
         self.bezier_route = bezier_route
         self.map_origin = map_origin
@@ -170,6 +172,19 @@ class BezierRouteGraphics(QGraphicsItemGroup):
         self.control_lines = []
         
         self.update_graphics()
+        
+    def clear_graphics(self):
+        """Remove all graphics items from the scene"""
+        scene = self.scene_ref
+        if scene:
+            for item in self.node_items + self.curve_items + self.control_handles + self.control_lines:
+                if item.scene():
+                    scene.removeItem(item)
+        
+        self.node_items.clear()
+        self.curve_items.clear()
+        self.control_handles.clear()
+        self.control_lines.clear()
         
     def world_to_map_coords(self, world_x: float, world_y: float) -> tuple:
         """Convert world coordinates to map pixel coordinates"""
@@ -185,6 +200,8 @@ class BezierRouteGraphics(QGraphicsItemGroup):
         
     def update_graphics(self):
         """Update all visual elements based on current route data"""
+        print(f"DEBUG: update_graphics called with {len(self.bezier_route.nodes)} nodes")
+        
         # Clear existing items
         for item in self.node_items + self.curve_items + self.control_handles + self.control_lines:
             if item.scene():
@@ -196,20 +213,26 @@ class BezierRouteGraphics(QGraphicsItemGroup):
         self.control_lines.clear()
         
         if not self.bezier_route.nodes:
+            print(f"DEBUG: No nodes in route, returning")
             return
             
         # Get the scene to add items to
-        scene = self.scene()
+        scene = self.scene_ref
         if not scene:
+            print(f"DEBUG: No scene available, returning")
             return
+        
+        print(f"DEBUG: Scene available, creating graphics for {len(self.bezier_route.nodes)} nodes")
             
         # Create node items - add directly to scene
         for i, node in enumerate(self.bezier_route.nodes):
             map_x, map_y = self.world_to_map_coords(node.x, node.y)
+            print(f"DEBUG: Node {i}: world=({node.x}, {node.y}) -> map=({map_x}, {map_y})")
             node_item = BezierNode(map_x, map_y, i, None)  # No parent - will be added to scene
             node_item.route_graphics = self  # Store reference to this graphics object
             self.node_items.append(node_item)
             scene.addItem(node_item)
+            print(f"DEBUG: Added node {i} to scene")
             
             # Create control handles if they exist
             if node.control_in:

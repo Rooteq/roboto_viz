@@ -445,7 +445,8 @@ class MapView(QGraphicsView):
             return
             
         if hasattr(self, 'current_route_graphics') and self.current_route_graphics:
-            self.scene.removeItem(self.current_route_graphics)
+            # Clear all graphics items managed by the route graphics
+            self.current_route_graphics.clear_graphics()
             self.current_route_graphics = None
 
     def display_bezier_route(self, bezier_route: BezierRoute, force_update: bool = False):
@@ -471,9 +472,8 @@ class MapView(QGraphicsView):
                 print(f"DEBUG: Creating BezierRouteGraphics with map_origin: {self.map_origin}")
                 # Create graphics even for empty routes so users can add nodes
                 self.current_route_graphics = BezierRouteGraphics(
-                    bezier_route, self.map_origin, self.pixmap.rect().height()
+                    bezier_route, self.map_origin, self.pixmap.rect().height(), self.scene
                 )
-                self.scene.addItem(self.current_route_graphics)
                 print(f"DEBUG: Created current_route_graphics: {self.current_route_graphics}")
             else:
                 print(f"DEBUG: No map loaded - cannot create route graphics yet")
@@ -506,3 +506,9 @@ class MapView(QGraphicsView):
         self.editing_mode = False
         self.enable_drawing = False
         self.clear_route()
+        
+    def get_current_route(self):
+        """Get the current route from the graphics display"""
+        if hasattr(self, 'current_route_graphics') and self.current_route_graphics:
+            return self.current_route_graphics.bezier_route
+        return None
