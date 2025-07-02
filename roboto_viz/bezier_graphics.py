@@ -33,9 +33,12 @@ class BezierNode(QGraphicsEllipseItem):
         self.text_item.setFont(font)
         self.text_item.setDefaultTextColor(Qt.white)
         
-        # Center the text
+        # Center the text relative to the ellipse center
         text_rect = self.text_item.boundingRect()
-        self.text_item.setPos(-text_rect.width()/2, -text_rect.height()/2)
+        self.text_item.setPos(
+            radius - text_rect.width()/2, 
+            radius - text_rect.height()/2
+        )
         
         # IMPORTANT: Make sure text doesn't interfere with mouse events
         self.text_item.setFlag(QGraphicsItem.ItemIsMovable, False)
@@ -274,14 +277,38 @@ class BezierRouteGraphics(QGraphicsItemGroup):
     
     def node_moved(self, index: int, map_x: float, map_y: float):
         """Handle node movement"""
+        if index >= len(self.bezier_route.nodes):
+            return
+            
         world_x, world_y = self.map_to_world_coords(map_x, map_y)
         print(f"DEBUG: node_moved index={index}, map_coords=({map_x}, {map_y}), world_coords=({world_x}, {world_y})")
-        print(f"DEBUG: map_origin={self.map_origin}, pixmap_height={self.pixmap_height}")
         
-        self.bezier_route.move_node(index, world_x, world_y)
+        # Calculate how much the node moved
+        node = self.bezier_route.nodes[index]
+        dx = world_x - node.x
+        dy = world_y - node.y
         
-        # Update only the affected curves and control lines without recreating everything
-        self.update_node_connections(index)
+        # Update node position
+        node.x = world_x
+        node.y = world_y
+        
+        # Move control points by the same amount to maintain relative position
+        if node.control_in:
+            node.control_in = (node.control_in[0] + dx, node.control_in[1] + dy)
+        if node.control_out:
+            node.control_out = (node.control_out[0] + dx, node.control_out[1] + dy)
+        
+        # Update visual control handles to match the new positions
+        self.move_visual_control_handles(index, dx, dy)
+        
+        # Update control lines for this node
+        self.update_control_lines_for_node(index)
+        
+        # Update curves
+        if index > 0:
+            self.update_curve(index - 1)
+        if index < len(self.bezier_route.nodes) - 1:
+            self.update_curve(index)
         
     def control_moved(self, node_index: int, is_out: bool, map_x: float, map_y: float):
         """Handle control point movement"""
@@ -378,6 +405,92 @@ class BezierRouteGraphics(QGraphicsItemGroup):
                 break
             else:
                 # Count control lines for previous nodes
+                if bezier_node.control_in:
+                    control_line_index += 1
+                if bezier_node.control_out:
+                    control_line_index += 1
+                    
+    def update_control_handle_positions(self, node_index: int):
+        """Update the positions of control handles for a specific node"""
+        if node_index >= len(self.bezier_route.nodes):
+            return
+        
+        # Find control handles for this node
+        control_handle_index = 0
+        for i, bezier_node in enumerate(self.bezier_route.nodes):
+            if i == node_index:
+                # Update control handles for this node
+                if bezier_node.control_in and control_handle_index < len(self.control_handles):
+                    cx, cy = self.world_to_map_coords(bezier_node.control_in[0], bezier_node.control_in[1])
+                    # Move the control handle to new position (accounting for radius offset)
+                    self.control_handles[control_handle_index].setPos(cx - 2, cy - 2)
+                    control_handle_index += 1
+                    
+                if bezier_node.control_out and control_handle_index < len(self.control_handles):
+                    cx, cy = self.world_to_map_coords(bezier_node.control_out[0], bezier_node.control_out[1])
+                    # Move the control handle to new position (accounting for radius offset)
+                    self.control_handles[control_handle_index].setPos(cx - 2, cy - 2)
+                    control_handle_index += 1
+            else:
+                # Skip control handles for other nodes
+                if bezier_node.control_in:
+                    control_handle_index += 1
+                if bezier_node.control_out:
+                    control_handle_index += 1
+                    
+    def move_visual_control_handles(self, node_index: int, dx_world: float, dy_world: float):
+        """Move the visual control handles by the specified world coordinate offset"""
+        # Convert world coordinate offset to map coordinate offset
+        dx_map = dx_world * 20  # Same scale factor used in coordinate conversion
+        dy_map = -dy_world * 20  # Y is inverted in map coordinates
+        
+        # Find control handles for this node and move them
+        control_handle_index = 0
+        for i, bezier_node in enumerate(self.bezier_route.nodes):
+            if i == node_index:
+                # Move control handles for this node
+                if bezier_node.control_in and control_handle_index < len(self.control_handles):
+                    current_pos = self.control_handles[control_handle_index].pos()
+                    self.control_handles[control_handle_index].setPos(current_pos.x() + dx_map, current_pos.y() + dy_map)
+                    control_handle_index += 1
+                    
+                if bezier_node.control_out and control_handle_index < len(self.control_handles):
+                    current_pos = self.control_handles[control_handle_index].pos()
+                    self.control_handles[control_handle_index].setPos(current_pos.x() + dx_map, current_pos.y() + dy_map)
+                    control_handle_index += 1
+                break
+            else:
+                # Skip control handles for other nodes
+                if bezier_node.control_in:
+                    control_handle_index += 1
+                if bezier_node.control_out:
+                    control_handle_index += 1
+                    
+    def update_control_lines_for_node(self, node_index: int):
+        """Update control lines for a specific node after it has moved"""
+        if node_index >= len(self.bezier_route.nodes):
+            return
+            
+        node = self.bezier_route.nodes[node_index]
+        node_map_x, node_map_y = self.world_to_map_coords(node.x, node.y)
+        
+        # Find control lines for this node and update them
+        control_line_index = 0
+        for i, bezier_node in enumerate(self.bezier_route.nodes):
+            if i == node_index:
+                # Update control lines for this node
+                if bezier_node.control_in and control_line_index < len(self.control_lines):
+                    cx, cy = self.world_to_map_coords(bezier_node.control_in[0], bezier_node.control_in[1])
+                    self.control_lines[control_line_index].setLine(node_map_x, node_map_y, cx, cy)
+                    control_line_index += 1
+                    
+                if bezier_node.control_out and control_line_index < len(self.control_lines):
+                    cx, cy = self.world_to_map_coords(bezier_node.control_out[0], bezier_node.control_out[1])
+                    self.control_lines[control_line_index].setLine(node_map_x, node_map_y, cx, cy)
+                    control_line_index += 1
+                break
+            else:
+                # Skip control lines for other nodes
                 if bezier_node.control_in:
                     control_line_index += 1
                 if bezier_node.control_out:
