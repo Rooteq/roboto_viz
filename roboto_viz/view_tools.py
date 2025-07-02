@@ -340,15 +340,20 @@ class ActiveTools(QWidget):
     def on_map_selected(self, map_name: str):
         """Handle map selection"""
         if map_name:
-            print(f"selected: {map_name}")
-            self.map_selected.emit(map_name)
+            print(f"DEBUG: Map selected: {map_name}")
+            
             # Clear current routes when map changes
             self.routes.clear()
             self.active_route_name = None
             self.update_routes()
-            # Only stop drawing if not in planning mode
-            # (Planning mode should preserve the current route graphics)
+            
+            # Stop any current drawing/route display
             self.stop_drawing_points.emit()
+            
+            # Emit the map selection signal - this will trigger map loading
+            self.map_selected.emit(map_name)
+            
+            print(f"DEBUG: Map selection completed for: {map_name}")
 
     def handle_navigate_to_dest(self):
         if self.active_route_name:
@@ -404,6 +409,9 @@ class ActiveTools(QWidget):
         current_item = self.route_list.currentItem()
         if current_item:
             route_name = current_item.text()  # No need to strip check mark anymore
+            
+            # Clear previous route graphics first
+            self.stop_drawing_points.emit()
             
             # Update active route name
             self.active_route_name = route_name

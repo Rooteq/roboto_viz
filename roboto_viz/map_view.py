@@ -112,14 +112,35 @@ class MapView(QGraphicsView):
         self.current_route_graphics = None
 
     def load_image(self, image_path, origin_data):
+        print(f"DEBUG: Loading new map: {image_path}")
+        
+        # Clear any existing route graphics first (force clear even in editing mode)
+        self.clear_route(force=True)
+        
+        # Update map origin
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
 
+        # Load new pixmap
         self.pixmap = QPixmap(image_path)
+        
+        # Remove old image item if it exists
         if self.image_item:
             self.scene.removeItem(self.image_item)
+            self.image_item = None
+            
+        # Add new image item
         self.image_item = self.scene.addPixmap(self.pixmap)
+        
+        # Update scene rectangle to match new image
         self.scene.setSceneRect(QRectF(self.pixmap.rect()))
+        
+        # Force scene update
+        self.scene.update()
+        
+        # Update view to fit new image
         self.update_view()
+        
+        print(f"DEBUG: Map loaded successfully, origin: {self.map_origin}")
 
     def update_view(self):
         if self.image_item:
@@ -437,17 +458,20 @@ class MapView(QGraphicsView):
         """Toggle panning mode for left mouse button"""
         self.left_pan_mode = self.pan_btn.isChecked()
 
-    def clear_route(self):
+    def clear_route(self, force=False):
         """Clear the current route graphics"""
         # Skip clearing route graphics if in editing mode to preserve the current editing session
-        if self.editing_mode:
+        # unless force is True (for map changes)
+        if self.editing_mode and not force:
             print(f"DEBUG: Skipping route clear - in editing mode")
             return
             
+        print(f"DEBUG: Clearing route graphics (force={force})")
         if hasattr(self, 'current_route_graphics') and self.current_route_graphics:
             # Clear all graphics items managed by the route graphics
             self.current_route_graphics.clear_graphics()
             self.current_route_graphics = None
+            print(f"DEBUG: Route graphics cleared")
 
     def display_bezier_route(self, bezier_route: BezierRoute, force_update: bool = False):
         """
@@ -489,6 +513,10 @@ class MapView(QGraphicsView):
             bezier_route: Existing route to edit, or None to create new
         """
         print(f"DEBUG: start_route_editing called with bezier_route: {bezier_route}")
+        
+        # Force clear any existing route graphics before starting editing
+        self.clear_route(force=True)
+        
         self.editing_mode = True
         self.enable_drawing = True
         print(f"DEBUG: Set editing_mode={self.editing_mode}, enable_drawing={self.enable_drawing}")
