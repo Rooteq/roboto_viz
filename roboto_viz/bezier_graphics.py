@@ -14,7 +14,7 @@ class BezierNode(QGraphicsEllipseItem):
         
         self.index = index
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.ItemIsSelectable, False)  # Disable selection to prevent group dragging
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         
         # Visual styling
@@ -63,11 +63,11 @@ class BezierNode(QGraphicsEllipseItem):
         return super().itemChange(change, value)
     
     def mousePressEvent(self, event):
-        """Handle mouse press for selection and dragging"""
+        """Handle mouse press for dragging"""
         print(f"DEBUG: BezierNode.mousePressEvent called for node {self.index}")
         if event.button() == Qt.LeftButton:
             print(f"DEBUG: *** START DRAGGING node {self.index} at {event.pos()} ***")
-            self.setSelected(True)
+            # Don't call setSelected() to avoid selection bounding box
         super().mousePressEvent(event)
 
 class ControlHandle(QGraphicsEllipseItem):
@@ -107,11 +107,11 @@ class ControlHandle(QGraphicsEllipseItem):
         return super().itemChange(change, value)
     
     def mousePressEvent(self, event):
-        """Handle mouse press for selection and dragging"""
+        """Handle mouse press for dragging"""
         print(f"DEBUG: ControlHandle.mousePressEvent called for handle {self.node_index}")
         if event.button() == Qt.LeftButton:
             print(f"DEBUG: *** START DRAGGING control handle {self.node_index} ***")
-            self.setSelected(True)
+            # Don't call setSelected() to avoid selection bounding box
         super().mousePressEvent(event)
 
 class BezierCurve(QGraphicsPathItem):
