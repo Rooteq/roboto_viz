@@ -68,7 +68,29 @@ class BezierNode(QGraphicsEllipseItem):
         if event.button() == Qt.LeftButton:
             print(f"DEBUG: *** START DRAGGING node {self.index} at {event.pos()} ***")
             # Don't call setSelected() to avoid selection bounding box
+        elif event.button() == Qt.RightButton:
+            print(f"DEBUG: Right-click on node {self.index} - preparing for deletion")
+            # Don't call super() for right-click to prevent other handling
+            return
         super().mousePressEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release for deletion"""
+        if event.button() == Qt.RightButton:
+            print(f"DEBUG: Right-click release on node {self.index} - deleting node")
+            if hasattr(self, 'route_graphics') and self.route_graphics:
+                self.route_graphics.delete_node(self.index)
+            return
+        super().mouseReleaseEvent(event)
+    
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click for deletion"""
+        if event.button() == Qt.LeftButton:
+            print(f"DEBUG: Double-click on node {self.index} - deleting node")
+            if hasattr(self, 'route_graphics') and self.route_graphics:
+                self.route_graphics.delete_node(self.index)
+            return
+        super().mouseDoubleClickEvent(event)
 
 class ControlHandle(QGraphicsEllipseItem):
     """

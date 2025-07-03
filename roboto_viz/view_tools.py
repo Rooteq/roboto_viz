@@ -465,7 +465,7 @@ class PlanningTools(QWidget):
         self.route_name_label.setFont(label_font)
 
         # Instructions
-        self.instructions_label = QLabel("Click on map to add nodes.\nDrag nodes to move them.\nRight-click nodes to delete.")
+        self.instructions_label = QLabel("Click on map to add nodes.\nDrag nodes to move them.\nDouble-click or right-click nodes to delete.")
         self.instructions_label.setWordWrap(True)
         self.instructions_label.setStyleSheet("color: #555; font-size: 10px; padding: 10px;")
 
