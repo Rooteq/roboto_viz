@@ -113,7 +113,7 @@ class DisconnectedView(QWidget):
         # Define styles matching the other widgets
         button_style = """
             QPushButton {
-                min-height: 40px;
+                min-height: 20px;
                 font-size: 14px;
                 padding: 5px 10px;
                 font-weight: bold;

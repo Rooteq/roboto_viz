@@ -34,7 +34,7 @@ class ActiveTools(QWidget):
 
         button_style = """
             QPushButton {
-                min-height: 40px;
+                min-height: 20px;
                 font-size: 14px;
                 padding: 5px 10px;
                 font-weight: bold;
@@ -56,7 +56,7 @@ class ActiveTools(QWidget):
 
         stop_button_style = """
             QPushButton {
-                min-height: 40px;
+                min-height: 20px;
                 font-size: 14px;
                 padding: 5px 10px;
                 font-weight: bold;
@@ -173,10 +173,10 @@ class ActiveTools(QWidget):
         self.leftButton =QPushButton("←")
         self.rightButton =QPushButton("→")
 
-        self.upButton.setFixedSize(50, 50)
-        self.leftButton.setFixedSize(50, 50)
-        self.downButton.setFixedSize(50, 50)
-        self.rightButton.setFixedSize(50, 50)
+        self.upButton.setFixedSize(25, 25)
+        self.leftButton.setFixedSize(25, 25)
+        self.downButton.setFixedSize(25, 25)
+        self.rightButton.setFixedSize(25, 25)
 
         keys_grid = QGridLayout()
         keys_grid.setSpacing(10)
@@ -230,8 +230,8 @@ class ActiveTools(QWidget):
 
         direction_button_style = """
             QPushButton {
-                min-height: 60px;
-                min-width: 60px;
+                min-height: 30px;
+                min-width: 30px;
                 font-size: 20px;
                 font-weight: bold;
                 border: 2px solid #2980b9;
@@ -255,10 +255,10 @@ class ActiveTools(QWidget):
         self.rightButton.setStyleSheet(direction_button_style)
         
         # Update fixed sizes for direction buttons
-        self.upButton.setFixedSize(60, 60)
-        self.leftButton.setFixedSize(60, 60)
-        self.downButton.setFixedSize(60, 60)
-        self.rightButton.setFixedSize(60, 60)
+        self.upButton.setFixedSize(30, 30)
+        self.leftButton.setFixedSize(30, 30)
+        self.downButton.setFixedSize(30, 30)
+        self.rightButton.setFixedSize(30, 30)
 
         # Make the route list font bigger
         route_list_font = QFont()
@@ -485,7 +485,7 @@ class PlanningTools(QWidget):
 
         button_style = """
             QPushButton {
-                min-height: 40px;
+                min-height: 20px;
                 font-size: 14px;
                 padding: 5px 10px;
                 font-weight: bold;
