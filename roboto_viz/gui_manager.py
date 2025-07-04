@@ -4,6 +4,7 @@ import sys
 import rclpy
 from rclpy.lifecycle import LifecycleNode
 from rclpy.lifecycle.node import LifecycleState, TransitionCallbackReturn
+from rclpy.action import ActionClient
 
 from rclpy.executors import MultiThreadedExecutor
 from std_srvs.srv import Trigger
@@ -16,12 +17,19 @@ from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Path
 from rclpy.duration import Duration
+from action_msgs.msg import GoalStatus
 
 import math
 from enum import Enum
 from roboto_viz.route_manager import RouteManager, BezierRoute
 from typing import Dict, List, Tuple
 
+try:
+    from lidar_auto_docking_messages.action import Dock, Undock
+except ImportError:
+    print("Warning: lidar_auto_docking_messages not found. Docking functionality will be disabled.")
+    Dock = None
+    Undock = None
 
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 
@@ -40,11 +48,16 @@ class ManagerNode(LifecycleNode):
         self.init_pose_pub = None
         self.cmd_vel_pub = None
 
+        # Docking action clients
+        self.dock_action_client = None
+        self.undock_action_client = None
+        
         #CALLBACKS: 
         self.service_availability_callback = None
         self.listener_pose_callback = None
         self.disconnect_callback = None
         self.connect_callback = None
+        self.docking_status_callback = None
 
         #INTERNAL STATES:
         self.srv_available: bool = False
@@ -139,6 +152,15 @@ class ManagerNode(LifecycleNode):
                 10
             )
 
+        # Create docking action clients if messages are available
+        if Dock is not None and self.dock_action_client is None:
+            self.dock_action_client = ActionClient(self, Dock, 'Dock')
+            self.get_logger().info("Created dock action client")
+            
+        if Undock is not None and self.undock_action_client is None:
+            self.undock_action_client = ActionClient(self, Undock, 'Undock')
+            self.get_logger().info("Created undock action client")
+
         self._current_state = LState.ACTIVE
 
         return super().on_activate(previous_state)
@@ -232,6 +254,143 @@ class ManagerNode(LifecycleNode):
         self.cmd_vel_pub.publish(self.cmd_vel_msg)
 
         self.get_logger().info("Stopped publishing to cmd_vel")
+        
+    def send_dock_goal(self):
+        """Send a docking goal to the robot"""
+        if Dock is None or self.dock_action_client is None:
+            self.get_logger().error("Docking action client not available")
+            if self.docking_status_callback:
+                self.docking_status_callback("Dock Error")
+            return
+            
+        goal_msg = Dock.Goal()
+        # Create empty dock pose - server will detect live
+        goal_msg.dock_pose = PoseStamped()
+        goal_msg.dock_pose.header.frame_id = "base_link"
+        goal_msg.dock_id = "live_detection"
+        
+        self.get_logger().info('Waiting for dock action server...')
+        if self.docking_status_callback:
+            self.docking_status_callback("Docking...")
+            
+        # Check if server is available, then send goal
+        if self.dock_action_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().info('Sending dock goal...')
+            send_goal_future = self.dock_action_client.send_goal_async(
+                goal_msg, feedback_callback=self._dock_feedback_callback)
+            send_goal_future.add_done_callback(self._dock_goal_response_callback)
+        else:
+            self.get_logger().error('Dock action server not available')
+            if self.docking_status_callback:
+                self.docking_status_callback("Dock Server Unavailable")
+
+    def _dock_goal_response_callback(self, future):
+        """Handle dock goal response"""
+        try:
+            goal_handle = future.result()
+            if not goal_handle.accepted:
+                self.get_logger().info('Dock goal rejected')
+                if self.docking_status_callback:
+                    self.docking_status_callback("Dock Rejected")
+                return
+
+            self.get_logger().info('Dock goal accepted')
+            get_result_future = goal_handle.get_result_async()
+            get_result_future.add_done_callback(self._dock_result_callback)
+        except Exception as e:
+            self.get_logger().error(f'Error in dock goal response: {e}')
+            if self.docking_status_callback:
+                self.docking_status_callback("Dock Error")
+
+    def _dock_result_callback(self, future):
+        """Handle dock result"""
+        try:
+            result = future.result().result
+            status = future.result().status
+            if status == GoalStatus.STATUS_SUCCEEDED:
+                self.get_logger().info(f'Docking succeeded! Docked: {result.docked}')
+                if self.docking_status_callback:
+                    self.docking_status_callback("Docked" if result.docked else "Dock Failed")
+            else:
+                self.get_logger().info('Docking failed')
+                if self.docking_status_callback:
+                    self.docking_status_callback("Dock Failed")
+        except Exception as e:
+            self.get_logger().error(f'Error in dock result: {e}')
+            if self.docking_status_callback:
+                self.docking_status_callback("Dock Error")
+
+    def _dock_feedback_callback(self, feedback_msg):
+        """Handle dock feedback"""
+        try:
+            feedback = feedback_msg.feedback
+            # Log dock pose updates
+            pose = feedback.dock_pose.pose
+            self.get_logger().info(
+                f'Dock detected at: x={pose.position.x:.2f}, y={pose.position.y:.2f}')
+        except Exception as e:
+            self.get_logger().error(f'Error in dock feedback: {e}')
+
+    def send_undock_goal(self):
+        """Send an undocking goal to the robot"""
+        if Undock is None or self.undock_action_client is None:
+            self.get_logger().error("Undocking action client not available")
+            if self.docking_status_callback:
+                self.docking_status_callback("Undock Error")
+            return
+            
+        goal_msg = Undock.Goal()
+        goal_msg.rotate_in_place = False
+        
+        self.get_logger().info('Waiting for undock action server...')
+        if self.docking_status_callback:
+            self.docking_status_callback("Undocking...")
+            
+        # Check if server is available, then send goal
+        if self.undock_action_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().info('Sending undock goal...')
+            send_goal_future = self.undock_action_client.send_goal_async(goal_msg)
+            send_goal_future.add_done_callback(self._undock_goal_response_callback)
+        else:
+            self.get_logger().error('Undock action server not available')
+            if self.docking_status_callback:
+                self.docking_status_callback("Undock Server Unavailable")
+
+    def _undock_goal_response_callback(self, future):
+        """Handle undock goal response"""
+        try:
+            goal_handle = future.result()
+            if not goal_handle.accepted:
+                self.get_logger().info('Undock goal rejected')
+                if self.docking_status_callback:
+                    self.docking_status_callback("Undock Rejected")
+                return
+
+            self.get_logger().info('Undock goal accepted')
+            get_result_future = goal_handle.get_result_async()
+            get_result_future.add_done_callback(self._undock_result_callback)
+        except Exception as e:
+            self.get_logger().error(f'Error in undock goal response: {e}')
+            if self.docking_status_callback:
+                self.docking_status_callback("Undock Error")
+
+    def _undock_result_callback(self, future):
+        """Handle undock result"""
+        try:
+            result = future.result().result
+            status = future.result().status
+            if status == GoalStatus.STATUS_SUCCEEDED:
+                self.get_logger().info(f'Undocking succeeded! Undocked: {result.undocked}')
+                if self.docking_status_callback:
+                    self.docking_status_callback("Undocked" if result.undocked else "Undock Failed")
+            else:
+                self.get_logger().info('Undocking failed')
+                if self.docking_status_callback:
+                    self.docking_status_callback("Undock Failed")
+        except Exception as e:
+            self.get_logger().error(f'Error in undock result: {e}')
+            if self.docking_status_callback:
+                self.docking_status_callback("Undock Error")
         
 class NavData(QObject):
     def __init__(self):
@@ -421,6 +580,7 @@ class Navigator(QThread):
 
 class GuiManager(QThread):
     manualStatus = pyqtSignal(str)
+    dockingStatus = pyqtSignal(str)
 
     service_response = pyqtSignal(bool)
     update_pose = pyqtSignal(float, float, float)
@@ -514,6 +674,18 @@ class GuiManager(QThread):
         self.manualStatus.emit("Idle")
 
         self.node.stop_publishing()
+        
+    @pyqtSlot()
+    def dock_robot(self):
+        """Slot to handle dock button click"""
+        if self.node:
+            self.node.send_dock_goal()
+            
+    @pyqtSlot()
+    def undock_robot(self):
+        """Slot to handle undock button click"""
+        if self.node:
+            self.node.send_undock_goal()
 
     def run(self):
         self.node = ManagerNode()
@@ -523,6 +695,7 @@ class GuiManager(QThread):
         self.node.listener_pose_callback = self.emit_pose 
         self.node.disconnect_callback = self.emit_disconnect_call
         self.node.connect_callback = self.emit_connect_call
+        self.node.docking_status_callback = self.emit_docking_status
 
         self.executor.spin()
 
@@ -548,6 +721,9 @@ class GuiManager(QThread):
         y = msg.twist.linear.y
         theta = -msg.twist.angular.z
         self.update_pose.emit(x, y, theta)
+        
+    def emit_docking_status(self, status: str):
+        self.dockingStatus.emit(status)
 
     pyqtSlot(str)
     def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):

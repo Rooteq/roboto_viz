@@ -50,23 +50,23 @@ class ActiveView(QWidget):
         self.planning_tools.stop_route_editing.connect(self.map_view.stop_route_editing)
         self.planning_tools.get_current_route.connect(self.handle_get_current_route)
 
-    pyqtSlot(dict,bool)
-    def handle_set_route(self, routes, to_dest):
-        self.start_nav.emit(routes, to_dest, self.curr_x, self.curr_y)
+    @pyqtSlot(str, bool)
+    def handle_set_route(self, route_name, to_dest):
+        self.start_nav.emit(route_name, to_dest, self.curr_x, self.curr_y)
 
-    pyqtSlot()
+    @pyqtSlot(float, float, float)
     def update_robot_pose(self, x, y, theta):
-        self.map_view.update_robot_pose(x,y,theta)
+        self.map_view.update_robot_pose(x, y, theta)
         self.curr_x = x
         self.curr_y = y
 
-    pyqtSlot(dict)
+    @pyqtSlot(dict)
     def load__routes(self, routes):
         self.routes.clear()
-        self.routes.update(routes) 
+        self.routes.update(routes)
         self.active_tools.update_routes()
 
-    pyqtSlot(list)
+    @pyqtSlot(list)
     def load_maps(self, maps: list):
         self.maps = maps.copy()  # Make a copy of the list
         self.active_tools.update_maps(self.maps)  # Update maps in ActiveTools
@@ -80,7 +80,7 @@ class ActiveView(QWidget):
     def switch_to_configuring_tab(self):
         self.active_tools.tab_widget.setCurrentIndex(1)
 
-    def switch_to_active(self): #OPTIMIZE
+    def switch_to_active(self):  # OPTIMIZE
         self.active_tools.tab_widget.setCurrentIndex(0)
 
     def switch_to_planning(self):
@@ -94,11 +94,10 @@ class ActiveView(QWidget):
         self.planning_tools.get_current_route.connect(self.handle_get_current_route)
         
     def handle_get_current_route(self):
-        """Get current route from map view and save it"""
+        """Get current route from map view and save it."""
         current_route = self.map_view.get_current_route()
         if current_route:
             self.planning_tools.save_route(current_route)
-
 
 
 class DisconnectedView(QWidget):
@@ -153,12 +152,12 @@ class DisconnectedView(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
 
         # Create and style the service state label
-        self.service_state = QLabel("Service: Not Available")
+        self.service_state = QLabel('Service: Not Available')
         self.service_state.setStyleSheet(label_style)
         self.service_state.setAlignment(Qt.AlignCenter)
         
         # Create and style the connect button
-        self.connect_button = QPushButton("Connect")
+        self.connect_button = QPushButton('Connect')
         self.connect_button.setStyleSheet(button_style)
         self.connect_button.clicked.connect(self.on_connect)
         self.connect_button.setEnabled(False)
@@ -176,16 +175,16 @@ class DisconnectedView(QWidget):
         layout.addStretch()
 
     def on_connect(self):
-        self.on_connection.emit("connect on Widget")
+        self.on_connection.emit('connect on Widget')
 
     def set_availability(self, available):
         if not self.wait_for_connection:
-            status = "Available" if available else "Not Available"
-            self.service_state.setText(f"Service: {status}")
+            status = 'Available' if available else 'Not Available'
+            self.service_state.setText(f'Service: {status}')
             self.connect_button.setEnabled(available)
 
     def waiting_for_connection(self, state: bool):
         if state:
             self.connect_button.setEnabled(False)
-            self.service_state.setText("Service: connecting")
+            self.service_state.setText('Service: connecting')
             self.wait_for_connection = state

@@ -167,6 +167,22 @@ class ConfiguringState(State):
             self.gui.gui_manager.set_init_pose
         )
 
+        # Connect docking signals
+        self.connect_and_store_connections(
+            self.gui.main_view.active_view.active_tools.dock_robot,
+            self.gui.gui_manager.dock_robot
+        )
+
+        self.connect_and_store_connections(
+            self.gui.main_view.active_view.active_tools.undock_robot,
+            self.gui.gui_manager.undock_robot
+        )
+
+        self.connect_and_store_connections(
+            self.gui.gui_manager.dockingStatus,
+            self.gui.main_view.active_view.active_tools.set_current_status
+        )
+
     def handle_activate(self):
         self.gui.transition_to(ActiveState())
         self.gui.handleGui()
@@ -219,6 +235,22 @@ class ActiveState(State):
 
         self.connect_and_store_connections(
             self.gui.gui_manager.navigator.navStatus,
+            self.gui.main_view.active_view.active_tools.set_current_status
+        )
+
+        # Connect docking signals
+        self.connect_and_store_connections(
+            self.gui.main_view.active_view.active_tools.dock_robot,
+            self.gui.gui_manager.dock_robot
+        )
+
+        self.connect_and_store_connections(
+            self.gui.main_view.active_view.active_tools.undock_robot,
+            self.gui.gui_manager.undock_robot
+        )
+
+        self.connect_and_store_connections(
+            self.gui.gui_manager.dockingStatus,
             self.gui.main_view.active_view.active_tools.set_current_status
         )
 

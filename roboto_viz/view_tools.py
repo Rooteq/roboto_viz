@@ -15,6 +15,9 @@ class ActiveTools(QWidget):
 
     start_nav = pyqtSignal(str, bool)
     stop_nav = pyqtSignal()
+    
+    dock_robot = pyqtSignal()
+    undock_robot = pyqtSignal()
 
     map_selected = pyqtSignal(str)
 
@@ -145,9 +148,18 @@ class ActiveTools(QWidget):
         # Add the navigation buttons
         self.button_go_to_base = QPushButton("Go to base")
         self.button_go_to_dest = QPushButton("Go to dest")
+        
+        # Add dock and undock buttons in a horizontal layout
+        dock_layout = QHBoxLayout()
+        self.button_dock = QPushButton("Dock")
+        self.button_undock = QPushButton("Undock")
+        dock_layout.addWidget(self.button_dock)
+        dock_layout.addWidget(self.button_undock)
+        
         self.button_stop = QPushButton("Stop")
         first_layout.addWidget(self.button_go_to_base)
         first_layout.addWidget(self.button_go_to_dest)
+        first_layout.addLayout(dock_layout)
         first_layout.addWidget(self.button_stop)
         
         self.tab_widget.addTab(operation_tab, "Operation")
@@ -215,6 +227,8 @@ class ActiveTools(QWidget):
         self.button_set_active.clicked.connect(self.set_active_route)
         self.button_go_to_dest.clicked.connect(self.handle_navigate_to_dest)
         self.button_go_to_base.clicked.connect(self.handle_navigate_to_base)
+        self.button_dock.clicked.connect(lambda: self.dock_robot.emit())
+        self.button_undock.clicked.connect(lambda: self.undock_robot.emit())
         self.button_stop.clicked.connect(lambda: self.stop_nav.emit())
 
         self.tab_widget.currentChanged.connect(self.emit_based_on_tab)
@@ -224,6 +238,8 @@ class ActiveTools(QWidget):
         self.button_set_active.setStyleSheet(button_style)
         self.button_go_to_base.setStyleSheet(button_style)
         self.button_go_to_dest.setStyleSheet(button_style)
+        self.button_dock.setStyleSheet(button_style)
+        self.button_undock.setStyleSheet(button_style)
         
         # Apply special style to stop button
         self.button_stop.setStyleSheet(stop_button_style)
