@@ -725,11 +725,35 @@ class GuiManager(QThread):
     def emit_docking_status(self, status: str):
         self.dockingStatus.emit(status)
 
-    pyqtSlot(str)
+    @pyqtSlot(str, bool, float, float)
     def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):
         print(f"New goal set!, To_dest: {to_dest}")
         self.navigator.set_goal(route, to_dest, x, y)
 
-    pyqtSlot()
+    @pyqtSlot()
     def stop_nav(self):
         self.navigator.stop()
+    
+    @pyqtSlot(str)
+    def handle_start_plan_execution(self, plan_name: str):
+        """Handle plan execution start request"""
+        print(f"Starting plan execution: {plan_name}")
+        # For now, just emit a status update
+        # In a real implementation, you would integrate with the plan executor
+        self.manualStatus.emit(f"Executing plan: {plan_name}")
+    
+    @pyqtSlot()
+    def handle_stop_plan_execution(self):
+        """Handle plan execution stop request"""
+        print("Stopping plan execution")
+        # Stop any ongoing navigation
+        self.navigator.stop()
+        self.manualStatus.emit("Plan execution stopped")
+    
+    @pyqtSlot(str, int)
+    def handle_execute_plan_action(self, plan_name: str, action_index: int):
+        """Handle execution of a specific plan action"""
+        print(f"Executing action {action_index} from plan {plan_name}")
+        # This would be handled by the plan executor in main_view
+        # The GUI manager just updates status
+        self.manualStatus.emit(f"Executing action {action_index + 1}")

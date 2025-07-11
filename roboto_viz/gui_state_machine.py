@@ -87,6 +87,12 @@ class DisconnectedState(State):
             self.gui.gui_manager.send_map_names,
             self.gui.main_view.active_view.load_maps
         )
+        
+        # Also load maps for plan system
+        self.connect_and_store_connections(
+            self.gui.gui_manager.send_map_names,
+            self.gui.main_view.load_maps_into_plan_system
+        )
 
         self.connect_and_store_connections(
             self.gui.gui_manager.trigger_disconnect,
@@ -105,7 +111,10 @@ class DisconnectedState(State):
 
     def handleConnection(self):
         self.gui.main_view.load_map("robots_map")
-        self.gui.transition_to(ActiveState())
+        if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system:
+            self.gui.transition_to(PlanActiveState())
+        else:
+            self.gui.transition_to(ActiveState())
         self.gui.main_view.disconnected_view.waiting_for_connection(False)
         self.gui.handleGui()
 
@@ -117,10 +126,14 @@ class ConfiguringState(State):
         self.gui.main_view.map_view.enable_drawing = True
 
 
-        self.connect_and_store_connections(
-            self.gui.main_view.active_view.active_tools.switch_to_active,
-            self.handle_activate
-        )
+        if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system:
+            # Use plan system configure connections
+            pass  # Plan system handles this differently
+        else:
+            self.connect_and_store_connections(
+                self.gui.main_view.active_view.active_tools.switch_to_active,
+                self.handle_activate
+            )
 
         self.connect_and_store_connections(
             self.gui.gui_manager.update_pose,
@@ -184,7 +197,10 @@ class ConfiguringState(State):
         )
 
     def handle_activate(self):
-        self.gui.transition_to(ActiveState())
+        if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system:
+            self.gui.transition_to(PlanActiveState())
+        else:
+            self.gui.transition_to(ActiveState())
         self.gui.handleGui()
 
 class ActiveState(State):
@@ -193,10 +209,14 @@ class ActiveState(State):
 
         self.gui.main_view.map_view.enable_drawing = False
 
-        self.connect_and_store_connections(
-            self.gui.main_view.active_view.active_tools.switch_to_configure,
-            self.handle_configuring
-        )
+        if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system:
+            # Plan system uses different connections
+            pass  # Will be handled in PlanActiveState
+        else:
+            self.connect_and_store_connections(
+                self.gui.main_view.active_view.active_tools.switch_to_configure,
+                self.handle_configuring
+            )
 
         self.connect_and_store_connections(
             self.gui.gui_manager.trigger_disconnect,
@@ -213,10 +233,16 @@ class ActiveState(State):
             self.gui.gui_manager.stop_nav
         )
 
-        self.connect_and_store_connections(
-            self.gui.gui_manager.update_pose,
-            self.gui.main_view.active_view.update_robot_pose
-        )
+        if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system:
+            self.connect_and_store_connections(
+                self.gui.gui_manager.update_pose,
+                self.gui.main_view.update_robot_pose_plan_system
+            )
+        else:
+            self.connect_and_store_connections(
+                self.gui.gui_manager.update_pose,
+                self.gui.main_view.active_view.update_robot_pose
+            )
 
         self.connect_and_store_connections(
             self.gui.main_view.start_planning,
@@ -308,5 +334,112 @@ class PlannerState(State):
 
     def finishPlanning(self):
         # Note: setPoint disconnection removed - connection no longer exists
-        self.gui.transition_to(ActiveState())
+        if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system:
+            self.gui.transition_to(PlanActiveState())
+        else:
+            self.gui.transition_to(ActiveState())
+        self.gui.handleGui()
+
+
+class PlanActiveState(State):
+    """New state for plan-based robot control"""
+    
+    def handleGui(self) -> None:
+        self.gui.main_view.switch_to_active()
+
+        self.gui.main_view.map_view.enable_drawing = False
+
+        # Plan execution connections
+        self.connect_and_store_connections(
+            self.gui.main_view.start_plan_execution,
+            self.gui.gui_manager.handle_start_plan_execution
+        )
+        
+        self.connect_and_store_connections(
+            self.gui.main_view.stop_plan_execution,
+            self.gui.gui_manager.handle_stop_plan_execution
+        )
+        
+        self.connect_and_store_connections(
+            self.gui.main_view.execute_plan_action,
+            self.gui.gui_manager.handle_execute_plan_action
+        )
+
+        # Robot control connections
+        self.connect_and_store_connections(
+            self.gui.main_view.start_nav,
+            self.gui.gui_manager.handle_set_route
+        )
+        
+        self.connect_and_store_connections(
+            self.gui.main_view.dock_robot,
+            self.gui.gui_manager.dock_robot
+        )
+
+        self.connect_and_store_connections(
+            self.gui.main_view.undock_robot,
+            self.gui.gui_manager.undock_robot
+        )
+
+        # Manual control connections
+        self.connect_and_store_connections(
+            self.gui.main_view.start_keys_vel,
+            self.gui.gui_manager.start_cmd_vel_pub
+        )
+
+        self.connect_and_store_connections(
+            self.gui.main_view.stop_keys_vel,
+            self.gui.gui_manager.stop_cmd_vel_pub
+        )
+
+        # Pose updates
+        self.connect_and_store_connections(
+            self.gui.gui_manager.update_pose,
+            self.gui.main_view.update_robot_pose_plan_system
+        )
+
+        # Map and position connections
+        self.connect_and_store_connections(
+            self.gui.main_view.set_position_signal,
+            self.gui.gui_manager.set_init_pose
+        )
+        
+        # Map change notification for navigation system
+        self.connect_and_store_connections(
+            self.gui.main_view.map_changed_signal,
+            self.gui.gui_manager.handle_map_selected
+        )
+
+        # Disconnection handling
+        self.connect_and_store_connections(
+            self.gui.gui_manager.trigger_disconnect,
+            self.handleDisconnection
+        )
+
+        # Status updates
+        self.connect_and_store_connections(
+            self.gui.gui_manager.manualStatus,
+            lambda status: self.gui.main_view.plan_active_view.update_robot_status(status)
+        )
+
+        self.connect_and_store_connections(
+            self.gui.gui_manager.dockingStatus,
+            lambda status: self.gui.main_view.plan_active_view.update_robot_status(status)
+        )
+
+        self.connect_and_store_connections(
+            self.gui.gui_manager.navigator.navStatus,
+            lambda status: self.gui.main_view.plan_active_view.update_robot_status(status)
+        )
+        
+        # Connect navigation completion to plan executor
+        self.connect_and_store_connections(
+            self.gui.gui_manager.navigator.finished,
+            self.gui.main_view.plan_executor.on_navigation_completed
+        )
+
+    def handleDisconnection(self):
+        self.gui.transition_to(DisconnectedState())
+        self.gui.gui_manager.stop_nav()
+        self.gui.main_view.plan_active_view.update_robot_status("Idle")
         self.gui.handleGui()
