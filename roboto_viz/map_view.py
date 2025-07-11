@@ -197,6 +197,7 @@ class MapView(QGraphicsView):
         # Handle left button for drawing when not in pan mode
         if event.button() == Qt.LeftButton and self.enable_drawing and not self.left_pan_mode:
             scene_pos = self.mapToScene(event.pos())
+            print(f"DEBUG: Left button pressed - enable_drawing={self.enable_drawing}, editing_mode={self.editing_mode}, left_pan_mode={self.left_pan_mode}")
             
             # If we're in editing mode, check if we clicked on an existing item first
             if self.editing_mode and self.current_route_graphics:

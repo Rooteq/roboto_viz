@@ -226,6 +226,7 @@ class MainView(QMainWindow):
         if self.use_plan_system:
             self.stacked_widget.setCurrentWidget(self.plan_active_view)
             self.plan_active_view.switch_to_configure()
+            self.plan_active_view.map_view.goal_pose_set.connect(self.on_set_position)
         else:
             self.stacked_widget.setCurrentWidget(self.active_view)
             self.active_view.switch_to_configuring_tab()

@@ -258,6 +258,14 @@ class PlanExecutor(QObject):
             self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received")
             self.on_action_completed()
     
+    @pyqtSlot(str)
+    def on_navigation_failed(self, status: str):
+        """Called when navigation fails"""
+        if (self.is_executing and self.waiting_for_completion and 
+            self.current_action_type == ActionType.ROUTE and status == "Failed"):
+            self.status_update.emit("Navigation failed - stopping plan execution")
+            self.stop_plan_execution()
+    
     def get_current_status(self) -> str:
         """Get current execution status"""
         if not self.is_executing:

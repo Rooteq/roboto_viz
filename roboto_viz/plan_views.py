@@ -75,6 +75,9 @@ class PlanActiveView(QWidget):
         # Navigation stop signal
         self.plan_tools.stop_navigation.connect(self.stop_navigation.emit)
         
+        # Tab change signal
+        self.plan_tools.tab_changed.connect(self.on_tab_changed)
+        
         # Robot control signals
         self.plan_tools.dock_robot.connect(self.dock_robot.emit)
         self.plan_tools.undock_robot.connect(self.undock_robot.emit)
@@ -151,10 +154,12 @@ class PlanActiveView(QWidget):
     def switch_to_active(self):
         """Switch to active tab in plan tools"""
         self.plan_tools.switch_to_active()
+        self.map_view.enable_drawing = False  # Disable arrow drawing in active mode
     
     def switch_to_configure(self):
         """Switch to configure tab in plan tools"""
         self.plan_tools.switch_to_configure()
+        self.map_view.enable_drawing = True   # Enable arrow drawing in configure mode
     
     def on_action_completed(self):
         """Called when a plan action is completed"""
@@ -168,6 +173,17 @@ class PlanActiveView(QWidget):
     def on_single_action_completed(self, plan_name: str, action_index: int):
         """Called when a single action execution is completed"""
         self.plan_tools.on_single_action_completed()
+    
+    @pyqtSlot(int)
+    def on_tab_changed(self, tab_index: int):
+        """Handle tab change to control enable_drawing"""
+        if tab_index == 0:  # Active tab
+            self.map_view.enable_drawing = False
+            # No need to change editing_mode for active tab
+        elif tab_index == 1:  # Configure tab
+            self.map_view.enable_drawing = True
+            self.map_view.editing_mode = False  # Ensure we're not in route editing mode
+            print(f"DEBUG: Configure tab activated - enable_drawing={self.map_view.enable_drawing}, editing_mode={self.map_view.editing_mode}")
     
     def update_robot_status(self, status: str):
         """Update robot status display"""

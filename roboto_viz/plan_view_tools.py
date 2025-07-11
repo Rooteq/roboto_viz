@@ -30,6 +30,9 @@ class PlanTools(QWidget):
     
     # Signal handling
     signal_button_pressed = pyqtSignal()
+    
+    # Tab change signal
+    tab_changed = pyqtSignal(int)  # tab_index
 
     def __init__(self, plan_manager: PlanManager):
         super().__init__()
@@ -83,6 +86,7 @@ class PlanTools(QWidget):
         
         # Create tab widget
         self.tab_widget = QTabWidget()
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
         main_layout.addWidget(self.tab_widget)
         
         # Active tab
@@ -315,13 +319,13 @@ class PlanTools(QWidget):
         self.undock_btn.clicked.connect(self.undock_robot.emit)
         
         # Manual control connections
-        self.up_btn.pressed.connect(lambda: self.start_keys_vel.emit("up", 0.2))
+        self.up_btn.pressed.connect(lambda: self.start_keys_vel.emit("f", 0.2))
         self.up_btn.released.connect(self.stop_keys_vel.emit)
-        self.down_btn.pressed.connect(lambda: self.start_keys_vel.emit("down", 0.2))
+        self.down_btn.pressed.connect(lambda: self.start_keys_vel.emit("b", 0.2))
         self.down_btn.released.connect(self.stop_keys_vel.emit)
-        self.left_btn.pressed.connect(lambda: self.start_keys_vel.emit("left", 0.5))
+        self.left_btn.pressed.connect(lambda: self.start_keys_vel.emit("l", 0.5))
         self.left_btn.released.connect(self.stop_keys_vel.emit)
-        self.right_btn.pressed.connect(lambda: self.start_keys_vel.emit("right", 0.5))
+        self.right_btn.pressed.connect(lambda: self.start_keys_vel.emit("r", 0.5))
         self.right_btn.released.connect(self.stop_keys_vel.emit)
         
         # Other connections
@@ -484,3 +488,12 @@ class PlanTools(QWidget):
     def hide_signal_button(self):
         """Hide the signal button"""
         self.signal_btn.setVisible(False)
+    
+    def on_tab_changed(self, index: int):
+        """Handle tab change - emit signal for external handling"""
+        self.tab_changed.emit(index)
+    
+    def on_tab_changed_external(self, index: int):
+        """Handle tab change from external signal"""
+        # This will be connected from plan_views to handle enable_drawing
+        pass

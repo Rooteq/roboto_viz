@@ -432,6 +432,12 @@ class PlanActiveState(State):
             lambda status: self.gui.main_view.plan_active_view.update_robot_status(status)
         )
         
+        # Connect navigation failure to plan executor
+        self.connect_and_store_connections(
+            self.gui.gui_manager.navigator.navStatus,
+            self.gui.main_view.plan_executor.on_navigation_failed
+        )
+        
         # Connect navigation completion to plan executor
         self.connect_and_store_connections(
             self.gui.gui_manager.navigator.finished,
