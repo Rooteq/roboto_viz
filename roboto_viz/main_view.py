@@ -50,6 +50,12 @@ class MainView(QMainWindow):
     # Manual control signals
     start_keys_vel = pyqtSignal(str, float)
     stop_keys_vel = pyqtSignal()
+    
+    # Navigation control
+    stop_navigation = pyqtSignal()
+    
+    # Signal handling
+    signal_button_pressed = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -165,6 +171,7 @@ class MainView(QMainWindow):
         self.plan_executor.undock_robot.connect(self.undock_robot.emit)
         self.plan_executor.action_completed.connect(self.plan_active_view.on_action_completed)
         self.plan_executor.execution_stopped.connect(self.plan_active_view.on_plan_execution_stopped)
+        self.plan_executor.single_action_completed.connect(self.plan_active_view.on_single_action_completed)
         
         # Connect navigation completion signal - this will be connected in GUI state machine
         # to the actual navigator.finished signal
@@ -173,6 +180,27 @@ class MainView(QMainWindow):
         self.plan_active_view.start_keys_vel.connect(self.start_keys_vel.emit)
         self.plan_active_view.stop_keys_vel.connect(self.stop_keys_vel.emit)
         self.plan_active_view.on_disconnection.connect(self.on_disconnection)
+        self.plan_active_view.stop_navigation.connect(self.stop_navigation.emit)
+        self.plan_active_view.signal_button_pressed.connect(self.signal_button_pressed.emit)
+        
+        # Connect signal button to plan executor
+        self.signal_button_pressed.connect(self.plan_executor.on_signal_received)
+        
+        # Connect plan executor signals to UI
+        self.plan_executor.waiting_for_signal.connect(self.on_waiting_for_signal)
+        self.plan_executor.execution_stopped.connect(self.on_plan_stopped)
+        
+    def on_plan_stopped(self, plan_name: str):
+        """Handle when plan execution stops"""
+        if self.use_plan_system:
+            # Hide the signal button when plan stops
+            self.plan_active_view.plan_tools.hide_signal_button()
+        
+    def on_waiting_for_signal(self, signal_name: str):
+        """Handle when plan executor is waiting for a signal"""
+        if self.use_plan_system:
+            # Show the signal button in the plan tools
+            self.plan_active_view.plan_tools.show_signal_button(signal_name)
 
 
     def switch_to_disconnected(self):

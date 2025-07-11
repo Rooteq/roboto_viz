@@ -124,7 +124,7 @@ class PlanEditor(QMainWindow):
         self.add_dock_btn = QPushButton("Add Dock")
         self.add_undock_btn = QPushButton("Add Undock")
         self.add_wait_btn = QPushButton("Add Wait")
-        self.add_stop_btn = QPushButton("Add Stop")
+        # Note: Add Stop button removed
         self.remove_action_btn = QPushButton("Remove Action")
         self.move_up_btn = QPushButton("Move Up")
         self.move_down_btn = QPushButton("Move Down")
@@ -133,10 +133,10 @@ class PlanEditor(QMainWindow):
         action_buttons_layout.addWidget(self.add_dock_btn, 0, 1)
         action_buttons_layout.addWidget(self.add_undock_btn, 1, 0)
         action_buttons_layout.addWidget(self.add_wait_btn, 1, 1)
-        action_buttons_layout.addWidget(self.add_stop_btn, 2, 0)
-        action_buttons_layout.addWidget(self.remove_action_btn, 2, 1)
-        action_buttons_layout.addWidget(self.move_up_btn, 3, 0)
-        action_buttons_layout.addWidget(self.move_down_btn, 3, 1)
+        # Note: add_stop_btn removed
+        action_buttons_layout.addWidget(self.remove_action_btn, 2, 0)
+        action_buttons_layout.addWidget(self.move_up_btn, 2, 1)
+        action_buttons_layout.addWidget(self.move_down_btn, 3, 0)
         
         actions_layout.addLayout(action_buttons_layout)
         
@@ -220,7 +220,7 @@ class PlanEditor(QMainWindow):
         self.add_dock_btn.clicked.connect(self.add_dock_action)
         self.add_undock_btn.clicked.connect(self.add_undock_action)
         self.add_wait_btn.clicked.connect(self.add_wait_action)
-        self.add_stop_btn.clicked.connect(self.add_stop_action)
+        # Note: add_stop_btn connection removed
         self.remove_action_btn.clicked.connect(self.remove_selected_action)
         self.move_up_btn.clicked.connect(self.move_action_up)
         self.move_down_btn.clicked.connect(self.move_action_down)
@@ -473,17 +473,7 @@ class PlanEditor(QMainWindow):
             self.refresh_actions_list()
             self.on_plan_details_changed()
     
-    def add_stop_action(self):
-        if not self.current_plan:
-            return
-        
-        message, ok = QInputDialog.getText(self, 'Add Stop Action', 
-                                         'Enter stop message:', 
-                                         text='Waiting for manual start')
-        if ok:
-            action = self.plan_manager.create_stop_wait_action(message)
-            self.current_plan.add_action(action)
-            self.refresh_actions_list()
+    # Note: add_stop_action method removed
             self.on_plan_details_changed()
     
     def remove_selected_action(self):

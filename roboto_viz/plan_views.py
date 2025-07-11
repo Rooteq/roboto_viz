@@ -24,6 +24,12 @@ class PlanActiveView(QWidget):
     start_keys_vel = pyqtSignal(str, float)
     stop_keys_vel = pyqtSignal()
     
+    # Navigation control
+    stop_navigation = pyqtSignal()
+    
+    # Signal handling
+    signal_button_pressed = pyqtSignal()
+    
     # Map signals
     map_load_requested = pyqtSignal(str)  # map_name
 
@@ -62,6 +68,12 @@ class PlanActiveView(QWidget):
         self.plan_tools.start_plan_execution.connect(self.handle_start_plan_execution)
         self.plan_tools.stop_plan_execution.connect(self.stop_plan_execution.emit)
         self.plan_tools.execute_action.connect(self.handle_execute_action)
+        
+        # Signal button connection
+        self.plan_tools.signal_button_pressed.connect(self.signal_button_pressed.emit)
+        
+        # Navigation stop signal
+        self.plan_tools.stop_navigation.connect(self.stop_navigation.emit)
         
         # Robot control signals
         self.plan_tools.dock_robot.connect(self.dock_robot.emit)
@@ -104,10 +116,7 @@ class PlanActiveView(QWidget):
         elif action.action_type.value == "wait_for_signal":
             # For now, just print - will be implemented later
             print(f"Waiting for signal: {action.parameters.get('signal_name', 'default')}")
-        elif action.action_type.value == "stop_and_wait":
-            # For now, just print - will be implemented later
-            message = action.parameters.get('message', 'Waiting for manual start')
-            print(f"Stop and wait: {message}")
+        # Note: stop_and_wait action type removed
         
         # Also emit the general execute action signal
         self.execute_plan_action.emit(plan_name, action_index)
@@ -154,6 +163,11 @@ class PlanActiveView(QWidget):
     def on_plan_execution_stopped(self):
         """Called when plan execution is stopped"""
         self.plan_tools.on_plan_execution_stopped()
+    
+    @pyqtSlot(str, int)
+    def on_single_action_completed(self, plan_name: str, action_index: int):
+        """Called when a single action execution is completed"""
+        self.plan_tools.on_single_action_completed()
     
     def update_robot_status(self, status: str):
         """Update robot status display"""

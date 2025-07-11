@@ -437,6 +437,12 @@ class PlanActiveState(State):
             self.gui.gui_manager.navigator.finished,
             self.gui.main_view.plan_executor.on_navigation_completed
         )
+        
+        # Connect stop navigation signal
+        self.connect_and_store_connections(
+            self.gui.main_view.stop_navigation,
+            self.gui.gui_manager.stop_nav
+        )
 
     def handleDisconnection(self):
         self.gui.transition_to(DisconnectedState())

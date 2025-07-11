@@ -11,7 +11,6 @@ class ActionType(Enum):
     DOCK = "dock"
     UNDOCK = "undock"
     WAIT_FOR_SIGNAL = "wait_for_signal"
-    STOP_AND_WAIT = "stop_and_wait"
 
 
 @dataclass
@@ -246,9 +245,4 @@ class PlanManager:
             parameters={'signal_name': signal_name}
         )
     
-    def create_stop_wait_action(self, message: str = "Waiting for manual start") -> PlanAction:
-        return PlanAction(
-            action_type=ActionType.STOP_AND_WAIT,
-            name="Stop and Wait",
-            parameters={'message': message}
-        )
+    # Note: create_stop_wait_action method removed

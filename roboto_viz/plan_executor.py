@@ -19,6 +19,9 @@ class PlanExecutor(QObject):
     
     # Status signals
     status_update = pyqtSignal(str)  # status_message
+    waiting_for_signal = pyqtSignal(str)  # signal_name - emitted when waiting for external signal
+    signal_received = pyqtSignal()  # emitted when signal button is pressed
+    single_action_completed = pyqtSignal(str, int)  # plan_name, action_index - for single action execution
 
     def __init__(self, plan_manager: PlanManager):
         super().__init__()
@@ -26,12 +29,14 @@ class PlanExecutor(QObject):
         
         # Execution state
         self.is_executing = False
+        self.continuous_execution = False  # True for plan execution, False for single action
         self.current_plan: Optional[ExecutionPlan] = None
         self.current_action_index = 0
         
         # Action completion tracking
         self.waiting_for_completion = False
         self.current_action_type = None
+        self.waiting_for_signal_name = None
         
         # Robot position tracking
         self.robot_x = 0.0
@@ -56,9 +61,11 @@ class PlanExecutor(QObject):
         
         self.current_plan = plan
         self.is_executing = True
+        self.continuous_execution = True  # This is continuous plan execution
+        # Start from where the plan left off (current_action_index)
         self.current_action_index = plan.current_action_index
         
-        self.status_update.emit(f"Starting execution of plan '{plan_name}'")
+        self.status_update.emit(f"Starting execution of plan '{plan_name}' from action {self.current_action_index + 1}")
         self.execute_current_action()
     
     @pyqtSlot()
@@ -68,13 +75,16 @@ class PlanExecutor(QObject):
             return
         
         self.is_executing = False
-        self.action_timer.stop()
+        self.continuous_execution = False
         
         plan_name = self.current_plan.name if self.current_plan else "Unknown"
         self.status_update.emit(f"Stopped execution of plan '{plan_name}'")
         self.execution_stopped.emit(plan_name)
         
-        self.current_plan = None
+        # Clear waiting states
+        self.waiting_for_completion = False
+        self.current_action_type = None
+        self.waiting_for_signal_name = None
     
     @pyqtSlot(str, int)
     def execute_action(self, plan_name: str, action_index: int):
@@ -88,6 +98,10 @@ class PlanExecutor(QObject):
         plan.set_current_action(action_index)
         self.current_plan = plan
         self.current_action_index = action_index
+        
+        # Set execution flag to true, but this is single action execution
+        self.is_executing = True
+        self.continuous_execution = False  # This is single action execution
         
         action = plan.actions[action_index]
         self.status_update.emit(f"Executing action: {action.name}")
@@ -123,8 +137,6 @@ class PlanExecutor(QObject):
             self.execute_undock_action(action)
         elif action_type == ActionType.WAIT_FOR_SIGNAL:
             self.execute_wait_signal_action(action)
-        elif action_type == ActionType.STOP_AND_WAIT:
-            self.execute_stop_wait_action(action)
         else:
             self.status_update.emit(f"Unknown action type: {action_type}")
             self.on_action_completed()
@@ -166,18 +178,12 @@ class PlanExecutor(QObject):
         signal_name = action.parameters.get('signal_name', 'default')
         self.status_update.emit(f"Waiting for signal: {signal_name}")
         
-        # For now, just complete immediately
-        # In a real implementation, this would wait for an external signal
-        QTimer.singleShot(1000, self.on_action_completed)  # 1 second
+        # Set waiting state and emit signal for UI to show signal button
+        self.waiting_for_completion = True
+        self.current_action_type = ActionType.WAIT_FOR_SIGNAL
+        self.waiting_for_signal_name = signal_name
+        self.waiting_for_signal.emit(signal_name)
     
-    def execute_stop_wait_action(self, action):
-        """Execute a stop and wait action"""
-        message = action.parameters.get('message', 'Waiting for manual start')
-        self.status_update.emit(f"Stop and wait: {message}")
-        
-        # This action waits indefinitely until manually continued
-        # For simulation, we'll wait 2 seconds
-        QTimer.singleShot(2000, self.on_action_completed)  # 2 seconds
     
     def on_action_completed(self):
         """Called when current action is completed"""
@@ -187,6 +193,7 @@ class PlanExecutor(QObject):
         # Clear waiting state
         self.waiting_for_completion = False
         self.current_action_type = None
+        self.waiting_for_signal_name = None
         
         plan_name = self.current_plan.name
         action_index = self.current_action_index
@@ -194,19 +201,26 @@ class PlanExecutor(QObject):
         self.action_completed.emit(plan_name, action_index)
         
         if self.is_executing:
-            # Move to next action
-            self.current_action_index += 1
-            self.current_plan.set_current_action(self.current_action_index)
-            
-            if self.current_action_index >= len(self.current_plan.actions):
-                # Plan completed, start over for continuous execution
-                self.status_update.emit(f"Plan '{plan_name}' completed. Restarting...")
-                self.current_action_index = 0
-                self.current_plan.set_current_action(0)
-                self.plan_completed.emit(plan_name)
-            
-            # Execute next action after a short delay
-            QTimer.singleShot(1000, self.execute_current_action)
+            if self.continuous_execution:
+                # Continuous plan execution - move to next action
+                self.current_action_index += 1
+                self.current_plan.set_current_action(self.current_action_index)
+                
+                if self.current_action_index >= len(self.current_plan.actions):
+                    # Plan completed, start over for continuous execution
+                    self.status_update.emit(f"Plan '{plan_name}' completed. Restarting...")
+                    self.current_action_index = 0
+                    self.current_plan.set_current_action(0)
+                    self.plan_completed.emit(plan_name)
+                
+                # Execute next action after a short delay
+                QTimer.singleShot(1000, self.execute_current_action)
+            else:
+                # Single action execution - stop after completion
+                self.status_update.emit(f"Action '{self.current_plan.actions[action_index].name}' completed")
+                self.is_executing = False
+                self.continuous_execution = False
+                self.single_action_completed.emit(plan_name, action_index)
     
     @pyqtSlot(float, float, float)
     def update_robot_pose(self, x: float, y: float, theta: float):
@@ -234,6 +248,14 @@ class PlanExecutor(QObject):
         """Called when undocking action is completed"""
         if (self.is_executing and self.waiting_for_completion and 
             self.current_action_type == ActionType.UNDOCK):
+            self.on_action_completed()
+    
+    @pyqtSlot()
+    def on_signal_received(self):
+        """Called when signal button is pressed"""
+        if (self.is_executing and self.waiting_for_completion and 
+            self.current_action_type == ActionType.WAIT_FOR_SIGNAL):
+            self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received")
             self.on_action_completed()
     
     def get_current_status(self) -> str:

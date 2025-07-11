@@ -24,6 +24,12 @@ class PlanTools(QWidget):
     
     start_keys_vel = pyqtSignal(str, float)
     stop_keys_vel = pyqtSignal()
+    
+    # Navigation control
+    stop_navigation = pyqtSignal()
+    
+    # Signal handling
+    signal_button_pressed = pyqtSignal()
 
     def __init__(self, plan_manager: PlanManager):
         super().__init__()
@@ -58,52 +64,7 @@ class PlanTools(QWidget):
             }
         """
         
-        self.start_button_style = """
-            QPushButton {
-                min-height: 25px;
-                font-size: 16px;
-                padding: 8px 15px;
-                font-weight: bold;
-                border: 2px solid #27ae60;
-                border-radius: 5px;
-                background-color: #2ecc71;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #27ae60;
-                border-color: #229954;
-            }
-            QPushButton:pressed {
-                background-color: #229954;
-                border-color: #1e8449;
-            }
-            QPushButton:disabled {
-                background-color: #a9dfbf;
-                border-color: #82c99a;
-                color: #566573;
-            }
-        """
-        
-        self.stop_button_style = """
-            QPushButton {
-                min-height: 25px;
-                font-size: 16px;
-                padding: 8px 15px;
-                font-weight: bold;
-                border: 2px solid #c0392b;
-                border-radius: 5px;
-                background-color: #e74c3c;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-                border-color: #962d22;
-            }
-            QPushButton:pressed {
-                background-color: #962d22;
-                border-color: #6d2018;
-            }
-        """
+        # Note: Button styles are now inline in the UI creation
         
         self.setup_ui()
         self.setup_connections()
@@ -173,17 +134,7 @@ class PlanTools(QWidget):
         plan_select_layout.addWidget(self.choose_plan_btn)
         control_layout.addLayout(plan_select_layout)
         
-        # Main control buttons
-        main_buttons_layout = QHBoxLayout()
-        self.start_btn = QPushButton("START")
-        self.start_btn.setStyleSheet(self.start_button_style)
-        self.stop_btn = QPushButton("STOP")
-        self.stop_btn.setStyleSheet(self.stop_button_style)
-        self.stop_btn.setEnabled(False)
-        
-        main_buttons_layout.addWidget(self.start_btn)
-        main_buttons_layout.addWidget(self.stop_btn)
-        control_layout.addLayout(main_buttons_layout)
+        # Note: Main control buttons moved to below robot status
         
         # Action selection
         action_layout = QHBoxLayout()
@@ -194,6 +145,8 @@ class PlanTools(QWidget):
         self.execute_action_btn.setStyleSheet(self.button_style)
         action_layout.addWidget(self.execute_action_btn)
         control_layout.addLayout(action_layout)
+        
+        # Note: Signal button moved to below robot status
         
         layout.addWidget(control_group)
         
@@ -206,6 +159,91 @@ class PlanTools(QWidget):
         robot_layout.addWidget(self.robot_status_label)
         
         layout.addWidget(robot_group)
+        
+        # Main Control Buttons Section (moved here)
+        control_buttons_group = QGroupBox("Control")
+        control_buttons_layout = QVBoxLayout(control_buttons_group)
+        
+        # Signal button (top - initially hidden)
+        self.signal_btn = QPushButton("SIGNAL")
+        self.signal_btn.setStyleSheet("""
+            QPushButton {
+                min-height: 35px;
+                font-size: 18px;
+                padding: 10px 20px;
+                font-weight: bold;
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                background-color: #5dade2;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #3498db;
+                border-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #2980b9;
+                border-color: #1f618d;
+            }
+        """)
+        self.signal_btn.setVisible(False)
+        control_buttons_layout.addWidget(self.signal_btn)
+        
+        # Start button (middle)
+        self.start_btn = QPushButton("START")
+        self.start_btn.setStyleSheet("""
+            QPushButton {
+                min-height: 35px;
+                font-size: 18px;
+                padding: 10px 20px;
+                font-weight: bold;
+                border: 2px solid #27ae60;
+                border-radius: 8px;
+                background-color: #2ecc71;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #27ae60;
+                border-color: #229954;
+            }
+            QPushButton:pressed {
+                background-color: #229954;
+                border-color: #1e8449;
+            }
+            QPushButton:disabled {
+                background-color: #a9dfbf;
+                border-color: #82c99a;
+                color: #566573;
+            }
+        """)
+        control_buttons_layout.addWidget(self.start_btn)
+        
+        # Stop button (bottom - always enabled)
+        self.stop_btn = QPushButton("STOP")
+        self.stop_btn.setStyleSheet("""
+            QPushButton {
+                min-height: 35px;
+                font-size: 18px;
+                padding: 10px 20px;
+                font-weight: bold;
+                border: 2px solid #c0392b;
+                border-radius: 8px;
+                background-color: #e74c3c;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+                border-color: #962d22;
+            }
+            QPushButton:pressed {
+                background-color: #962d22;
+                border-color: #6d2018;
+            }
+        """)
+        # Stop button is always enabled as precaution
+        control_buttons_layout.addWidget(self.stop_btn)
+        
+        layout.addWidget(control_buttons_group)
         
         # Disconnect button
         layout.addStretch()
@@ -269,6 +307,7 @@ class PlanTools(QWidget):
         self.start_btn.clicked.connect(self.start_execution)
         self.stop_btn.clicked.connect(self.stop_execution)
         self.execute_action_btn.clicked.connect(self.execute_selected_action)
+        self.signal_btn.clicked.connect(self.on_signal_button_clicked)
         
         # Configuration connections
         self.edit_plans_btn.clicked.connect(self.open_plan_editor.emit)
@@ -357,7 +396,7 @@ class PlanTools(QWidget):
         
         self.is_executing = True
         self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
+        # Stop button always stays enabled as precaution
         self.execution_status_label.setText("In Progress")
         self.execution_status_label.setVisible(True)
         
@@ -368,10 +407,13 @@ class PlanTools(QWidget):
         """Stop plan execution"""
         self.is_executing = False
         self.start_btn.setEnabled(True)
-        self.stop_btn.setEnabled(False)
+        # Stop button always stays enabled as precaution
         self.execution_status_label.setVisible(False)
+        self.signal_btn.setVisible(False)  # Hide signal button
         
+        # Always stop both plan execution and navigation as precaution
         self.stop_plan_execution.emit()
+        self.stop_navigation.emit()
     
     def execute_selected_action(self):
         """Execute the selected action immediately"""
@@ -384,6 +426,13 @@ class PlanTools(QWidget):
             QMessageBox.warning(self, "Warning", "No action selected!")
             return
         
+        # Set execution state like start button
+        self.is_executing = True
+        self.start_btn.setEnabled(False)
+        # Stop button always stays enabled as precaution
+        self.execution_status_label.setText("In Progress")
+        self.execution_status_label.setVisible(True)
+        
         self.current_plan.set_current_action(action_index)
         self.execute_action.emit(self.current_plan.name, action_index)
         self.update_plan_status()
@@ -393,13 +442,27 @@ class PlanTools(QWidget):
         if not self.is_executing or not self.current_plan:
             return
         
-        # Move to next action
+        # This is called for continuous plan execution
+        # Move to next action for plan status display
         next_action = self.current_plan.next_action()
         self.update_plan_status()
     
     def on_plan_execution_stopped(self):
         """Called when plan execution is stopped externally"""
         self.stop_execution()
+    
+    def on_signal_button_clicked(self):
+        """Called when signal button is clicked"""
+        self.signal_btn.setVisible(False)  # Hide immediately after clicking
+        self.signal_button_pressed.emit()  # Emit the signal
+    
+    def on_single_action_completed(self):
+        """Called when a single action execution is completed"""
+        self.is_executing = False
+        self.start_btn.setEnabled(True)
+        # Stop button always stays enabled as precaution
+        self.execution_status_label.setVisible(False)
+        self.signal_btn.setVisible(False)
     
     def update_robot_status(self, status: str):
         """Update robot status display"""
@@ -412,3 +475,12 @@ class PlanTools(QWidget):
     def switch_to_configure(self):
         """Switch to configure tab"""
         self.tab_widget.setCurrentIndex(1)
+    
+    def show_signal_button(self, signal_name: str):
+        """Show the signal button for wait-for-signal actions"""
+        self.signal_btn.setText(f'SIGNAL ({signal_name})')
+        self.signal_btn.setVisible(True)
+    
+    def hide_signal_button(self):
+        """Hide the signal button"""
+        self.signal_btn.setVisible(False)
