@@ -190,10 +190,6 @@ class PlanEditor(QMainWindow):
         self.load_map_btn = QPushButton("Load Map")
         details_layout.addWidget(self.load_map_btn)
         
-        # Save plan button
-        self.save_plan_btn = QPushButton("Save Plan")
-        details_layout.addWidget(self.save_plan_btn)
-        
         left_layout.addWidget(details_group)
         
         # Actions Section
@@ -229,50 +225,30 @@ class PlanEditor(QMainWindow):
         
         left_layout.addWidget(actions_group)
         
-        # Routes Section
-        routes_group = QGroupBox("Routes")
-        routes_layout = QVBoxLayout(routes_group)
-        
-        # Routes list
-        self.routes_list = QListWidget()
-        routes_layout.addWidget(self.routes_list)
-        
-        # Route control buttons
-        route_buttons_layout = QHBoxLayout()
-        self.add_route_editor_btn = QPushButton("Add Route")
-        self.edit_route_btn = QPushButton("Edit Route")
-        self.remove_route_btn = QPushButton("Remove Route")
-        
-        route_buttons_layout.addWidget(self.add_route_editor_btn)
-        route_buttons_layout.addWidget(self.edit_route_btn)
-        route_buttons_layout.addWidget(self.remove_route_btn)
-        routes_layout.addLayout(route_buttons_layout)
-        
-        left_layout.addWidget(routes_group)
-        
-        # Docks Section
-        docks_group = QGroupBox("Docks")
-        docks_layout = QVBoxLayout(docks_group)
-        
-        # Docks list
-        self.docks_list = QListWidget()
-        docks_layout.addWidget(self.docks_list)
-        
-        # Dock control buttons
-        dock_buttons_layout = QHBoxLayout()
-        self.add_dock_editor_btn = QPushButton("Add Dock")
-        self.edit_dock_editor_btn = QPushButton("Edit Dock")
-        self.remove_dock_editor_btn = QPushButton("Remove Dock")
-        
-        dock_buttons_layout.addWidget(self.add_dock_editor_btn)
-        dock_buttons_layout.addWidget(self.edit_dock_editor_btn)
-        dock_buttons_layout.addWidget(self.remove_dock_editor_btn)
-        docks_layout.addLayout(dock_buttons_layout)
-        
-        left_layout.addWidget(docks_group)
-        
         # Add stretch to push everything to top
         left_layout.addStretch()
+        
+        # Save plan and exit button at the bottom
+        self.save_plan_btn = QPushButton("Save plan and exit")
+        self.save_plan_btn.setStyleSheet("""
+            QPushButton {
+                font-weight: bold;
+                font-size: 14px;
+                padding: 10px 20px;
+                background-color: #27ae60;
+                color: white;
+                border: 2px solid #2ecc71;
+                border-radius: 5px;
+                min-height: 30px;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #229954;
+            }
+        """)
+        left_layout.addWidget(self.save_plan_btn)
         
         return left_widget
     
@@ -321,10 +297,76 @@ class PlanEditor(QMainWindow):
         
         right_layout.addLayout(map_controls_layout)
         
-        # Add map view
-        right_layout.addWidget(self.map_view)
+        # Create horizontal layout for map and routes/docks sections
+        content_layout = QHBoxLayout()
+        
+        # Map section (left side)
+        map_section = QWidget()
+        map_section_layout = QVBoxLayout(map_section)
+        map_section_layout.addWidget(self.map_view)
+        content_layout.addWidget(map_section, 2)  # Give map more space (weight 2)
+        
+        # Routes and Docks section (right side)
+        routes_docks_section = self.create_routes_docks_section()
+        content_layout.addWidget(routes_docks_section, 1)  # Less space (weight 1)
+        
+        right_layout.addLayout(content_layout)
         
         return right_widget
+    
+    def create_routes_docks_section(self) -> QWidget:
+        """Create the Routes and Docks section for the right side"""
+        section_widget = QWidget()
+        section_layout = QVBoxLayout(section_widget)
+        
+        # Routes Section
+        routes_group = QGroupBox("Routes")
+        routes_layout = QVBoxLayout(routes_group)
+        
+        # Routes list
+        self.routes_list = QListWidget()
+        self.routes_list.setMaximumHeight(150)  # Limit height to save space
+        routes_layout.addWidget(self.routes_list)
+        
+        # Route control buttons
+        route_buttons_layout = QHBoxLayout()
+        self.add_route_editor_btn = QPushButton("Add Route")
+        self.edit_route_btn = QPushButton("Edit Route")
+        self.remove_route_btn = QPushButton("Remove Route")
+        
+        route_buttons_layout.addWidget(self.add_route_editor_btn)
+        route_buttons_layout.addWidget(self.edit_route_btn)
+        route_buttons_layout.addWidget(self.remove_route_btn)
+        routes_layout.addLayout(route_buttons_layout)
+        
+        section_layout.addWidget(routes_group)
+        
+        # Docks Section
+        docks_group = QGroupBox("Docks")
+        docks_layout = QVBoxLayout(docks_group)
+        
+        # Docks list
+        self.docks_list = QListWidget()
+        self.docks_list.setMaximumHeight(150)  # Limit height to save space
+        docks_layout.addWidget(self.docks_list)
+        
+        # Dock control buttons
+        dock_buttons_layout = QHBoxLayout()
+        self.add_dock_editor_btn = QPushButton("Add Dock")
+        self.edit_dock_editor_btn = QPushButton("Edit Dock")
+        self.remove_dock_editor_btn = QPushButton("Remove Dock")
+        
+        dock_buttons_layout.addWidget(self.add_dock_editor_btn)
+        dock_buttons_layout.addWidget(self.edit_dock_editor_btn)
+        dock_buttons_layout.addWidget(self.remove_dock_editor_btn)
+        docks_layout.addLayout(dock_buttons_layout)
+        
+        section_layout.addWidget(docks_group)
+        
+        # Add stretch to push everything to top
+        section_layout.addStretch()
+        
+        return section_widget
     
     def setup_connections(self):
         # Plan management connections
@@ -507,6 +549,7 @@ class PlanEditor(QMainWindow):
             self.refresh_plan_list()
             self.plan_updated.emit()
             QMessageBox.information(self, "Success", "Plan saved successfully!")
+            self.close()  # Close the plan editor window after saving
     
     def clear_plan_details(self):
         self.plan_name_edit.clear()
