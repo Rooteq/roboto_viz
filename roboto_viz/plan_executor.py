@@ -1,8 +1,56 @@
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer, QThread
 from typing import Optional
 import time
+import socket
+import struct
+import threading
 
 from roboto_viz.plan_manager import PlanManager, ExecutionPlan, ActionType
+
+
+class CANListener(QThread):
+    """Thread for listening to CAN messages"""
+    can_message_received = pyqtSignal(int)  # CAN ID
+    
+    def __init__(self, interface='can0'):
+        super().__init__()
+        self.interface = interface
+        self.running = False
+        self.socket = None
+        
+    def run(self):
+        """Main thread loop for CAN listening"""
+        try:
+            # Create CAN socket
+            self.socket = socket.socket(socket.AF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
+            self.socket.bind((self.interface,))
+            self.socket.settimeout(1.0)  # 1 second timeout for checking running flag
+            self.running = True
+            
+            while self.running:
+                try:
+                    frame, _ = self.socket.recvfrom(16)
+                    # Parse CAN frame
+                    can_id, _ = struct.unpack("=IB", frame[:5])
+                    can_id &= socket.CAN_EFF_MASK  # Remove flags
+                    self.can_message_received.emit(can_id)
+                except socket.timeout:
+                    continue  # Check running flag
+                except Exception as e:
+                    print(f"CAN receive error: {e}")
+                    break
+                    
+        except Exception as e:
+            print(f"CAN socket error: {e}")
+        finally:
+            if self.socket:
+                self.socket.close()
+                
+    def stop(self):
+        """Stop the CAN listener"""
+        self.running = False
+        if self.isRunning():
+            self.wait(3000)  # Wait up to 3 seconds for thread to finish
 
 
 class PlanExecutor(QObject):
@@ -43,6 +91,20 @@ class PlanExecutor(QObject):
         self.robot_x = 0.0
         self.robot_y = 0.0
         self.robot_theta = 0.0
+        
+        # CAN bus support
+        self.can_listener = CANListener()
+        self.can_listener.can_message_received.connect(self.on_can_message_received)
+        self.can_listener.start()
+        
+        # CAN wait parameters
+        self.waiting_can_id_high = None  # CAN ID for "activate on high" 
+        self.waiting_can_id_low = None   # CAN ID for "activate on low"
+    
+    def __del__(self):
+        """Destructor to clean up CAN listener"""
+        if hasattr(self, 'can_listener'):
+            self.can_listener.stop()
     
     @pyqtSlot(str)
     def start_plan_execution(self, plan_name: str):
@@ -86,6 +148,8 @@ class PlanExecutor(QObject):
         self.waiting_for_completion = False
         self.current_action_type = None
         self.waiting_for_signal_name = None
+        self.waiting_can_id_high = None
+        self.waiting_can_id_low = None
     
     @pyqtSlot(str, int)
     def execute_action(self, plan_name: str, action_index: int):
@@ -190,12 +254,31 @@ class PlanExecutor(QObject):
     def execute_wait_signal_action(self, action):
         """Execute a wait for signal action"""
         signal_name = action.parameters.get('signal_name', 'default')
+        
+        # Extract CAN ID parameters
+        can_id_high = action.parameters.get('can_id_high', None)  # Placeholder: 0x123
+        can_id_low = action.parameters.get('can_id_low', None)    # Placeholder: 0x124
+        activate_on_high = action.parameters.get('activate_on_high', False)
+        activate_on_low = action.parameters.get('activate_on_low', False)
+        
         self.status_update.emit(f"Waiting for signal: {signal_name}")
         
         # Set waiting state and emit signal for UI to show signal button
         self.waiting_for_completion = True
         self.current_action_type = ActionType.WAIT_FOR_SIGNAL
         self.waiting_for_signal_name = signal_name
+        
+        # Set CAN wait parameters if CAN activation is enabled
+        if activate_on_high and can_id_high is not None:
+            self.waiting_can_id_high = can_id_high
+        else:
+            self.waiting_can_id_high = None
+            
+        if activate_on_low and can_id_low is not None:
+            self.waiting_can_id_low = can_id_low
+        else:
+            self.waiting_can_id_low = None
+        
         self.waiting_for_signal.emit(signal_name)
     
     
@@ -208,6 +291,8 @@ class PlanExecutor(QObject):
         self.waiting_for_completion = False
         self.current_action_type = None
         self.waiting_for_signal_name = None
+        self.waiting_can_id_high = None
+        self.waiting_can_id_low = None
         
         plan_name = self.current_plan.name
         action_index = self.current_action_index
@@ -269,8 +354,29 @@ class PlanExecutor(QObject):
         """Called when signal button is pressed"""
         if (self.is_executing and self.waiting_for_completion and 
             self.current_action_type == ActionType.WAIT_FOR_SIGNAL):
-            self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received")
+            self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (button)")
             self.on_action_completed()
+    
+    @pyqtSlot(int)
+    def on_can_message_received(self, can_id: int):
+        """Called when a CAN message is received"""
+        if (self.is_executing and self.waiting_for_completion and 
+            self.current_action_type == ActionType.WAIT_FOR_SIGNAL):
+            
+            # Check if this CAN ID matches our waiting criteria
+            signal_triggered = False
+            trigger_type = ""
+            
+            if self.waiting_can_id_high is not None and can_id == self.waiting_can_id_high:
+                signal_triggered = True
+                trigger_type = "high"
+            elif self.waiting_can_id_low is not None and can_id == self.waiting_can_id_low:
+                signal_triggered = True  
+                trigger_type = "low"
+            
+            if signal_triggered:
+                self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (CAN {trigger_type}: 0x{can_id:X})")
+                self.on_action_completed()
     
     @pyqtSlot(str)
     def on_navigation_failed(self, status: str):

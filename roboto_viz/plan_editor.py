@@ -12,6 +12,99 @@ from roboto_viz.dock_manager import DockManager, Dock
 from roboto_viz.map_view import MapView
 
 
+class WaitActionDialog(QDialog):
+    """Custom dialog for configuring wait actions with CAN options"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Wait Action")
+        self.setModal(True)
+        self.resize(350, 200)
+        
+        self.signal_name = 'default'
+        self.activate_on_high = False
+        self.activate_on_low = False
+        self.can_id_high = 0x123  # Placeholder CAN ID
+        self.can_id_low = 0x124   # Placeholder CAN ID
+        
+        layout = QVBoxLayout()
+        
+        # Signal name input
+        signal_label = QLabel("Signal name:")
+        self.signal_input = QLineEdit("default")
+        layout.addWidget(signal_label)
+        layout.addWidget(self.signal_input)
+        
+        # CAN activation options
+        can_group = QGroupBox("CAN Activation Options")
+        can_layout = QVBoxLayout()
+        
+        # Activate on high checkbox with CAN ID
+        high_layout = QHBoxLayout()
+        self.high_checkbox = QCheckBox("Activate on high")
+        self.high_can_input = QLineEdit("0x123")
+        self.high_can_input.setMaximumWidth(80)
+        high_layout.addWidget(self.high_checkbox)
+        high_layout.addWidget(QLabel("CAN ID:"))
+        high_layout.addWidget(self.high_can_input)
+        high_layout.addStretch()
+        can_layout.addLayout(high_layout)
+        
+        # Activate on low checkbox with CAN ID  
+        low_layout = QHBoxLayout()
+        self.low_checkbox = QCheckBox("Activate on low")
+        self.low_can_input = QLineEdit("0x124")
+        self.low_can_input.setMaximumWidth(80)
+        low_layout.addWidget(self.low_checkbox)
+        low_layout.addWidget(QLabel("CAN ID:"))
+        low_layout.addWidget(self.low_can_input)
+        low_layout.addStretch()
+        can_layout.addLayout(low_layout)
+        
+        can_group.setLayout(can_layout)
+        layout.addWidget(can_group)
+        
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        self.ok_button = QPushButton("OK")
+        self.cancel_button = QPushButton("Cancel")
+        
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        
+        buttons_layout.addWidget(self.ok_button)
+        buttons_layout.addWidget(self.cancel_button)
+        layout.addLayout(buttons_layout)
+        
+        self.setLayout(layout)
+    
+    def accept(self):
+        self.signal_name = self.signal_input.text() or 'default'
+        self.activate_on_high = self.high_checkbox.isChecked()
+        self.activate_on_low = self.low_checkbox.isChecked()
+        
+        # Parse CAN IDs (handle hex format)
+        try:
+            high_text = self.high_can_input.text().strip()
+            if high_text.startswith('0x') or high_text.startswith('0X'):
+                self.can_id_high = int(high_text, 16)
+            else:
+                self.can_id_high = int(high_text)
+        except ValueError:
+            self.can_id_high = 0x123  # Default fallback
+        
+        try:
+            low_text = self.low_can_input.text().strip()
+            if low_text.startswith('0x') or low_text.startswith('0X'):
+                self.can_id_low = int(low_text, 16)
+            else:
+                self.can_id_low = int(low_text)
+        except ValueError:
+            self.can_id_low = 0x124  # Default fallback
+        
+        super().accept()
+
+
 class RouteSelectionDialog(QDialog):
     """Custom dialog for selecting a route with optional reverse checkbox"""
     
@@ -715,16 +808,21 @@ class PlanEditor(QMainWindow):
         if not self.current_plan:
             return
         
-        signal_name, ok = QInputDialog.getText(self, 'Add Wait Action', 
-                                             'Enter signal name:', text='default')
-        if ok:
-            action = self.plan_manager.create_wait_signal_action(signal_name)
+        dialog = WaitActionDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            action = self.plan_manager.create_wait_signal_action(dialog.signal_name)
+            
+            # Add CAN configuration parameters
+            action.parameters['activate_on_high'] = dialog.activate_on_high
+            action.parameters['activate_on_low'] = dialog.activate_on_low
+            action.parameters['can_id_high'] = dialog.can_id_high
+            action.parameters['can_id_low'] = dialog.can_id_low
+            
             self.current_plan.add_action(action)
             self.refresh_actions_list()
             self.on_plan_details_changed()
     
     # Note: add_stop_action method removed
-            self.on_plan_details_changed()
     
     def remove_selected_action(self):
         if not self.current_plan:
