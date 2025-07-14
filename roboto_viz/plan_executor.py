@@ -280,6 +280,27 @@ class PlanExecutor(QObject):
             self.status_update.emit("Navigation failed - stopping plan execution")
             self.stop_plan_execution()
     
+    @pyqtSlot(str)
+    def on_docking_status_changed(self, status: str):
+        """Called when docking status changes"""
+        if not (self.is_executing and self.waiting_for_completion):
+            return
+            
+        if self.current_action_type == ActionType.DOCK:
+            if status == "Docked":
+                self.status_update.emit("Docking completed successfully")
+                self.on_docking_completed()
+            elif status in ["Dock Failed", "Dock Error"]:
+                self.status_update.emit(f"Docking failed: {status} - stopping plan execution")
+                self.stop_plan_execution()
+        elif self.current_action_type == ActionType.UNDOCK:
+            if status == "Undocked":
+                self.status_update.emit("Undocking completed successfully")
+                self.on_undocking_completed()
+            elif status in ["Undock Failed", "Undock Error"]:
+                self.status_update.emit(f"Undocking failed: {status} - stopping plan execution")
+                self.stop_plan_execution()
+    
     def get_current_status(self) -> str:
         """Get current execution status"""
         if not self.is_executing:

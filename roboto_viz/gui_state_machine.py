@@ -378,7 +378,7 @@ class PlanActiveState(State):
         
         self.connect_and_store_connections(
             self.gui.main_view.dock_robot_at,
-            self.gui.gui_manager.dock_robot
+            lambda dock_name: self.gui.gui_manager.dock_robot(dock_name)
         )
 
         self.connect_and_store_connections(
@@ -447,6 +447,12 @@ class PlanActiveState(State):
         self.connect_and_store_connections(
             self.gui.gui_manager.navigator.finished,
             self.gui.main_view.plan_executor.on_navigation_completed
+        )
+        
+        # Connect docking status to plan executor
+        self.connect_and_store_connections(
+            self.gui.gui_manager.dockingStatus,
+            self.gui.main_view.plan_executor.on_docking_status_changed
         )
         
         # Connect stop navigation signal

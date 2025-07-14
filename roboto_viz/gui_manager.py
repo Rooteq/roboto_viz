@@ -274,11 +274,13 @@ class ManagerNode(LifecycleNode):
             goal_msg.dock_pose.pose.position.z = 0.0
             goal_msg.dock_pose.pose.orientation.w = 1.0  # No rotation
             goal_msg.dock_id = "specific_location"
+            self.get_logger().info('DOCK SPECIFIC LOCATION')
         else:
             # Create empty dock pose - server will detect live
             goal_msg.dock_pose = PoseStamped()
             goal_msg.dock_pose.header.frame_id = "base_link"
             goal_msg.dock_id = "live_detection"
+            self.get_logger().info('DOCK LIVE LOCATION')
         
         self.get_logger().info('Waiting for dock action server...')
         if self.docking_status_callback:
@@ -336,9 +338,9 @@ class ManagerNode(LifecycleNode):
         try:
             feedback = feedback_msg.feedback
             # Log dock pose updates
-            pose = feedback.dock_pose.pose
-            self.get_logger().info(
-                f'Dock detected at: x={pose.position.x:.2f}, y={pose.position.y:.2f}')
+            # pose = feedback.dock_pose.pose
+            # self.get_logger().info(
+            #     f'Dock detected at: x={pose.position.x:.2f}, y={pose.position.y:.2f}')
         except Exception as e:
             self.get_logger().error(f'Error in dock feedback: {e}')
 
@@ -660,6 +662,14 @@ class GuiManager(QThread):
     def handle_map_selected(self, map_name: str):
         """Handle map selection from GUI"""
         self.nav_data.set_current_map(map_name)
+        
+        # Load the map into nav2 navigation stack
+        success, error_msg = self.nav_data.route_manager.load_map_onto_robot(map_name)
+        if success:
+            print(f"Map '{map_name}' loaded into nav2 successfully")
+        else:
+            print(f"Failed to load map '{map_name}' into nav2: {error_msg}")
+        
         self.send_routes()  # Send updated routes for new map
         
     @pyqtSlot()
@@ -691,15 +701,25 @@ class GuiManager(QThread):
     def dock_robot(self, dock_name=None):
         """Slot to handle dock button click with optional dock name"""
         if self.node:
-            if dock_name and self.dock_manager:
-                # Get dock coordinates
+            if self.dock_manager:
                 docks = self.dock_manager.load_docks()
-                if dock_name in docks:
+                
+                if dock_name and dock_name in docks:
+                    # Use specific dock coordinates
                     dock = docks[dock_name]
+                    print(f"Docking at specific dock '{dock_name}' at coordinates ({dock.x}, {dock.y})")
+                    self.node.send_dock_goal(dock.x, dock.y)
+                    return
+                elif docks:
+                    # If no specific dock name but docks exist, use the first available dock
+                    first_dock_name = next(iter(docks))
+                    dock = docks[first_dock_name]
+                    print(f"No specific dock specified, using first available dock '{first_dock_name}' at ({dock.x}, {dock.y})")
                     self.node.send_dock_goal(dock.x, dock.y)
                     return
             
-            # Fallback to live detection
+            # Only fallback to live detection if no docks are available at all
+            print("No docks available, falling back to live detection")
             self.node.send_dock_goal()
             
     @pyqtSlot()
