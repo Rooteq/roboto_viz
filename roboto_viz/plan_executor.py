@@ -290,6 +290,9 @@ class PlanExecutor(QObject):
             if status == "Docked":
                 self.status_update.emit("Docking completed successfully")
                 self.on_docking_completed()
+            elif status == "Dock Cancelled":
+                self.status_update.emit("Docking cancelled - stopping plan execution")
+                self.stop_plan_execution()
             elif status in ["Dock Failed", "Dock Error"]:
                 self.status_update.emit(f"Docking failed: {status} - stopping plan execution")
                 self.stop_plan_execution()

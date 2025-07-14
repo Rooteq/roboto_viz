@@ -51,6 +51,7 @@ class ManagerNode(LifecycleNode):
         # Docking action clients
         self.dock_action_client = None
         self.undock_action_client = None
+        self.current_dock_goal_handle = None
         
         #CALLBACKS: 
         self.service_availability_callback = None
@@ -308,6 +309,8 @@ class ManagerNode(LifecycleNode):
                 return
 
             self.get_logger().info('Dock goal accepted')
+            # Store the goal handle for potential cancellation
+            self.current_dock_goal_handle = goal_handle
             get_result_future = goal_handle.get_result_async()
             get_result_future.add_done_callback(self._dock_result_callback)
         except Exception as e:
@@ -320,10 +323,17 @@ class ManagerNode(LifecycleNode):
         try:
             result = future.result().result
             status = future.result().status
+            # Clear the goal handle since docking is complete
+            self.current_dock_goal_handle = None
+            
             if status == GoalStatus.STATUS_SUCCEEDED:
                 self.get_logger().info(f'Docking succeeded! Docked: {result.docked}')
                 if self.docking_status_callback:
                     self.docking_status_callback("Docked" if result.docked else "Dock Failed")
+            elif status == GoalStatus.STATUS_CANCELED:
+                self.get_logger().info('Docking was cancelled')
+                if self.docking_status_callback:
+                    self.docking_status_callback("Dock Cancelled")
             else:
                 self.get_logger().info('Docking failed')
                 if self.docking_status_callback:
@@ -343,6 +353,25 @@ class ManagerNode(LifecycleNode):
             #     f'Dock detected at: x={pose.position.x:.2f}, y={pose.position.y:.2f}')
         except Exception as e:
             self.get_logger().error(f'Error in dock feedback: {e}')
+
+    def cancel_dock_goal(self):
+        """Cancel any ongoing docking operation"""
+        if self.current_dock_goal_handle is not None:
+            try:
+                # Cancel the specific goal handle
+                cancel_future = self.current_dock_goal_handle.cancel_goal_async()
+                self.get_logger().info('Sent cancellation request for docking operation')
+                # The result callback will handle the "Dock Cancelled" status when cancellation completes
+            except Exception as e:
+                self.get_logger().error(f"Error cancelling dock goal: {e}")
+                # Still emit cancelled status in case of error
+                if self.docking_status_callback:
+                    self.docking_status_callback("Dock Cancelled")
+        else:
+            # No active docking goal to cancel
+            self.get_logger().info("No active docking operation to cancel")
+            if self.docking_status_callback:
+                self.docking_status_callback("Dock Cancelled")
 
     def send_undock_goal(self):
         """Send an undocking goal to the robot"""
@@ -723,6 +752,12 @@ class GuiManager(QThread):
             self.node.send_dock_goal()
             
     @pyqtSlot()
+    def cancel_docking(self):
+        """Slot to cancel any ongoing docking operation"""
+        if self.node:
+            self.node.cancel_dock_goal()
+
+    @pyqtSlot()
     def undock_robot(self):
         """Slot to handle undock button click"""
         if self.node:
@@ -773,7 +808,10 @@ class GuiManager(QThread):
 
     @pyqtSlot()
     def stop_nav(self):
+        """Stop navigation and cancel any ongoing docking operations"""
         self.navigator.stop()
+        # Also cancel any ongoing docking operations
+        self.cancel_docking()
     
     @pyqtSlot(str)
     def handle_start_plan_execution(self, plan_name: str):
