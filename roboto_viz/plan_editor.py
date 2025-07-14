@@ -206,7 +206,6 @@ class PlanEditor(QMainWindow):
         
         self.setWindowTitle("Plan Editor")
         self.setGeometry(100, 100, 1024, 550)
-        self.showFullScreen()  # Make planner window fullscreen
         
         # Apply global font scaling for smaller screens
         font = self.font()
@@ -258,6 +257,9 @@ class PlanEditor(QMainWindow):
         self.setup_connections()
         self.refresh_plan_list()
         self.refresh_routes_list()
+        
+        # Always start in fullscreen
+        self.showFullScreen()
     
     def setup_ui(self):
         central_widget = QWidget()
@@ -315,11 +317,6 @@ class PlanEditor(QMainWindow):
         self.plan_name_edit = QLineEdit()
         details_layout.addWidget(self.plan_name_edit)
         
-        # Plan description
-        details_layout.addWidget(QLabel("Description:"))
-        self.plan_description_edit = QTextEdit()
-        self.plan_description_edit.setMaximumHeight(60)  # Reduced height
-        details_layout.addWidget(self.plan_description_edit)
         
         # Map selection
         details_layout.addWidget(QLabel("Map:"))
@@ -431,31 +428,6 @@ class PlanEditor(QMainWindow):
         
         right_layout.addLayout(content_layout)
         
-        # Add stretch to push save button to bottom
-        right_layout.addStretch()
-        
-        # Save plan and exit button at the bottom right
-        self.save_plan_btn = QPushButton("Save plan and exit")
-        self.save_plan_btn.setStyleSheet("""
-            QPushButton {
-                font-weight: bold;
-                font-size: 12px;
-                padding: 8px 16px;
-                background-color: #27ae60;
-                color: white;
-                border: 1px solid #2ecc71;
-                border-radius: 4px;
-                min-height: 24px;
-            }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
-            QPushButton:pressed {
-                background-color: #229954;
-            }
-        """)
-        right_layout.addWidget(self.save_plan_btn)
-        
         return right_widget
     
     def create_routes_docks_section(self) -> QWidget:
@@ -507,7 +479,29 @@ class PlanEditor(QMainWindow):
         
         section_layout.addWidget(docks_group)
         
-        # Add stretch to push everything to top
+        # Save plan and exit button
+        self.save_plan_btn = QPushButton("Save plan and exit")
+        self.save_plan_btn.setStyleSheet("""
+            QPushButton {
+                font-weight: bold;
+                font-size: 12px;
+                padding: 8px 16px;
+                background-color: #27ae60;
+                color: white;
+                border: 1px solid #2ecc71;
+                border-radius: 4px;
+                min-height: 24px;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #229954;
+            }
+        """)
+        section_layout.addWidget(self.save_plan_btn)
+        
+        # Add stretch to push everything to top except save button
         section_layout.addStretch()
         
         return section_widget
@@ -556,7 +550,6 @@ class PlanEditor(QMainWindow):
         
         # Detail change connections
         self.plan_name_edit.textChanged.connect(self.on_plan_details_changed)
-        self.plan_description_edit.textChanged.connect(self.on_plan_details_changed)
         self.map_combo.currentTextChanged.connect(self.on_map_changed)
         
         # Map view connections
@@ -593,7 +586,6 @@ class PlanEditor(QMainWindow):
             return
         
         self.plan_name_edit.setText(self.current_plan.name)
-        self.plan_description_edit.setPlainText(self.current_plan.description)
         
         # Refresh maps and select current
         self.refresh_map_list()
@@ -667,7 +659,6 @@ class PlanEditor(QMainWindow):
             # Create a copy
             new_plan = ExecutionPlan(
                 name=name,
-                description=self.current_plan.description,
                 map_name=self.current_plan.map_name,
                 actions=self.current_plan.actions.copy()
             )
@@ -686,7 +677,6 @@ class PlanEditor(QMainWindow):
         
         # Update plan with current details
         self.current_plan.name = self.plan_name_edit.text()
-        self.current_plan.description = self.plan_description_edit.toPlainText()
         self.current_plan.map_name = self.map_combo.currentText()
         
         if self.plan_manager.update_plan(self.current_plan):
@@ -697,7 +687,6 @@ class PlanEditor(QMainWindow):
     
     def clear_plan_details(self):
         self.plan_name_edit.clear()
-        self.plan_description_edit.clear()
         self.map_combo.setCurrentIndex(-1)
         self.actions_list.clear()
     
