@@ -241,6 +241,7 @@ class MainView(QMainWindow):
         # Connect plan executor signals to UI
         self.plan_executor.waiting_for_signal.connect(self.on_waiting_for_signal)
         self.plan_executor.execution_stopped.connect(self.on_plan_stopped)
+        self.plan_executor.uart_signal_received.connect(self.on_uart_signal_received)
         
     def on_plan_stopped(self, plan_name: str):
         """Handle when plan execution stops"""
@@ -253,6 +254,12 @@ class MainView(QMainWindow):
         if self.use_plan_system:
             # Show the signal button in the plan tools
             self.plan_active_view.plan_tools.show_signal_button(signal_name)
+    
+    def on_uart_signal_received(self):
+        """Handle when UART signal is received - immediately hide signal button"""
+        if self.use_plan_system:
+            # Hide the signal button immediately when UART signal is received
+            self.plan_active_view.plan_tools.hide_signal_button()
 
 
     def switch_to_disconnected(self):
