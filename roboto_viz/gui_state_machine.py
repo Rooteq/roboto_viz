@@ -11,8 +11,8 @@ class Gui:
         rclpy.init()
 
         self._state = None
-        self.gui_manager: GuiManager = GuiManager()
         self.main_view: MainView = MainView()
+        self.gui_manager: GuiManager = GuiManager(self.main_view.dock_manager)
         self.transition_to(DisconnectedState())
 
     def setup(self):
@@ -373,6 +373,11 @@ class PlanActiveState(State):
         
         self.connect_and_store_connections(
             self.gui.main_view.dock_robot,
+            self.gui.gui_manager.dock_robot
+        )
+        
+        self.connect_and_store_connections(
+            self.gui.main_view.dock_robot_at,
             self.gui.gui_manager.dock_robot
         )
 

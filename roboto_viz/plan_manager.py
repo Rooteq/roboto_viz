@@ -224,11 +224,18 @@ class PlanManager:
             parameters={'route_name': route_name, 'reverse': reverse}
         )
     
-    def create_dock_action(self) -> PlanAction:
+    def create_dock_action(self, dock_name: str = None) -> PlanAction:
+        if dock_name:
+            name = f"Dock at {dock_name}"
+            parameters = {'dock_name': dock_name}
+        else:
+            name = "Dock Robot"
+            parameters = {}
+        
         return PlanAction(
             action_type=ActionType.DOCK,
-            name="Dock Robot",
-            parameters={}
+            name=name,
+            parameters=parameters
         )
     
     def create_undock_action(self) -> PlanAction:

@@ -11,10 +11,12 @@ from roboto_viz.robot_item import RobotItem
 from roboto_viz.goal_arrow import GoalArrow
 from roboto_viz.route_manager import BezierRoute
 from roboto_viz.bezier_graphics import BezierRouteGraphics, BezierNode, ControlHandle
+from roboto_viz.dock_graphics import DockGraphicsManager
 
 
 class MapView(QGraphicsView):
     goal_pose_set = pyqtSignal(float, float, float)
+    dock_placed = pyqtSignal(str)  # dock_name
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -110,6 +112,13 @@ class MapView(QGraphicsView):
         # Route editing variables
         self.editing_mode = False
         self.current_route_graphics = None
+        
+        # Dock management variables
+        self.dock_graphics_manager = None
+        self.dock_placement_mode = False
+        self.pending_dock_name = None
+        self.dock_editing_mode = False
+        self.editing_dock_name = None
 
     def load_image(self, image_path, origin_data):
         print(f"DEBUG: Loading new map: {image_path}")
@@ -194,6 +203,16 @@ class MapView(QGraphicsView):
             super().mousePressEvent(event)
             return
             
+        # Handle dock placement mode first (independent of drawing mode)
+        if event.button() == Qt.LeftButton and self.dock_placement_mode and not self.left_pan_mode:
+            scene_pos = self.mapToScene(event.pos())
+            print(f"DEBUG: In dock placement mode - placing dock '{self.pending_dock_name}' at {scene_pos.x()}, {scene_pos.y()}")
+            if self.place_dock_at_position(scene_pos.x(), scene_pos.y()):
+                print(f"DEBUG: Dock placed successfully")
+            else:
+                print(f"DEBUG: Failed to place dock")
+            return
+        
         # Handle left button for drawing when not in pan mode
         if event.button() == Qt.LeftButton and self.enable_drawing and not self.left_pan_mode:
             scene_pos = self.mapToScene(event.pos())
@@ -541,3 +560,131 @@ class MapView(QGraphicsView):
         if hasattr(self, 'current_route_graphics') and self.current_route_graphics:
             return self.current_route_graphics.bezier_route
         return None
+    
+    # Dock management methods
+    def init_dock_graphics(self, dock_manager):
+        """Initialize dock graphics manager with the current map"""
+        if hasattr(self, 'map_origin') and self.map_origin and hasattr(self, 'image_item') and self.image_item:
+            pixmap_height = self.image_item.pixmap().height()
+            self.dock_graphics_manager = DockGraphicsManager(
+                dock_manager, self.map_origin, pixmap_height, self.scene
+            )
+            print(f"DEBUG: Initialized dock graphics manager")
+        else:
+            print(f"DEBUG: Cannot initialize dock graphics - missing map data")
+    
+    def start_dock_placement(self, dock_name):
+        """Start dock placement mode"""
+        self.dock_placement_mode = True
+        self.pending_dock_name = dock_name
+        print(f"DEBUG: Started dock placement mode for '{dock_name}'")
+    
+    def stop_dock_placement(self):
+        """Stop dock placement mode"""
+        self.dock_placement_mode = False
+        self.pending_dock_name = None
+        print(f"DEBUG: Stopped dock placement mode")
+    
+    def place_dock_at_position(self, scene_x, scene_y):
+        """Place a dock at the specified scene position (temporary, not saved)"""
+        if not self.dock_placement_mode or not self.pending_dock_name:
+            return False
+        
+        if self.dock_graphics_manager:
+            # Create temporary dock for editing
+            success = self.dock_graphics_manager.create_temporary_dock(
+                scene_x, scene_y, self.pending_dock_name
+            )
+            if success:
+                # Switch to dock editing mode
+                self.dock_editing_mode = True
+                self.editing_dock_name = self.pending_dock_name
+                self.dock_placement_mode = False
+                self.pending_dock_name = None
+                print(f"DEBUG: Created temporary dock '{self.editing_dock_name}' for editing")
+                return True
+        return False
+    
+    def update_dock_graphics(self):
+        """Update dock graphics display"""
+        if self.dock_graphics_manager:
+            self.dock_graphics_manager.update_graphics()
+    
+    def clear_dock_graphics(self):
+        """Clear all dock graphics"""
+        if self.dock_graphics_manager:
+            self.dock_graphics_manager.clear_graphics()
+    
+    def show_dock(self, dock_name: str):
+        """Show a specific dock on the map"""
+        if self.dock_graphics_manager:
+            self.dock_graphics_manager.show_dock(dock_name)
+    
+    def hide_dock(self, dock_name: str):
+        """Hide a specific dock from the map"""
+        if self.dock_graphics_manager:
+            self.dock_graphics_manager.hide_dock(dock_name)
+    
+    def hide_all_docks(self):
+        """Hide all docks from the map"""
+        if self.dock_graphics_manager:
+            self.dock_graphics_manager.hide_all_docks()
+    
+    def show_all_docks(self):
+        """Show all docks on the map"""
+        if self.dock_graphics_manager:
+            self.dock_graphics_manager.show_all_docks()
+    
+    def start_dock_editing(self, dock_name: str):
+        """Start editing mode for a dock"""
+        self.dock_editing_mode = True
+        self.editing_dock_name = dock_name
+        
+        if self.dock_graphics_manager:
+            # Enable editing for this dock
+            self.dock_graphics_manager.set_dock_editing_mode(dock_name, True)
+            # Show only this dock for editing
+            self.dock_graphics_manager.hide_all_docks()
+            self.dock_graphics_manager.show_dock(dock_name)
+        
+        print(f"DEBUG: Started dock editing for '{dock_name}'")
+    
+    def stop_dock_editing(self):
+        """Stop dock editing mode"""
+        if self.dock_editing_mode and self.editing_dock_name:
+            if self.dock_graphics_manager:
+                # Disable editing for the current dock
+                self.dock_graphics_manager.set_dock_editing_mode(self.editing_dock_name, False)
+                # Hide the dock after editing
+                self.dock_graphics_manager.hide_dock(self.editing_dock_name)
+        
+        self.dock_editing_mode = False
+        self.editing_dock_name = None
+        print(f"DEBUG: Stopped dock editing mode")
+    
+    def save_current_dock(self) -> bool:
+        """Save the current dock position"""
+        if self.dock_editing_mode and self.editing_dock_name and self.dock_graphics_manager:
+            # Check if this is a temporary dock (new dock) or existing dock
+            docks = self.dock_graphics_manager.dock_manager.load_docks()
+            if self.editing_dock_name in docks:
+                # Existing dock - update position
+                return self.dock_graphics_manager.save_dock_position(self.editing_dock_name)
+            else:
+                # Temporary dock - save to dock manager
+                return self.dock_graphics_manager.save_temporary_dock(self.editing_dock_name)
+        return False
+    
+    def cancel_dock_editing(self):
+        """Cancel dock editing and revert to saved position"""
+        if self.dock_editing_mode and self.editing_dock_name and self.dock_graphics_manager:
+            # Check if this is a temporary dock (new dock) or existing dock
+            docks = self.dock_graphics_manager.dock_manager.load_docks()
+            if self.editing_dock_name in docks:
+                # Existing dock - revert to saved position
+                self.dock_graphics_manager.revert_dock_position(self.editing_dock_name)
+            else:
+                # Temporary dock - delete it
+                self.dock_graphics_manager.cancel_temporary_dock(self.editing_dock_name)
+        
+        self.stop_dock_editing()

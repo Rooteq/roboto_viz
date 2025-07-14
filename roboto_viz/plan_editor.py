@@ -8,6 +8,7 @@ from typing import Optional
 
 from roboto_viz.plan_manager import PlanManager, ExecutionPlan, PlanAction, ActionType
 from roboto_viz.route_manager import RouteManager, BezierRoute
+from roboto_viz.dock_manager import DockManager, Dock
 from roboto_viz.map_view import MapView
 
 
@@ -56,16 +57,56 @@ class RouteSelectionDialog(QDialog):
         return self.route_combo.currentText(), self.reverse_checkbox.isChecked()
 
 
+class DockSelectionDialog(QDialog):
+    """Custom dialog for selecting a dock for dock actions"""
+    
+    def __init__(self, dock_names, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Dock Action")
+        self.setModal(True)
+        self.resize(300, 120)
+        
+        layout = QVBoxLayout()
+        
+        # Dock selection
+        dock_label = QLabel("Select dock:")
+        layout.addWidget(dock_label)
+        
+        self.dock_combo = QComboBox()
+        self.dock_combo.addItems(dock_names)
+        layout.addWidget(self.dock_combo)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(self.accept)
+        button_layout.addWidget(ok_button)
+        
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+    
+    def get_selection(self):
+        """Get the selected dock name"""
+        return self.dock_combo.currentText()
+
+
 class PlanEditor(QMainWindow):
     plan_selected = pyqtSignal(str)  # plan_name
     plan_updated = pyqtSignal()
     
-    def __init__(self, plan_manager: PlanManager, route_manager: RouteManager):
+    def __init__(self, plan_manager: PlanManager, route_manager: RouteManager, dock_manager: DockManager):
         super().__init__()
         self.plan_manager = plan_manager
         self.route_manager = route_manager
+        self.dock_manager = dock_manager
         self.current_plan: Optional[ExecutionPlan] = None
         self.editing_route_name: Optional[str] = None  # Track if we're editing an existing route
+        self.editing_dock_name: Optional[str] = None   # Track if we're editing an existing dock
         
         # Create a new map view for the editor
         self.map_view = MapView()
@@ -209,6 +250,27 @@ class PlanEditor(QMainWindow):
         
         left_layout.addWidget(routes_group)
         
+        # Docks Section
+        docks_group = QGroupBox("Docks")
+        docks_layout = QVBoxLayout(docks_group)
+        
+        # Docks list
+        self.docks_list = QListWidget()
+        docks_layout.addWidget(self.docks_list)
+        
+        # Dock control buttons
+        dock_buttons_layout = QHBoxLayout()
+        self.add_dock_editor_btn = QPushButton("Add Dock")
+        self.edit_dock_editor_btn = QPushButton("Edit Dock")
+        self.remove_dock_editor_btn = QPushButton("Remove Dock")
+        
+        dock_buttons_layout.addWidget(self.add_dock_editor_btn)
+        dock_buttons_layout.addWidget(self.edit_dock_editor_btn)
+        dock_buttons_layout.addWidget(self.remove_dock_editor_btn)
+        docks_layout.addLayout(dock_buttons_layout)
+        
+        left_layout.addWidget(docks_group)
+        
         # Add stretch to push everything to top
         left_layout.addStretch()
         
@@ -243,6 +305,20 @@ class PlanEditor(QMainWindow):
         map_controls_layout.addWidget(self.route_editing_widget)
         self.route_editing_widget.setVisible(False)  # Initially hidden
         
+        # Dock editing controls (initially hidden)
+        self.dock_editing_widget = QWidget()
+        dock_editing_layout = QHBoxLayout(self.dock_editing_widget)
+        dock_editing_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.save_dock_btn = QPushButton("Save Dock")
+        self.cancel_dock_btn = QPushButton("Cancel")
+        
+        dock_editing_layout.addWidget(self.save_dock_btn)
+        dock_editing_layout.addWidget(self.cancel_dock_btn)
+        
+        map_controls_layout.addWidget(self.dock_editing_widget)
+        self.dock_editing_widget.setVisible(False)  # Initially hidden
+        
         right_layout.addLayout(map_controls_layout)
         
         # Add map view
@@ -276,16 +352,29 @@ class PlanEditor(QMainWindow):
         self.save_route_btn.clicked.connect(self.save_current_route)
         self.cancel_route_btn.clicked.connect(self.cancel_route_creation)
         
+        # Dock editor connections
+        self.save_dock_btn.clicked.connect(self.save_current_dock)
+        self.cancel_dock_btn.clicked.connect(self.cancel_dock_creation)
+        
         # Route management connections
         self.add_route_editor_btn.clicked.connect(self.start_route_creation)
         self.edit_route_btn.clicked.connect(self.edit_selected_route)
         self.remove_route_btn.clicked.connect(self.remove_selected_route)
         self.routes_list.itemClicked.connect(self.on_route_selected)
         
+        # Dock management connections
+        self.add_dock_editor_btn.clicked.connect(self.start_dock_creation)
+        self.edit_dock_editor_btn.clicked.connect(self.edit_selected_dock)
+        self.remove_dock_editor_btn.clicked.connect(self.remove_selected_dock)
+        self.docks_list.itemClicked.connect(self.on_dock_selected)
+        
         # Detail change connections
         self.plan_name_edit.textChanged.connect(self.on_plan_details_changed)
         self.plan_description_edit.textChanged.connect(self.on_plan_details_changed)
         self.map_combo.currentTextChanged.connect(self.on_map_changed)
+        
+        # Map view connections
+        self.map_view.dock_placed.connect(self.on_dock_placed)
     
     def refresh_plan_list(self):
         self.plan_list.clear()
@@ -432,10 +521,12 @@ class PlanEditor(QMainWindow):
     def on_map_changed(self):
         if self.current_plan:
             self.current_plan.map_name = self.map_combo.currentText()
-            # Update route manager and refresh routes list
+            # Update route manager and dock manager, refresh lists
             if self.current_plan.map_name:
                 self.route_manager.set_current_map(self.current_plan.map_name)
+                self.dock_manager.set_current_map(self.current_plan.map_name)
                 self.refresh_routes_list()
+                self.refresh_docks_list()
             self.on_plan_details_changed()
     
     def load_selected_map(self, show_success_dialog=True):
@@ -445,8 +536,9 @@ class PlanEditor(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Please select a map first!")
             return
         
-        # Set the current map in route manager
+        # Set the current map in route and dock managers
         self.route_manager.set_current_map(map_name)
+        self.dock_manager.set_current_map(map_name)
         
         # Load the map in the editor's map view
         from pathlib import Path
@@ -466,8 +558,11 @@ class PlanEditor(QMainWindow):
                 yaml_data = yaml.safe_load(file)
             
             self.map_view.load_image(str(map_path), yaml_data['origin'])
-            # Refresh routes list after map is loaded
+            # Initialize dock graphics after map is loaded
+            self.map_view.init_dock_graphics(self.dock_manager)
+            # Refresh routes and docks lists after map is loaded
             self.refresh_routes_list()
+            self.refresh_docks_list()
             if show_success_dialog:
                 QMessageBox.information(self, "Success", f"Map '{map_name}' loaded successfully!")
             
@@ -498,10 +593,20 @@ class PlanEditor(QMainWindow):
         if not self.current_plan:
             return
         
-        action = self.plan_manager.create_dock_action()
-        self.current_plan.add_action(action)
-        self.refresh_actions_list()
-        self.on_plan_details_changed()
+        # Get available docks
+        docks = self.dock_manager.load_docks()
+        if not docks:
+            QMessageBox.warning(self, "Warning", "No docks available for current map!")
+            return
+        
+        dock_names = list(docks.keys())
+        dialog = DockSelectionDialog(dock_names, self)
+        if dialog.exec_() == QDialog.Accepted:
+            dock_name = dialog.get_selection()
+            action = self.plan_manager.create_dock_action(dock_name)
+            self.current_plan.add_action(action)
+            self.refresh_actions_list()
+            self.on_plan_details_changed()
     
     def add_undock_action(self):
         if not self.current_plan:
@@ -700,5 +805,160 @@ class PlanEditor(QMainWindow):
                 self.route_editing_widget.setVisible(False)
                 self.editing_route_name = None
             
+            # Hide all docks when showing a route
+            self.map_view.hide_all_docks()
+            
             # Display the route
             self.map_view.display_bezier_route(route, force_update=True)
+    
+    # Dock management methods
+    def refresh_docks_list(self):
+        """Refresh the docks list display"""
+        self.docks_list.clear()
+        if not self.dock_manager.current_map:
+            return
+        
+        docks = self.dock_manager.load_docks()
+        for dock_name in sorted(docks.keys()):
+            self.docks_list.addItem(dock_name)
+    
+    def start_dock_creation(self):
+        """Start creating a new dock by clicking on the map"""
+        if not self.dock_manager.current_map:
+            QMessageBox.warning(self, "Warning", "Please select and load a map first!")
+            return
+        
+        # Clear editing state (we're creating a new dock)
+        self.editing_dock_name = None
+        
+        # Get dock name from user
+        name, ok = QInputDialog.getText(self, 'Create Dock', 'Enter dock name:')
+        if not ok or not name:
+            return
+        
+        # Check if dock name already exists
+        docks = self.dock_manager.load_docks()
+        if name in docks:
+            QMessageBox.warning(self, "Warning", f"Dock '{name}' already exists!")
+            return
+        
+        # Set up for new dock creation
+        self.editing_dock_name = name
+        
+        # Hide route editing controls if visible
+        self.route_editing_widget.setVisible(False)
+        
+        # Enable dock placement mode
+        self.map_view.start_dock_placement(name)
+        
+        # Show dock editing controls for new dock
+        self.dock_editing_widget.setVisible(True)
+        
+        QMessageBox.information(self, "Place Dock", 
+                               f"Click on the map to place dock '{name}', then click Save or Cancel")
+    
+    def edit_selected_dock(self):
+        """Start editing the selected dock"""
+        current_item = self.docks_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "Warning", "Please select a dock to edit!")
+            return
+        
+        dock_name = current_item.text()
+        docks = self.dock_manager.load_docks()
+        
+        if dock_name not in docks:
+            QMessageBox.warning(self, "Warning", "Selected dock not found!")
+            return
+        
+        # Store the dock we're editing
+        self.editing_dock_name = dock_name
+        
+        # Hide route editing controls if visible
+        self.route_editing_widget.setVisible(False)
+        
+        # Start dock editing mode in map view
+        self.map_view.start_dock_editing(dock_name)
+        
+        # Show dock editing controls
+        self.dock_editing_widget.setVisible(True)
+        
+        QMessageBox.information(self, "Edit Dock", 
+                               f"Drag dock '{dock_name}' to move it, then click Save or Cancel")
+    
+    def remove_selected_dock(self):
+        """Remove the selected dock from the docks list"""
+        current_item = self.docks_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "Warning", "Please select a dock to remove!")
+            return
+        
+        dock_name = current_item.text()
+        
+        # Confirm deletion
+        reply = QMessageBox.question(self, 'Remove Dock', 
+                                   f"Are you sure you want to remove dock '{dock_name}'?",
+                                   QMessageBox.Yes | QMessageBox.No)
+        
+        if reply == QMessageBox.Yes:
+            if self.dock_manager.remove_dock(dock_name):
+                self.refresh_docks_list()
+                # Force remove any stuck dock graphics
+                if self.map_view.dock_graphics_manager:
+                    self.map_view.dock_graphics_manager.force_remove_dock_graphics(dock_name)
+                # Update dock graphics display
+                self.map_view.update_dock_graphics()
+                QMessageBox.information(self, "Success", f"Dock '{dock_name}' removed successfully!")
+            else:
+                QMessageBox.warning(self, "Error", f"Failed to remove dock '{dock_name}'!")
+    
+    def on_dock_selected(self, item: QListWidgetItem):
+        """Handle dock selection from list"""
+        # Display the selected dock on the map
+        dock_name = item.text()
+        docks = self.dock_manager.load_docks()
+        
+        if dock_name in docks:
+            dock = docks[dock_name]
+            
+            # Hide routes when showing a dock
+            self.map_view.clear_route()
+            
+            # Hide all docks first, then show only the selected one
+            self.map_view.hide_all_docks()
+            self.map_view.show_dock(dock_name)
+            
+            print(f"DEBUG: Selected dock '{dock_name}' at ({dock.x}, {dock.y})")
+    
+    def on_dock_placed(self, dock_name: str):
+        """Handle when a dock is successfully placed on the map"""
+        # Note: For new editing system, we don't refresh the list until saved
+        # The dock is now temporary and needs to be saved
+        print(f"DEBUG: Dock '{dock_name}' placed temporarily, waiting for save/cancel")
+    
+    def save_current_dock(self):
+        """Save the current dock position"""
+        if not self.editing_dock_name:
+            QMessageBox.warning(self, "Warning", "No dock being edited!")
+            return
+        
+        if self.map_view.save_current_dock():
+            # Exit dock editing mode
+            self.map_view.stop_dock_editing()
+            self.dock_editing_widget.setVisible(False)
+            self.editing_dock_name = None
+            
+            # Refresh the dock list
+            self.refresh_docks_list()
+            QMessageBox.information(self, "Success", "Dock position saved successfully!")
+        else:
+            QMessageBox.warning(self, "Error", "Failed to save dock position!")
+    
+    def cancel_dock_creation(self):
+        """Cancel current dock editing"""
+        if self.editing_dock_name:
+            # Cancel dock editing and revert position
+            self.map_view.cancel_dock_editing()
+            self.dock_editing_widget.setVisible(False)
+            self.editing_dock_name = None
+            QMessageBox.information(self, "Cancelled", "Dock editing cancelled.")

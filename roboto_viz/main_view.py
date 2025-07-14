@@ -26,6 +26,7 @@ from roboto_viz.views import ActiveView, DisconnectedView
 from roboto_viz.plan_views import PlanActiveView
 from roboto_viz.plan_manager import PlanManager
 from roboto_viz.plan_executor import PlanExecutor
+from roboto_viz.dock_manager import DockManager
 
 class MainView(QMainWindow):
     map_loaded_signal = pyqtSignal(bool, str)  # success, error_message
@@ -44,6 +45,7 @@ class MainView(QMainWindow):
     
     # Robot control signals
     dock_robot = pyqtSignal()
+    dock_robot_at = pyqtSignal(str)  # dock_name
     undock_robot = pyqtSignal()
     start_nav = pyqtSignal(str, bool, float, float)
     
@@ -72,13 +74,14 @@ class MainView(QMainWindow):
         # Initialize managers
         from roboto_viz.route_manager import RouteManager
         self.route_manager = RouteManager()
+        self.dock_manager = DockManager()
         self.plan_manager = PlanManager()
         self.plan_executor = PlanExecutor(self.plan_manager)
 
         self.disconnected_view = DisconnectedView()
         # self.planner_view = PlannerView()
         self.active_view = ActiveView(self.map_view)  # Keep old view for compatibility
-        self.plan_active_view = PlanActiveView(self.map_view, self.plan_manager, self.route_manager)
+        self.plan_active_view = PlanActiveView(self.map_view, self.plan_manager, self.route_manager, self.dock_manager)
         self.maps_dir = Path.home() / ".robotroutes" / "maps"
         self.current_map_path = None
         self.current_yaml_path = None
@@ -168,6 +171,7 @@ class MainView(QMainWindow):
         # Plan executor connections
         self.plan_executor.start_nav.connect(self.start_nav.emit)
         self.plan_executor.dock_robot.connect(self.dock_robot.emit)
+        self.plan_executor.dock_robot_at.connect(self.dock_robot_at.emit)
         self.plan_executor.undock_robot.connect(self.undock_robot.emit)
         self.plan_executor.action_completed.connect(self.plan_active_view.on_action_completed)
         self.plan_executor.execution_stopped.connect(self.plan_active_view.on_plan_execution_stopped)

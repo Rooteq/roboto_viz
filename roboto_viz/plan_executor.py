@@ -15,6 +15,7 @@ class PlanExecutor(QObject):
     # Robot control signals
     start_nav = pyqtSignal(str, bool, float, float)  # route_name, to_dest, curr_x, curr_y
     dock_robot = pyqtSignal()
+    dock_robot_at = pyqtSignal(str)  # dock_name
     undock_robot = pyqtSignal()
     
     # Status signals
@@ -159,13 +160,22 @@ class PlanExecutor(QObject):
     
     def execute_dock_action(self, action):
         """Execute a dock action"""
-        self.status_update.emit("Docking robot...")
+        dock_name = action.parameters.get('dock_name')
+        
+        if dock_name:
+            self.status_update.emit(f"Docking robot at {dock_name}...")
+        else:
+            self.status_update.emit("Docking robot...")
         
         # Set waiting state
         self.waiting_for_completion = True
         self.current_action_type = ActionType.DOCK
         
-        self.dock_robot.emit()
+        # Emit dock signal with dock name if available
+        if dock_name:
+            self.dock_robot_at.emit(dock_name)
+        else:
+            self.dock_robot.emit()
     
     def execute_undock_action(self, action):
         """Execute an undock action"""

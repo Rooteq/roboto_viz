@@ -255,8 +255,8 @@ class ManagerNode(LifecycleNode):
 
         self.get_logger().info("Stopped publishing to cmd_vel")
         
-    def send_dock_goal(self):
-        """Send a docking goal to the robot"""
+    def send_dock_goal(self, dock_x=None, dock_y=None):
+        """Send a docking goal to the robot with optional coordinates"""
         if Dock is None or self.dock_action_client is None:
             self.get_logger().error("Docking action client not available")
             if self.docking_status_callback:
@@ -264,10 +264,21 @@ class ManagerNode(LifecycleNode):
             return
             
         goal_msg = Dock.Goal()
-        # Create empty dock pose - server will detect live
-        goal_msg.dock_pose = PoseStamped()
-        goal_msg.dock_pose.header.frame_id = "base_link"
-        goal_msg.dock_id = "live_detection"
+        
+        if dock_x is not None and dock_y is not None:
+            # Create dock pose with specific coordinates
+            goal_msg.dock_pose = PoseStamped()
+            goal_msg.dock_pose.header.frame_id = "map"
+            goal_msg.dock_pose.pose.position.x = dock_x
+            goal_msg.dock_pose.pose.position.y = dock_y
+            goal_msg.dock_pose.pose.position.z = 0.0
+            goal_msg.dock_pose.pose.orientation.w = 1.0  # No rotation
+            goal_msg.dock_id = "specific_location"
+        else:
+            # Create empty dock pose - server will detect live
+            goal_msg.dock_pose = PoseStamped()
+            goal_msg.dock_pose.header.frame_id = "base_link"
+            goal_msg.dock_id = "live_detection"
         
         self.get_logger().info('Waiting for dock action server...')
         if self.docking_status_callback:
@@ -607,12 +618,13 @@ class GuiManager(QThread):
     send_route_names = pyqtSignal(dict)
     send_map_names = pyqtSignal(list)
 
-    def __init__(self):
+    def __init__(self, dock_manager=None):
         super().__init__()
         self.node: ManagerNode = None
         self.executor = MultiThreadedExecutor()
         self.nav_data: NavData = NavData()
         self.navigator: Navigator = Navigator(self.nav_data)
+        self.dock_manager = dock_manager
 
         # self.nav_data.send_routes.connect(lambda: self.send_route_names)
 
@@ -676,9 +688,18 @@ class GuiManager(QThread):
         self.node.stop_publishing()
         
     @pyqtSlot()
-    def dock_robot(self):
-        """Slot to handle dock button click"""
+    def dock_robot(self, dock_name=None):
+        """Slot to handle dock button click with optional dock name"""
         if self.node:
+            if dock_name and self.dock_manager:
+                # Get dock coordinates
+                docks = self.dock_manager.load_docks()
+                if dock_name in docks:
+                    dock = docks[dock_name]
+                    self.node.send_dock_goal(dock.x, dock.y)
+                    return
+            
+            # Fallback to live detection
             self.node.send_dock_goal()
             
     @pyqtSlot()

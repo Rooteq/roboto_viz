@@ -6,6 +6,7 @@ from roboto_viz.map_view import MapView
 from roboto_viz.plan_view_tools import PlanTools
 from roboto_viz.plan_manager import PlanManager, ExecutionPlan
 from roboto_viz.route_manager import RouteManager
+from roboto_viz.dock_manager import DockManager
 from roboto_viz.plan_editor import PlanEditor
 
 
@@ -33,12 +34,13 @@ class PlanActiveView(QWidget):
     # Map signals
     map_load_requested = pyqtSignal(str)  # map_name
 
-    def __init__(self, map_view: MapView, plan_manager: PlanManager, route_manager: RouteManager):
+    def __init__(self, map_view: MapView, plan_manager: PlanManager, route_manager: RouteManager, dock_manager: DockManager):
         super().__init__()
         
         self.map_view = map_view
         self.plan_manager = plan_manager
         self.route_manager = route_manager
+        self.dock_manager = dock_manager
         
         # Current robot position
         self.curr_x: float = 0
@@ -131,7 +133,7 @@ class PlanActiveView(QWidget):
     def open_plan_editor(self):
         """Open the plan editor window"""
         if self.plan_editor is None:
-            self.plan_editor = PlanEditor(self.plan_manager, self.route_manager)
+            self.plan_editor = PlanEditor(self.plan_manager, self.route_manager, self.dock_manager)
             self.plan_editor.plan_updated.connect(self.on_plan_updated)
         
         self.plan_editor.show()
