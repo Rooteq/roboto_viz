@@ -65,6 +65,7 @@ class PlanEditor(QMainWindow):
         self.plan_manager = plan_manager
         self.route_manager = route_manager
         self.current_plan: Optional[ExecutionPlan] = None
+        self.editing_route_name: Optional[str] = None  # Track if we're editing an existing route
         
         # Create a new map view for the editor
         self.map_view = MapView()
@@ -198,12 +199,12 @@ class PlanEditor(QMainWindow):
         # Route control buttons
         route_buttons_layout = QHBoxLayout()
         self.add_route_editor_btn = QPushButton("Add Route")
+        self.edit_route_btn = QPushButton("Edit Route")
         self.remove_route_btn = QPushButton("Remove Route")
-        self.view_route_btn = QPushButton("View Route")
         
         route_buttons_layout.addWidget(self.add_route_editor_btn)
+        route_buttons_layout.addWidget(self.edit_route_btn)
         route_buttons_layout.addWidget(self.remove_route_btn)
-        route_buttons_layout.addWidget(self.view_route_btn)
         routes_layout.addLayout(route_buttons_layout)
         
         left_layout.addWidget(routes_group)
@@ -277,8 +278,8 @@ class PlanEditor(QMainWindow):
         
         # Route management connections
         self.add_route_editor_btn.clicked.connect(self.start_route_creation)
+        self.edit_route_btn.clicked.connect(self.edit_selected_route)
         self.remove_route_btn.clicked.connect(self.remove_selected_route)
-        self.view_route_btn.clicked.connect(self.view_selected_route)
         self.routes_list.itemClicked.connect(self.on_route_selected)
         
         # Detail change connections
@@ -572,16 +573,35 @@ class PlanEditor(QMainWindow):
             QMessageBox.warning(self, "Warning", "No route to save!")
             return
         
-        name, ok = QInputDialog.getText(self, 'Save Route', 'Enter route name:')
-        if ok and name:
-            if self.route_manager.add_route(name, current_route):
-                self.refresh_routes_list()  # Refresh the routes list
-                # Exit route editing mode
-                self.map_view.stop_route_editing()
-                self.route_editing_widget.setVisible(False)
-                QMessageBox.information(self, "Success", f"Route '{name}' saved successfully!")
-            else:
-                QMessageBox.warning(self, "Error", f"Failed to save route '{name}'!")
+        # Check if we're editing an existing route
+        if self.editing_route_name:
+            # Editing existing route - ask for confirmation
+            reply = QMessageBox.question(self, 'Update Route', 
+                                       f"Update existing route '{self.editing_route_name}'?",
+                                       QMessageBox.Yes | QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                name = self.editing_route_name
+                if self.route_manager.update_route(name, current_route):
+                    self.refresh_routes_list()
+                    # Exit route editing mode
+                    self.map_view.stop_route_editing()
+                    self.route_editing_widget.setVisible(False)
+                    self.editing_route_name = None
+                    QMessageBox.information(self, "Success", f"Route '{name}' updated successfully!")
+                else:
+                    QMessageBox.warning(self, "Error", f"Failed to update route '{name}'!")
+        else:
+            # Creating new route - ask for name
+            name, ok = QInputDialog.getText(self, 'Save Route', 'Enter route name:')
+            if ok and name:
+                if self.route_manager.add_route(name, current_route):
+                    self.refresh_routes_list()  # Refresh the routes list
+                    # Exit route editing mode
+                    self.map_view.stop_route_editing()
+                    self.route_editing_widget.setVisible(False)
+                    QMessageBox.information(self, "Success", f"Route '{name}' saved successfully!")
+                else:
+                    QMessageBox.warning(self, "Error", f"Failed to save route '{name}'!")
     
     # Route management methods
     def start_route_creation(self):
@@ -590,9 +610,41 @@ class PlanEditor(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select and load a map first!")
             return
         
+        # Clear editing state (we're creating a new route)
+        self.editing_route_name = None
+        
         # Clear any existing route and enable route editing
         self.map_view.clear_route()
         self.map_view.start_route_editing()
+        
+        # Show route editing controls
+        self.route_editing_widget.setVisible(True)
+    
+    def edit_selected_route(self):
+        """Start editing the selected route"""
+        current_item = self.routes_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "Warning", "Please select a route to edit!")
+            return
+        
+        if not self.route_manager.current_map:
+            QMessageBox.warning(self, "Warning", "Please select and load a map first!")
+            return
+        
+        route_name = current_item.text()
+        routes = self.route_manager.load_routes()
+        
+        if route_name not in routes:
+            QMessageBox.warning(self, "Warning", "Selected route not found!")
+            return
+        
+        # Store the route we're editing
+        self.editing_route_name = route_name
+        
+        # Load the route for editing
+        route = routes[route_name]
+        self.map_view.clear_route()
+        self.map_view.start_route_editing(route)
         
         # Show route editing controls
         self.route_editing_widget.setVisible(True)
@@ -601,6 +653,9 @@ class PlanEditor(QMainWindow):
         """Cancel current route creation"""
         self.map_view.stop_route_editing()
         self.map_view.clear_route()
+        
+        # Clear editing state
+        self.editing_route_name = None
         
         # Hide route editing controls
         self.route_editing_widget.setVisible(False)
@@ -630,14 +685,10 @@ class PlanEditor(QMainWindow):
                 else:
                     QMessageBox.warning(self, "Error", f"Failed to remove route '{route_name}'!")
     
-    def view_selected_route(self):
-        """Display the selected route on the map"""
-        current_item = self.routes_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "Warning", "Please select a route to view!")
-            return
-        
-        route_name = current_item.text()
+    def on_route_selected(self, item: QListWidgetItem):
+        """Handle route selection from list"""
+        # Display the selected route on the map
+        route_name = item.text()
         routes = self.route_manager.load_routes()
         
         if route_name in routes:
@@ -647,13 +698,7 @@ class PlanEditor(QMainWindow):
             if was_editing:
                 self.map_view.stop_route_editing()
                 self.route_editing_widget.setVisible(False)
+                self.editing_route_name = None
             
             # Display the route
             self.map_view.display_bezier_route(route, force_update=True)
-        else:
-            QMessageBox.warning(self, "Error", f"Route '{route_name}' not found!")
-    
-    def on_route_selected(self, item: QListWidgetItem):
-        """Handle route selection from list"""
-        # Automatically view the selected route
-        self.view_selected_route()

@@ -422,6 +422,30 @@ class RouteManager:
         # Save updated routes
         return self.save_routes(routes)
 
+    def update_route(self, name: str, route: BezierRoute) -> bool:
+        """
+        Update an existing route or add a new one if it doesn't exist.
+        
+        Args:
+            name: Name of the route to update
+            route: BezierRoute object to save
+            
+        Returns:
+            bool: True if route was updated successfully, False otherwise
+        """
+        if not self.current_map:
+            print("Error: No map selected")
+            return False
+
+        # Load existing routes
+        routes = self.load_routes()
+        
+        # Update or add the route (overwrites existing)
+        routes[name] = route
+        
+        # Save updated routes
+        return self.save_routes(routes)
+
     def get_file_path(self) -> str:
         """Return the current routes file path."""
         return str(self.routes_file)
