@@ -348,7 +348,12 @@ class PlanTools(QWidget):
             return
         
         for i, action in enumerate(self.current_plan.actions):
-            action_text = f"{i+1}. {action.action_type.value.replace('_', ' ').title()}: {action.name}"
+            action_name = action.name
+            # Add (rev) for reversed route actions
+            if action.action_type == ActionType.ROUTE and action.parameters.get('reverse', False):
+                action_name = f"{action.name} (rev)"
+            
+            action_text = f"{i+1}. {action.action_type.value.replace('_', ' ').title()}: {action_name}"
             self.action_combo.addItem(action_text)
     
     def choose_plan(self):
@@ -383,7 +388,12 @@ class PlanTools(QWidget):
         
         current_action = self.current_plan.get_current_action()
         if current_action:
-            action_text = f"Action {self.current_plan.current_action_index + 1}: {current_action.name}"
+            action_name = current_action.name
+            # Add (rev) for reversed route actions
+            if current_action.action_type == ActionType.ROUTE and current_action.parameters.get('reverse', False):
+                action_name = f"{current_action.name} (rev)"
+            
+            action_text = f"Action {self.current_plan.current_action_index + 1}: {action_name}"
             self.current_action_label.setText(action_text)
         else:
             self.current_action_label.setText("No actions in plan")

@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QListWidget, QListWidgetItem, QLabel, 
                              QLineEdit, QComboBox, QTextEdit, QSplitter, QGroupBox,
-                             QMessageBox, QInputDialog, QGridLayout, QFrame)
+                             QMessageBox, QInputDialog, QGridLayout, QFrame, QCheckBox, QDialog)
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QFont
 from typing import Optional
@@ -9,6 +9,51 @@ from typing import Optional
 from roboto_viz.plan_manager import PlanManager, ExecutionPlan, PlanAction, ActionType
 from roboto_viz.route_manager import RouteManager, BezierRoute
 from roboto_viz.map_view import MapView
+
+
+class RouteSelectionDialog(QDialog):
+    """Custom dialog for selecting a route with optional reverse checkbox"""
+    
+    def __init__(self, route_names, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Route Action")
+        self.setModal(True)
+        self.resize(300, 150)
+        
+        self.route_name = None
+        self.reverse = False
+        
+        layout = QVBoxLayout()
+        
+        # Route selection
+        route_label = QLabel("Select route:")
+        layout.addWidget(route_label)
+        
+        self.route_combo = QComboBox()
+        self.route_combo.addItems(route_names)
+        layout.addWidget(self.route_combo)
+        
+        # Reverse checkbox
+        self.reverse_checkbox = QCheckBox("Run route in reverse")
+        layout.addWidget(self.reverse_checkbox)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(self.accept)
+        button_layout.addWidget(ok_button)
+        
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+    
+    def get_selection(self):
+        """Get the selected route name and reverse state"""
+        return self.route_combo.currentText(), self.reverse_checkbox.isChecked()
 
 
 class PlanEditor(QMainWindow):
@@ -292,7 +337,12 @@ class PlanEditor(QMainWindow):
             return
         
         for i, action in enumerate(self.current_plan.actions):
-            item_text = f"{i+1}. {action.action_type.value.replace('_', ' ').title()}: {action.name}"
+            action_name = action.name
+            # Add (rev) for reversed route actions
+            if action.action_type == ActionType.ROUTE and action.parameters.get('reverse', False):
+                action_name = f"{action.name} (rev)"
+            
+            item_text = f"{i+1}. {action.action_type.value.replace('_', ' ').title()}: {action_name}"
             self.actions_list.addItem(item_text)
     
     def create_new_plan(self):
@@ -435,10 +485,10 @@ class PlanEditor(QMainWindow):
             return
         
         route_names = list(routes.keys())
-        route_name, ok = QInputDialog.getItem(self, 'Add Route Action', 
-                                            'Select route:', route_names, 0, False)
-        if ok and route_name:
-            action = self.plan_manager.create_route_action(route_name)
+        dialog = RouteSelectionDialog(route_names, self)
+        if dialog.exec_() == QDialog.Accepted:
+            route_name, reverse = dialog.get_selection()
+            action = self.plan_manager.create_route_action(route_name, reverse)
             self.current_plan.add_action(action)
             self.refresh_actions_list()
             self.on_plan_details_changed()

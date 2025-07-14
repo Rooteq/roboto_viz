@@ -217,11 +217,11 @@ class PlanManager:
     def get_current_plan(self) -> Optional[ExecutionPlan]:
         return self.current_plan
     
-    def create_route_action(self, route_name: str) -> PlanAction:
+    def create_route_action(self, route_name: str, reverse: bool = False) -> PlanAction:
         return PlanAction(
             action_type=ActionType.ROUTE,
             name=route_name,
-            parameters={'route_name': route_name}
+            parameters={'route_name': route_name, 'reverse': reverse}
         )
     
     def create_dock_action(self) -> PlanAction:

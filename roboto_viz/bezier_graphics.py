@@ -4,46 +4,55 @@ from PyQt5.QtGui import QPainterPath, QPen, QBrush, QColor, QFont
 from PyQt5.QtCore import Qt, QPointF, QRectF, QObject
 import math
 
-class BezierNode(QGraphicsEllipseItem):
+class BezierNode(QGraphicsItemGroup):
     """
     Visual representation of a route node that can be moved and edited.
     """
     def __init__(self, x: float, y: float, index: int, parent=None):
-        radius = 4
-        super().__init__(x - radius, y - radius, radius * 2, radius * 2, parent)
+        super().__init__(parent)
         
         self.index = index
-        self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.ItemIsSelectable, False)  # Disable selection to prevent group dragging
-        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+        radius = 4
         
-        # Visual styling
-        self.setBrush(QBrush(QColor(50, 150, 250)))  # Blue
-        self.setPen(QPen(QColor(30, 100, 200), 2))
+        # Create ellipse item centered at origin
+        self.ellipse_item = QGraphicsEllipseItem(-radius, -radius, radius * 2, radius * 2)
+        self.ellipse_item.setBrush(QBrush(QColor(50, 150, 250)))  # Blue
+        self.ellipse_item.setPen(QPen(QColor(30, 100, 200), 2))
         
-        # Enable mouse events for this item
-        self.setAcceptedMouseButtons(Qt.LeftButton | Qt.RightButton)
-        self.setAcceptHoverEvents(True)
-        
-        # Add number label
-        self.text_item = QGraphicsTextItem(str(index), self)
+        # Create text item centered at origin
+        self.text_item = QGraphicsTextItem(str(index))
         font = QFont()
         font.setPointSize(6)
         font.setBold(True)
         self.text_item.setFont(font)
         self.text_item.setDefaultTextColor(Qt.white)
         
-        # Center the text relative to the ellipse center
+        # Center the text
         text_rect = self.text_item.boundingRect()
         self.text_item.setPos(
-            radius - text_rect.width()/2, 
-            radius - text_rect.height()/2
+            -text_rect.width()/2, 
+            -text_rect.height()/2
         )
+        
+        # Add items to the group
+        self.addToGroup(self.ellipse_item)
+        self.addToGroup(self.text_item)
+        
+        # Position the entire group
+        self.setPos(x, y)
+        
+        # Set flags and properties
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.ItemIsSelectable, False)
+        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+        
+        # Enable mouse events for this item
+        self.setAcceptedMouseButtons(Qt.LeftButton | Qt.RightButton)
+        self.setAcceptHoverEvents(True)
         
         # IMPORTANT: Make sure text doesn't interfere with mouse events
         self.text_item.setFlag(QGraphicsItem.ItemIsMovable, False)
         self.text_item.setFlag(QGraphicsItem.ItemIsSelectable, False)
-        self.text_item.setFlag(QGraphicsItem.ItemStacksBehindParent, True)  # Add this
         self.text_item.setAcceptedMouseButtons(Qt.NoButton)
         self.text_item.setAcceptHoverEvents(False)
         
@@ -52,11 +61,10 @@ class BezierNode(QGraphicsEllipseItem):
     def itemChange(self, change, value):
         """Handle position changes"""
         if change == QGraphicsItem.ItemPositionHasChanged:
-            # Notify route graphics about position change - use the center position
+            # Notify route graphics about position change - use the group position
             if hasattr(self, 'route_graphics') and self.route_graphics:
-                # Use the actual scene coordinates instead of the value parameter
-                # The value parameter is relative to parent, but we need scene coordinates
-                scene_pos = self.mapToScene(self.rect().center())
+                # The group position is already the center position
+                scene_pos = self.mapToScene(0, 0)
                 
                 print(f"DEBUG: Node {self.index} moved to scene position: {scene_pos.x()}, {scene_pos.y()}")
                 self.route_graphics.node_moved(self.index, scene_pos.x(), scene_pos.y())
@@ -121,7 +129,7 @@ class ControlHandle(QGraphicsEllipseItem):
         if change == QGraphicsItem.ItemPositionHasChanged:
             # Notify route graphics about control point movement - use the center position
             if hasattr(self, 'route_graphics') and self.route_graphics:
-                # Use the actual scene coordinates instead of the value parameter
+                # Use the actual scene coordinates of the ellipse center
                 scene_pos = self.mapToScene(self.rect().center())
                 
                 self.route_graphics.control_moved(

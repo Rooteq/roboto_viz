@@ -144,14 +144,18 @@ class PlanExecutor(QObject):
     def execute_route_action(self, action):
         """Execute a route navigation action"""
         route_name = action.parameters.get('route_name', action.name)
-        self.status_update.emit(f"Navigating to route: {route_name}")
+        reverse = action.parameters.get('reverse', False)
+        to_dest = not reverse  # If reverse is True, to_dest should be False
+        
+        direction_text = "in reverse" if reverse else "forward"
+        self.status_update.emit(f"Navigating route {route_name} {direction_text}")
         
         # Set waiting state
         self.waiting_for_completion = True
         self.current_action_type = ActionType.ROUTE
         
-        # Emit navigation signal
-        self.start_nav.emit(route_name, True, self.robot_x, self.robot_y)
+        # Emit navigation signal with proper direction
+        self.start_nav.emit(route_name, to_dest, self.robot_x, self.robot_y)
     
     def execute_dock_action(self, action):
         """Execute a dock action"""
