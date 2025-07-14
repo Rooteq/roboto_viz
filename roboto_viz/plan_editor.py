@@ -19,7 +19,7 @@ class RouteSelectionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Add Route Action")
         self.setModal(True)
-        self.resize(300, 150)
+        self.resize(250, 120)  # Smaller dialog size
         
         self.route_name = None
         self.reverse = False
@@ -64,7 +64,7 @@ class DockSelectionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Add Dock Action")
         self.setModal(True)
-        self.resize(300, 120)
+        self.resize(250, 100)  # Smaller dialog size
         
         layout = QVBoxLayout()
         
@@ -112,7 +112,54 @@ class PlanEditor(QMainWindow):
         self.map_view = MapView()
         
         self.setWindowTitle("Plan Editor")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1024, 550)
+        self.showFullScreen()  # Make planner window fullscreen
+        
+        # Apply global font scaling for smaller screens
+        font = self.font()
+        font.setPointSize(8)  # Smaller base font size
+        self.setFont(font)
+        
+        # Apply global scaling to all child widgets
+        self.setStyleSheet("""
+            QWidget {
+                font-size: 8px;
+            }
+            QLabel {
+                font-size: 8px;
+            }
+            QPushButton {
+                font-size: 8px;
+                min-height: 16px;
+                padding: 2px 4px;
+            }
+            QComboBox {
+                font-size: 8px;
+                min-height: 16px;
+            }
+            QListWidget {
+                font-size: 8px;
+            }
+            QLineEdit {
+                font-size: 8px;
+                min-height: 16px;
+            }
+            QTextEdit {
+                font-size: 8px;
+            }
+            QGroupBox {
+                font-size: 8px;
+                font-weight: bold;
+            }
+            QTabWidget {
+                font-size: 8px;
+            }
+            QTabBar::tab {
+                font-size: 8px;
+                min-height: 16px;
+                padding: 2px 4px;
+            }
+        """)
         
         self.setup_ui()
         self.setup_connections()
@@ -138,8 +185,8 @@ class PlanEditor(QMainWindow):
         right_panel = self.create_right_panel()
         splitter.addWidget(right_panel)
         
-        # Set initial splitter proportions
-        splitter.setSizes([300, 900])
+        # Set initial splitter proportions - adjusted for smaller screen
+        splitter.setSizes([250, 774])  # Smaller left panel for 1024 width
     
     def create_left_panel(self) -> QWidget:
         left_widget = QWidget()
@@ -178,7 +225,7 @@ class PlanEditor(QMainWindow):
         # Plan description
         details_layout.addWidget(QLabel("Description:"))
         self.plan_description_edit = QTextEdit()
-        self.plan_description_edit.setMaximumHeight(80)
+        self.plan_description_edit.setMaximumHeight(60)  # Reduced height
         details_layout.addWidget(self.plan_description_edit)
         
         # Map selection
@@ -227,28 +274,6 @@ class PlanEditor(QMainWindow):
         
         # Add stretch to push everything to top
         left_layout.addStretch()
-        
-        # Save plan and exit button at the bottom
-        self.save_plan_btn = QPushButton("Save plan and exit")
-        self.save_plan_btn.setStyleSheet("""
-            QPushButton {
-                font-weight: bold;
-                font-size: 14px;
-                padding: 10px 20px;
-                background-color: #27ae60;
-                color: white;
-                border: 2px solid #2ecc71;
-                border-radius: 5px;
-                min-height: 30px;
-            }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
-            QPushButton:pressed {
-                background-color: #229954;
-            }
-        """)
-        left_layout.addWidget(self.save_plan_btn)
         
         return left_widget
     
@@ -303,6 +328,7 @@ class PlanEditor(QMainWindow):
         # Map section (left side)
         map_section = QWidget()
         map_section_layout = QVBoxLayout(map_section)
+        map_section_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
         map_section_layout.addWidget(self.map_view)
         content_layout.addWidget(map_section, 2)  # Give map more space (weight 2)
         
@@ -311,6 +337,31 @@ class PlanEditor(QMainWindow):
         content_layout.addWidget(routes_docks_section, 1)  # Less space (weight 1)
         
         right_layout.addLayout(content_layout)
+        
+        # Add stretch to push save button to bottom
+        right_layout.addStretch()
+        
+        # Save plan and exit button at the bottom right
+        self.save_plan_btn = QPushButton("Save plan and exit")
+        self.save_plan_btn.setStyleSheet("""
+            QPushButton {
+                font-weight: bold;
+                font-size: 12px;
+                padding: 8px 16px;
+                background-color: #27ae60;
+                color: white;
+                border: 1px solid #2ecc71;
+                border-radius: 4px;
+                min-height: 24px;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #229954;
+            }
+        """)
+        right_layout.addWidget(self.save_plan_btn)
         
         return right_widget
     
@@ -325,7 +376,7 @@ class PlanEditor(QMainWindow):
         
         # Routes list
         self.routes_list = QListWidget()
-        self.routes_list.setMaximumHeight(150)  # Limit height to save space
+        self.routes_list.setMaximumHeight(120)  # Reduced height to save space
         routes_layout.addWidget(self.routes_list)
         
         # Route control buttons
@@ -347,7 +398,7 @@ class PlanEditor(QMainWindow):
         
         # Docks list
         self.docks_list = QListWidget()
-        self.docks_list.setMaximumHeight(150)  # Limit height to save space
+        self.docks_list.setMaximumHeight(120)  # Reduced height to save space
         docks_layout.addWidget(self.docks_list)
         
         # Dock control buttons

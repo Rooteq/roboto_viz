@@ -37,12 +37,12 @@ class ActiveTools(QWidget):
 
         button_style = """
             QPushButton {
-                min-height: 20px;
-                font-size: 14px;
-                padding: 5px 10px;
+                min-height: 12px;
+                font-size: 9px;
+                padding: 2px 4px;
                 font-weight: bold;
-                border: 2px solid #2c3e50;
-                border-radius: 5px;
+                border: 1px solid #2c3e50;
+                border-radius: 3px;
                 background-color: #ecf0f1;
                 color: #2c3e50;
             }
@@ -59,12 +59,12 @@ class ActiveTools(QWidget):
 
         stop_button_style = """
             QPushButton {
-                min-height: 20px;
-                font-size: 14px;
-                padding: 5px 10px;
+                min-height: 12px;
+                font-size: 9px;
+                padding: 2px 4px;
                 font-weight: bold;
-                border: 2px solid #c0392b;
-                border-radius: 5px;
+                border: 1px solid #c0392b;
+                border-radius: 3px;
                 background-color: #e74c3c;
                 color: white;
             }
@@ -80,30 +80,30 @@ class ActiveTools(QWidget):
 
         tab_style = """
             QTabWidget::pane {
-                border: 2px solid #2c3e50;
-                border-radius: 5px;
+                border: 1px solid #2c3e50;
+                border-radius: 3px;
                 background: white;
             }
 
             QTabBar::tab {
                 background: #ecf0f1;
-                border: 2px solid #2c3e50;
+                border: 1px solid #2c3e50;
                 border-bottom: none;
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-                min-width: 120px;
-                min-height: 35px;
-                padding: 5px;
-                margin-right: 2px;
-                font-size: 14px;
+                border-top-left-radius: 3px;
+                border-top-right-radius: 3px;
+                min-width: 60px;
+                min-height: 18px;
+                padding: 2px;
+                margin-right: 1px;
+                font-size: 9px;
                 font-weight: bold;
                 color: #2c3e50;
             }
 
             QTabBar::tab:selected {
                 background: white;
-                margin-bottom: -2px;
-                padding-bottom: 7px;
+                margin-bottom: -1px;
+                padding-bottom: 3px;
             }
 
             QTabBar::tab:hover:!selected {
@@ -120,7 +120,7 @@ class ActiveTools(QWidget):
         operation_tab = QWidget()
         first_layout = QVBoxLayout(operation_tab)
         self.route_list = QListWidget()
-        self.route_list.setFixedHeight(200)
+        self.route_list.setFixedHeight(100)  # Reduced height for smaller screen
         first_layout.addWidget(self.route_list)
         
         # Create button layout for first row
@@ -185,10 +185,10 @@ class ActiveTools(QWidget):
         self.leftButton =QPushButton("←")
         self.rightButton =QPushButton("→")
 
-        self.upButton.setFixedSize(25, 25)
-        self.leftButton.setFixedSize(25, 25)
-        self.downButton.setFixedSize(25, 25)
-        self.rightButton.setFixedSize(25, 25)
+        self.upButton.setFixedSize(18, 18)
+        self.leftButton.setFixedSize(18, 18)
+        self.downButton.setFixedSize(18, 18)
+        self.rightButton.setFixedSize(18, 18)
 
         keys_grid = QGridLayout()
         keys_grid.setSpacing(10)
@@ -246,12 +246,12 @@ class ActiveTools(QWidget):
 
         direction_button_style = """
             QPushButton {
-                min-height: 30px;
-                min-width: 30px;
-                font-size: 20px;
+                min-height: 18px;
+                min-width: 18px;
+                font-size: 12px;
                 font-weight: bold;
-                border: 2px solid #2980b9;
-                border-radius: 5px;
+                border: 1px solid #2980b9;
+                border-radius: 3px;
                 background-color: #3498db;
                 color: white;
             }
@@ -271,24 +271,24 @@ class ActiveTools(QWidget):
         self.rightButton.setStyleSheet(direction_button_style)
         
         # Update fixed sizes for direction buttons
-        self.upButton.setFixedSize(30, 30)
-        self.leftButton.setFixedSize(30, 30)
-        self.downButton.setFixedSize(30, 30)
-        self.rightButton.setFixedSize(30, 30)
+        self.upButton.setFixedSize(18, 18)
+        self.leftButton.setFixedSize(18, 18)
+        self.downButton.setFixedSize(18, 18)
+        self.rightButton.setFixedSize(18, 18)
 
-        # Make the route list font bigger
+        # Make the route list font smaller
         route_list_font = QFont()
-        route_list_font.setPointSize(12)
+        route_list_font.setPointSize(8)
         self.route_list.setFont(route_list_font)
 
-        # Make the map combo box font bigger
+        # Make the map combo box font smaller
         map_combo_font = QFont()
-        map_combo_font.setPointSize(12)
+        map_combo_font.setPointSize(8)
         self.map_combo.setFont(map_combo_font)
 
-        # Make labels bigger
+        # Make labels smaller
         label_font = QFont()
-        label_font.setPointSize(12)
+        label_font.setPointSize(8)
         statusLabel.setFont(label_font)
         map_label.setFont(label_font)
 
@@ -296,14 +296,14 @@ class ActiveTools(QWidget):
         list_style = """
             QListWidget {
                 border: 2px solid #bdc3c7;
-                border-radius: 5px;
-                padding: 5px;
+                border-radius: 4px;
+                padding: 3px;
                 background-color: white;
             }
             QListWidget::item {
-                height: 30px;
+                height: 22px;
                 border-radius: 3px;
-                padding: 5px;
+                padding: 3px;
             }
             QListWidget::item:selected {
                 background-color: #3498db;
@@ -316,16 +316,16 @@ class ActiveTools(QWidget):
         self.route_list.setStyleSheet(list_style)
 
         # Add some vertical spacing between major sections
-        first_layout.setSpacing(10)
-        config_layout.setSpacing(10)
+        first_layout.setSpacing(6)
+        config_layout.setSpacing(6)
 
         # Style the status label
         status_label_style = """
             QLabel {
-                font-size: 14px;
+                font-size: 11px;
                 font-weight: bold;
                 color: #2c3e50;
-                padding: 5px;
+                padding: 3px;
             }
         """
         statusLabel.setStyleSheet(status_label_style)
@@ -477,13 +477,13 @@ class PlanningTools(QWidget):
 
         self.route_name_label = QLabel("Route Name:")
         label_font = QFont()
-        label_font.setPointSize(12)
+        label_font.setPointSize(10)  # Smaller font size
         self.route_name_label.setFont(label_font)
 
         # Instructions
         self.instructions_label = QLabel("Click on map to add nodes.\nDrag nodes to move them.\nDouble-click or right-click nodes to delete.")
         self.instructions_label.setWordWrap(True)
-        self.instructions_label.setStyleSheet("color: #555; font-size: 10px; padding: 10px;")
+        self.instructions_label.setStyleSheet("color: #555; font-size: 8px; padding: 8px;")
 
         self.done_button = QPushButton("Done")
         self.cancel_button = QPushButton("Cancel")
@@ -501,12 +501,12 @@ class PlanningTools(QWidget):
 
         button_style = """
             QPushButton {
-                min-height: 20px;
-                font-size: 14px;
-                padding: 5px 10px;
+                min-height: 16px;
+                font-size: 12px;
+                padding: 4px 8px;
                 font-weight: bold;
-                border: 2px solid #2c3e50;
-                border-radius: 5px;
+                border: 1px solid #2c3e50;
+                border-radius: 4px;
                 background-color: #ecf0f1;
                 color: #2c3e50;
             }
@@ -523,14 +523,14 @@ class PlanningTools(QWidget):
         self.done_button.setStyleSheet(button_style)
         self.cancel_button.setStyleSheet(button_style)
         
-        # Make the route name input bigger
+        # Make the route name input smaller
         route_name_style = """
             QLineEdit {
-                min-height: 40px;
-                font-size: 14px;
-                padding: 5px 10px;
-                border: 2px solid #bdc3c7;
-                border-radius: 5px;
+                min-height: 30px;
+                font-size: 12px;
+                padding: 4px 8px;
+                border: 1px solid #bdc3c7;
+                border-radius: 4px;
                 background-color: white;
             }
         """
@@ -564,7 +564,7 @@ class PlanningTools(QWidget):
 class LEDIndicator(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(32, 32)
+        self.setFixedSize(24, 24)  # Smaller LED size
         self._color = QColor(Qt.green)
         self._flashing = False
         self._flash_state = True
@@ -606,7 +606,7 @@ class LEDIndicator(QWidget):
         else:
             painter.setBrush(self._color)
             
-        painter.drawEllipse(4, 4, 24, 24)
+        painter.drawEllipse(3, 3, 18, 18)  # Adjusted for smaller size
 
 class StatusDisplay(QWidget):
     def __init__(self, parent=None):
@@ -617,7 +617,7 @@ class StatusDisplay(QWidget):
         self.led = LEDIndicator()
         self.status_label = QLabel("Idle")
         font = QFont()
-        font.setPointSize(15)
+        font.setPointSize(12)  # Smaller font size
         font.setBold(True)
         self.status_label.setFont(font)
         # self.status_label.setStyleSheet("font-weight: bold;")

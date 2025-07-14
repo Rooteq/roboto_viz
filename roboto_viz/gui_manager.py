@@ -382,7 +382,7 @@ class ManagerNode(LifecycleNode):
             return
             
         goal_msg = Undock.Goal()
-        goal_msg.rotate_in_place = False
+        goal_msg.rotate_in_place = True
         
         self.get_logger().info('Waiting for undock action server...')
         if self.docking_status_callback:

@@ -77,9 +77,10 @@ class MapView(QGraphicsView):
                 background-color: white;
                 border: 1px solid gray;
                 border-radius: 2px;
-                padding: 5px;
-                min-width: 30px;
-                min-height: 30px;
+                padding: 3px;
+                min-width: 24px;
+                min-height: 24px;
+                font-size: 10px;
             }
             QPushButton:checked {
                 background-color: lightgray;
@@ -94,8 +95,8 @@ class MapView(QGraphicsView):
         button_layout.addWidget(self.zoom_in_btn)
         button_layout.addWidget(self.zoom_out_btn)
         button_layout.addWidget(self.pan_btn)
-        button_layout.setSpacing(5)
-        button_layout.setContentsMargins(5, 5, 5, 5)
+        button_layout.setSpacing(3)  # Reduced spacing
+        button_layout.setContentsMargins(3, 3, 3, 3)  # Reduced margins
         
         # Create container widget for buttons
         button_container = QWidget(self)

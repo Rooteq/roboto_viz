@@ -35,6 +35,8 @@ class ActiveView(QWidget):
         self.stacked_widget.addWidget(self.planning_tools)
 
         self.main_layout = QHBoxLayout()
+        self.main_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
+        self.main_layout.setSpacing(2)  # Reduced spacing
         self.main_layout.addWidget(self.map_view, 3)
         self.main_layout.addWidget(self.stacked_widget, 1)
         self.setLayout(self.main_layout)
@@ -112,12 +114,12 @@ class DisconnectedView(QWidget):
         # Define styles matching the other widgets
         button_style = """
             QPushButton {
-                min-height: 20px;
-                font-size: 14px;
-                padding: 5px 10px;
+                min-height: 16px;
+                font-size: 12px;
+                padding: 4px 8px;
                 font-weight: bold;
-                border: 2px solid #2c3e50;
-                border-radius: 5px;
+                border: 1px solid #2c3e50;
+                border-radius: 4px;
                 background-color: #ecf0f1;
                 color: #2c3e50;
             }
@@ -138,18 +140,18 @@ class DisconnectedView(QWidget):
 
         label_style = """
             QLabel {
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: bold;
                 color: #2c3e50;
-                padding: 5px;
-                min-height: 30px;
+                padding: 3px;
+                min-height: 24px;
             }
         """
 
         # Create layout with proper spacing
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(5)  # Reduced spacing
+        layout.setContentsMargins(10, 10, 10, 10)  # Reduced margins
 
         # Create and style the service state label
         self.service_state = QLabel('Service: Not Available')
@@ -164,7 +166,7 @@ class DisconnectedView(QWidget):
 
         # Set fonts
         font = QFont()
-        font.setPointSize(12)
+        font.setPointSize(10)  # Smaller font size
         self.service_state.setFont(font)
         self.connect_button.setFont(font)
 

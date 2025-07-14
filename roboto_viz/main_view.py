@@ -65,6 +65,52 @@ class MainView(QMainWindow):
         self.setWindowTitle("Robot Control")
         self.setFixedSize(1024, 550)  # Ensure window fits your screen exactly
         self.showFullScreen()
+        
+        # Apply global font scaling for smaller screens
+        font = self.font()
+        font.setPointSize(8)  # Smaller base font size
+        self.setFont(font)
+        
+        # Apply global scaling to all child widgets
+        self.setStyleSheet("""
+            QWidget {
+                font-size: 8px;
+            }
+            QLabel {
+                font-size: 8px;
+            }
+            QPushButton {
+                font-size: 8px;
+                min-height: 16px;
+                padding: 2px 4px;
+            }
+            QComboBox {
+                font-size: 8px;
+                min-height: 16px;
+            }
+            QListWidget {
+                font-size: 8px;
+            }
+            QLineEdit {
+                font-size: 8px;
+                min-height: 16px;
+            }
+            QTextEdit {
+                font-size: 8px;
+            }
+            QGroupBox {
+                font-size: 8px;
+                font-weight: bold;
+            }
+            QTabWidget {
+                font-size: 8px;
+            }
+            QTabBar::tab {
+                font-size: 8px;
+                min-height: 16px;
+                padding: 2px 4px;
+            }
+        """)
 
         # self.setGeometry(100, 100, 300, 200)
         
@@ -93,6 +139,8 @@ class MainView(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
+        self.layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        self.layout.setSpacing(0)  # Remove spacing
         
         self.stacked_widget = QStackedWidget()
         self.layout.addWidget(self.stacked_widget)

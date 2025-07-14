@@ -58,6 +58,8 @@ class PlanActiveView(QWidget):
     def setup_ui(self):
         # Main horizontal layout
         main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
+        main_layout.setSpacing(2)  # Reduced spacing
         
         # Add map view (takes 3/4 of space)
         main_layout.addWidget(self.map_view, 3)

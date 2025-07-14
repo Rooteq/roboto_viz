@@ -43,12 +43,12 @@ class PlanTools(QWidget):
         # Styles
         self.button_style = """
             QPushButton {
-                min-height: 20px;
-                font-size: 14px;
-                padding: 5px 10px;
+                min-height: 16px;
+                font-size: 12px;
+                padding: 4px 8px;
                 font-weight: bold;
-                border: 2px solid #2c3e50;
-                border-radius: 5px;
+                border: 1px solid #2c3e50;
+                border-radius: 4px;
                 background-color: #ecf0f1;
                 color: #2c3e50;
             }
@@ -79,9 +79,9 @@ class PlanTools(QWidget):
         
         # Title
         title_label = QLabel("Robot Plan Control")
-        title_label.setFont(QFont("Arial", 16, QFont.Bold))
+        title_label.setFont(QFont("Arial", 12, QFont.Bold))  # Smaller font
         title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("QLabel { color: #2c3e50; padding: 10px; }")
+        title_label.setStyleSheet("QLabel { color: #2c3e50; padding: 5px; }")  # Reduced padding
         main_layout.addWidget(title_label)
         
         # Create tab widget
@@ -107,18 +107,18 @@ class PlanTools(QWidget):
         
         # Current plan display
         self.current_plan_label = QLabel("No plan selected")
-        self.current_plan_label.setFont(QFont("Arial", 12, QFont.Bold))
-        self.current_plan_label.setStyleSheet("QLabel { color: #2c3e50; padding: 5px; }")
+        self.current_plan_label.setFont(QFont("Arial", 10, QFont.Bold))  # Smaller font
+        self.current_plan_label.setStyleSheet("QLabel { color: #2c3e50; padding: 3px; }")  # Reduced padding
         status_layout.addWidget(self.current_plan_label)
         
         # Current action display
         self.current_action_label = QLabel("No action")
-        self.current_action_label.setStyleSheet("QLabel { color: #7f8c8d; padding: 5px; }")
+        self.current_action_label.setStyleSheet("QLabel { color: #7f8c8d; padding: 3px; }")  # Reduced padding
         status_layout.addWidget(self.current_action_label)
         
         # Execution status
         self.execution_status_label = QLabel("")
-        self.execution_status_label.setStyleSheet("QLabel { color: #27ae60; padding: 5px; font-weight: bold; }")
+        self.execution_status_label.setStyleSheet("QLabel { color: #27ae60; padding: 3px; font-weight: bold; }")  # Reduced padding
         self.execution_status_label.setVisible(False)
         status_layout.addWidget(self.execution_status_label)
         
@@ -159,7 +159,7 @@ class PlanTools(QWidget):
         robot_layout = QVBoxLayout(robot_group)
         
         self.robot_status_label = QLabel("Status: Unknown")
-        self.robot_status_label.setStyleSheet("QLabel { color: #7f8c8d; padding: 5px; }")
+        self.robot_status_label.setStyleSheet("QLabel { color: #7f8c8d; padding: 3px; }")  # Reduced padding
         robot_layout.addWidget(self.robot_status_label)
         
         layout.addWidget(robot_group)
@@ -172,12 +172,12 @@ class PlanTools(QWidget):
         self.signal_btn = QPushButton("SIGNAL")
         self.signal_btn.setStyleSheet("""
             QPushButton {
-                min-height: 35px;
-                font-size: 18px;
-                padding: 10px 20px;
+                min-height: 28px;
+                font-size: 14px;
+                padding: 8px 16px;
                 font-weight: bold;
-                border: 2px solid #3498db;
-                border-radius: 8px;
+                border: 1px solid #3498db;
+                border-radius: 6px;
                 background-color: #5dade2;
                 color: white;
             }
@@ -197,12 +197,12 @@ class PlanTools(QWidget):
         self.start_btn = QPushButton("START")
         self.start_btn.setStyleSheet("""
             QPushButton {
-                min-height: 35px;
-                font-size: 18px;
-                padding: 10px 20px;
+                min-height: 28px;
+                font-size: 14px;
+                padding: 8px 16px;
                 font-weight: bold;
-                border: 2px solid #27ae60;
-                border-radius: 8px;
+                border: 1px solid #27ae60;
+                border-radius: 6px;
                 background-color: #2ecc71;
                 color: white;
             }
@@ -226,12 +226,12 @@ class PlanTools(QWidget):
         self.stop_btn = QPushButton("STOP")
         self.stop_btn.setStyleSheet("""
             QPushButton {
-                min-height: 35px;
-                font-size: 18px;
-                padding: 10px 20px;
+                min-height: 28px;
+                font-size: 14px;
+                padding: 8px 16px;
                 font-weight: bold;
-                border: 2px solid #c0392b;
-                border-radius: 8px;
+                border: 1px solid #c0392b;
+                border-radius: 6px;
                 background-color: #e74c3c;
                 color: white;
             }
@@ -292,7 +292,7 @@ class PlanTools(QWidget):
         
         for btn in [self.up_btn, self.down_btn, self.left_btn, self.right_btn]:
             btn.setStyleSheet(self.button_style)
-            btn.setMinimumSize(50, 50)
+            btn.setMinimumSize(40, 40)  # Smaller buttons
         
         manual_layout.addWidget(self.up_btn, 1, 1)
         manual_layout.addWidget(self.left_btn, 2, 0)
