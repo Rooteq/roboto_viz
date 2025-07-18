@@ -52,6 +52,7 @@ class ManagerNode(LifecycleNode):
         self.dock_action_client = None
         self.undock_action_client = None
         self.current_dock_goal_handle = None
+        self.current_undock_goal_handle = None
         
         #CALLBACKS: 
         self.service_availability_callback = None
@@ -391,7 +392,8 @@ class ManagerNode(LifecycleNode):
         # Check if server is available, then send goal
         if self.undock_action_client.wait_for_server(timeout_sec=5.0):
             self.get_logger().info('Sending undock goal...')
-            send_goal_future = self.undock_action_client.send_goal_async(goal_msg)
+            send_goal_future = self.undock_action_client.send_goal_async(
+                goal_msg, feedback_callback=self._undock_feedback_callback)
             send_goal_future.add_done_callback(self._undock_goal_response_callback)
         else:
             self.get_logger().error('Undock action server not available')
@@ -409,6 +411,8 @@ class ManagerNode(LifecycleNode):
                 return
 
             self.get_logger().info('Undock goal accepted')
+            # Store the goal handle for potential cancellation
+            self.current_undock_goal_handle = goal_handle
             get_result_future = goal_handle.get_result_async()
             get_result_future.add_done_callback(self._undock_result_callback)
         except Exception as e:
@@ -421,10 +425,17 @@ class ManagerNode(LifecycleNode):
         try:
             result = future.result().result
             status = future.result().status
+            # Clear the goal handle since undocking is complete
+            self.current_undock_goal_handle = None
+            
             if status == GoalStatus.STATUS_SUCCEEDED:
                 self.get_logger().info(f'Undocking succeeded! Undocked: {result.undocked}')
                 if self.docking_status_callback:
                     self.docking_status_callback("Undocked" if result.undocked else "Undock Failed")
+            elif status == GoalStatus.STATUS_CANCELED:
+                self.get_logger().info('Undocking was cancelled')
+                if self.docking_status_callback:
+                    self.docking_status_callback("Undock Cancelled")
             else:
                 self.get_logger().info('Undocking failed')
                 if self.docking_status_callback:
@@ -433,6 +444,51 @@ class ManagerNode(LifecycleNode):
             self.get_logger().error(f'Error in undock result: {e}')
             if self.docking_status_callback:
                 self.docking_status_callback("Undock Error")
+
+    def _undock_feedback_callback(self, feedback_msg):
+        """Handle undock feedback"""
+        try:
+            feedback = feedback_msg.feedback
+            # Log undock feedback updates if needed
+            # self.get_logger().info(f'Undocking feedback: {feedback}')
+        except Exception as e:
+            self.get_logger().error(f'Error in undock feedback: {e}')
+
+    def cancel_undock_goal(self):
+        """Cancel any ongoing undocking operation"""
+        if self.current_undock_goal_handle is not None:
+            try:
+                # Cancel the specific goal handle
+                cancel_future = self.current_undock_goal_handle.cancel_goal_async()
+                cancel_future.add_done_callback(self._undock_cancel_callback)
+                self.get_logger().info('Sent cancellation request for undocking operation')
+                # The result callback will handle the "Undock Cancelled" status when cancellation completes
+            except Exception as e:
+                self.get_logger().error(f"Error cancelling undock goal: {e}")
+                # Still emit cancelled status in case of error
+                if self.docking_status_callback:
+                    self.docking_status_callback("Undock Cancelled")
+        else:
+            # No active undocking goal to cancel
+            self.get_logger().info("No active undocking operation to cancel")
+            if self.docking_status_callback:
+                self.docking_status_callback("Undock Cancelled")
+
+    def _undock_cancel_callback(self, future):
+        """Handle undock cancellation response"""
+        try:
+            cancel_response = future.result()
+            if cancel_response.return_code == 0:  # SUCCESS
+                self.get_logger().info('Undocking cancellation accepted by server')
+            else:
+                self.get_logger().warning(f'Undocking cancellation rejected by server: {cancel_response.return_code}')
+                # Still emit cancelled status for UI feedback
+                if self.docking_status_callback:
+                    self.docking_status_callback("Undock Cancelled")
+        except Exception as e:
+            self.get_logger().error(f'Error in undock cancel callback: {e}')
+            if self.docking_status_callback:
+                self.docking_status_callback("Undock Cancelled")
         
 class NavData(QObject):
     def __init__(self):
@@ -763,6 +819,12 @@ class GuiManager(QThread):
         if self.node:
             self.node.send_undock_goal()
 
+    @pyqtSlot()
+    def cancel_undocking(self):
+        """Slot to cancel any ongoing undocking operation"""
+        if self.node:
+            self.node.cancel_undock_goal()
+
     def run(self):
         self.node = ManagerNode()
         self.executor.add_node(self.node)
@@ -808,10 +870,12 @@ class GuiManager(QThread):
 
     @pyqtSlot()
     def stop_nav(self):
-        """Stop navigation and cancel any ongoing docking operations"""
+        """Stop navigation and cancel any ongoing docking/undocking operations"""
         self.navigator.stop()
         # Also cancel any ongoing docking operations
         self.cancel_docking()
+        # Also cancel any ongoing undocking operations
+        self.cancel_undocking()
     
     @pyqtSlot(str)
     def handle_start_plan_execution(self, plan_name: str):
