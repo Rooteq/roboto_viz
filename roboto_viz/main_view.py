@@ -183,7 +183,7 @@ class MainView(QMainWindow):
             self.current_yaml_path = yaml_path
             
             # Load the map into the view
-            self.map_view.load_image(str(map_path), yaml_data['origin'])
+            self.map_view.load_image(str(map_path), yaml_data['origin'], yaml_data.get('resolution'))
             
             # Notify navigation system about map change
             self.map_changed_signal.emit(map_name)

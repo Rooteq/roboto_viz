@@ -125,16 +125,30 @@ class MapView(QGraphicsView):
         self.speed_zone_editing_mode = False
         self.speed_zone_editor = None
         self.last_draw_position = None
+        
+        # Grid overlay variables
+        self.grid_items = []
+        self.map_resolution = None  # meters per pixel
+        self.grid_visible = False
+        self.min_zoom_for_grid = 0.8  # Hide grid when zoomed out below this level
 
-    def load_image(self, image_path, origin_data):
+    def load_image(self, image_path, origin_data, resolution=None):
         print(f"DEBUG: Loading new map: {image_path}")
         
         # Clear any existing route graphics first (force clear even in editing mode)
         self.clear_route(force=True)
         
+        # Clear existing grid
+        self.clear_grid()
+        
         # Update map origin and current map path
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
         self.current_map_path = image_path
+        
+        # Store map resolution if provided
+        if resolution is not None:
+            self.map_resolution = resolution
+            print(f"DEBUG: Map resolution: {self.map_resolution} meters/pixel")
 
         # Load new pixmap
         self.pixmap = QPixmap(image_path)
@@ -149,6 +163,9 @@ class MapView(QGraphicsView):
         
         # Update scene rectangle to match new image
         self.scene.setSceneRect(QRectF(self.pixmap.rect()))
+        
+        # Create grid overlay
+        self.create_grid()
         
         # Force scene update
         self.scene.update()
@@ -368,6 +385,9 @@ class MapView(QGraphicsView):
         # Move scene to keep mouse position fixed
         delta = newPos - oldPos
         self.translate(delta.x(), delta.y())
+        
+        # Update grid visibility based on new zoom level
+        self.update_grid_visibility()
                 
         # Accept the event to prevent it from being propagated
         event.accept()
@@ -495,6 +515,7 @@ class MapView(QGraphicsView):
         """Zoom in by the zoom factor"""
         self.scale(self.zoom_factor, self.zoom_factor)
         self.current_zoom *= self.zoom_factor
+        self.update_grid_visibility()
         
     def zoom_out(self):
         """Zoom out by the zoom factor"""
@@ -502,6 +523,7 @@ class MapView(QGraphicsView):
         if new_zoom >= self.min_zoom:
             self.scale(1/self.zoom_factor, 1/self.zoom_factor)
             self.current_zoom = new_zoom
+            self.update_grid_visibility()
             
     def toggle_pan_mode(self):
         """Toggle panning mode for left mouse button"""
@@ -759,3 +781,77 @@ class MapView(QGraphicsView):
     def set_current_map_path(self, map_path: str):
         """Set the current map path for reloading"""
         self.current_map_path = map_path
+    
+    # Grid overlay methods
+    def create_grid(self):
+        """Create grid overlay based on map resolution"""
+        print(f"DEBUG: create_grid called - resolution: {self.map_resolution}, has_pixmap: {self.pixmap is not None}")
+        
+        if not self.map_resolution or not self.pixmap:
+            print(f"DEBUG: Cannot create grid - missing resolution or pixmap")
+            return
+        
+        # Clear existing grid
+        self.clear_grid()
+        
+        # Calculate grid spacing in pixels for 50cm (0.5m) grid
+        grid_spacing_meters = 0.5  # 50cm
+        grid_spacing_pixels = grid_spacing_meters / self.map_resolution
+        
+        print(f"DEBUG: Grid spacing: {grid_spacing_pixels:.2f} pixels for {grid_spacing_meters}m at {self.map_resolution:.6f} m/pixel")
+        
+        # Get map dimensions
+        map_width = self.pixmap.width()
+        map_height = self.pixmap.height()
+        
+        print(f"DEBUG: Map dimensions: {map_width}x{map_height} pixels")
+        
+        # Create vertical grid lines
+        x = 0
+        while x <= map_width:
+            line = QGraphicsLineItem(x, 0, x, map_height)
+            pen = QPen(QColor(128, 128, 128))  # Light grey, solid
+            pen.setWidth(0)  # Cosmetic pen - thin lines
+            line.setPen(pen)
+            line.setZValue(1)  # Above map but below other elements
+            self.scene.addItem(line)
+            self.grid_items.append(line)
+            x += grid_spacing_pixels
+        
+        # Create horizontal grid lines
+        y = 0
+        while y <= map_height:
+            line = QGraphicsLineItem(0, y, map_width, y)
+            pen = QPen(QColor(128, 128, 128))  # Light grey, solid
+            pen.setWidth(0)  # Cosmetic pen - thin lines
+            line.setPen(pen)
+            line.setZValue(1)  # Above map but below other elements
+            self.scene.addItem(line)
+            self.grid_items.append(line)
+            y += grid_spacing_pixels
+        
+        # Update grid visibility based on current zoom
+        self.update_grid_visibility()
+        
+        print(f"DEBUG: Created grid with {len(self.grid_items)} lines, spacing: {grid_spacing_pixels:.2f} pixels")
+    
+    def clear_grid(self):
+        """Remove all grid lines from the scene"""
+        for item in self.grid_items:
+            self.scene.removeItem(item)
+        self.grid_items.clear()
+    
+    def update_grid_visibility(self):
+        """Update grid visibility based on zoom level"""
+        should_show_grid = (len(self.grid_items) > 0 and 
+                           self.current_zoom >= self.min_zoom_for_grid)
+        
+        if should_show_grid != self.grid_visible:
+            self.grid_visible = should_show_grid
+            for item in self.grid_items:
+                item.setVisible(self.grid_visible)
+            
+            if self.grid_visible:
+                print(f"DEBUG: Grid shown at zoom {self.current_zoom:.2f}")
+            else:
+                print(f"DEBUG: Grid hidden at zoom {self.current_zoom:.2f}")

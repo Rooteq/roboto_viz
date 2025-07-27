@@ -769,7 +769,7 @@ class PlanEditor(QMainWindow):
                 yaml_data = yaml.safe_load(file)
             
             # Always load original map in plan view (not speed_ version)
-            self.map_view.load_image(str(map_path), yaml_data['origin'])
+            self.map_view.load_image(str(map_path), yaml_data['origin'], yaml_data.get('resolution'))
             # Initialize dock graphics after map is loaded
             self.map_view.init_dock_graphics(self.dock_manager)
             # Refresh routes and docks lists after map is loaded
@@ -1254,7 +1254,7 @@ class PlanEditor(QMainWindow):
             try:
                 with open(speed_yaml_path, 'r') as file:
                     yaml_data = yaml.safe_load(file)
-                self.map_view.load_image(str(speed_map_path), yaml_data['origin'])
+                self.map_view.load_image(str(speed_map_path), yaml_data['origin'], yaml_data.get('resolution'))
                 print(f"DEBUG: Loaded speed_ prefixed map for editing: {speed_map_path}")
             except Exception as e:
                 print(f"Error loading speed map: {e}")
@@ -1319,7 +1319,7 @@ class PlanEditor(QMainWindow):
                 
                 with open(speed_yaml_path, 'r') as file:
                     yaml_data = yaml.safe_load(file)
-                self.map_view.load_image(str(speed_map_path), yaml_data['origin'])
+                self.map_view.load_image(str(speed_map_path), yaml_data['origin'], yaml_data.get('resolution'))
                 print(f"DEBUG: Successfully reloaded speed map")
             except Exception as e:
                 print(f"Error reloading speed map: {e}")
