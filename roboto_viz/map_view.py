@@ -120,6 +120,11 @@ class MapView(QGraphicsView):
         self.pending_dock_name = None
         self.dock_editing_mode = False
         self.editing_dock_name = None
+        
+        # Speed zone editing variables
+        self.speed_zone_editing_mode = False
+        self.speed_zone_editor = None
+        self.last_draw_position = None
 
     def load_image(self, image_path, origin_data):
         print(f"DEBUG: Loading new map: {image_path}")
@@ -127,8 +132,9 @@ class MapView(QGraphicsView):
         # Clear any existing route graphics first (force clear even in editing mode)
         self.clear_route(force=True)
         
-        # Update map origin
+        # Update map origin and current map path
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
+        self.current_map_path = image_path
 
         # Load new pixmap
         self.pixmap = QPixmap(image_path)
@@ -204,6 +210,14 @@ class MapView(QGraphicsView):
             super().mousePressEvent(event)
             return
             
+        # Handle speed zone editing mode first
+        if (event.button() == Qt.LeftButton and self.speed_zone_editing_mode and 
+            not self.left_pan_mode and self.speed_zone_editor and 
+            self.speed_zone_editor.drawing_enabled):
+            scene_pos = self.mapToScene(event.pos())
+            self.speed_zone_editor.start_box_drawing(scene_pos.x(), scene_pos.y())
+            return
+        
         # Handle dock placement mode first (independent of drawing mode)
         if event.button() == Qt.LeftButton and self.dock_placement_mode and not self.left_pan_mode:
             scene_pos = self.mapToScene(event.pos())
@@ -259,6 +273,13 @@ class MapView(QGraphicsView):
             super().mouseMoveEvent(fake_event)
             return
             
+        # Handle speed zone editing mode for box dragging
+        if (self.speed_zone_editing_mode and self.speed_zone_editor and 
+            self.speed_zone_editor.drawing_enabled and self.speed_zone_editor.drawing_box):
+            scene_pos = self.mapToScene(event.pos())
+            self.speed_zone_editor.update_box_drawing(scene_pos.x(), scene_pos.y())
+            return
+        
         # In editing mode, allow item dragging to work properly
         if self.editing_mode:
             super().mouseMoveEvent(event)
@@ -286,6 +307,13 @@ class MapView(QGraphicsView):
                 super().mouseReleaseEvent(event)
             return
             
+        # Handle speed zone editing mode
+        if (event.button() == Qt.LeftButton and self.speed_zone_editing_mode and 
+            self.speed_zone_editor and self.speed_zone_editor.drawing_enabled):
+            scene_pos = self.mapToScene(event.pos())
+            self.speed_zone_editor.finish_box_drawing(scene_pos.x(), scene_pos.y())
+            return
+        
         # In editing mode, let items handle the release event
         if self.editing_mode:
             super().mouseReleaseEvent(event)
@@ -689,3 +717,45 @@ class MapView(QGraphicsView):
                 self.dock_graphics_manager.cancel_temporary_dock(self.editing_dock_name)
         
         self.stop_dock_editing()
+    
+    # Speed zone editing methods
+    def start_speed_zone_editing(self, speed_zone_editor):
+        """Start speed zone editing mode"""
+        self.speed_zone_editing_mode = True
+        self.speed_zone_editor = speed_zone_editor
+        self.enable_drawing = True
+        print(f"DEBUG: Started speed zone editing mode")
+        
+    def stop_speed_zone_editing(self):
+        """Stop speed zone editing mode"""
+        print(f"DEBUG: Stopping speed zone editing mode")
+        
+        # Cancel any ongoing box drawing
+        if self.speed_zone_editor and self.speed_zone_editor.drawing_box:
+            self.speed_zone_editor.cancel_box_drawing()
+        
+        # Clear all speed zone editing state
+        self.speed_zone_editing_mode = False
+        self.speed_zone_editor = None
+        self.last_draw_position = None
+        self.enable_drawing = False
+        
+        print(f"DEBUG: Speed zone editing mode stopped")
+        
+    def reload_current_map(self):
+        """Reload the current map image (for when speed zones are updated)"""
+        if hasattr(self, 'current_map_path') and self.current_map_path:
+            try:
+                # Reload the pixmap from file
+                new_pixmap = QPixmap(self.current_map_path)
+                if self.image_item:
+                    self.image_item.setPixmap(new_pixmap)
+                    self.pixmap = new_pixmap
+                    self.scene.update()
+                    print(f"DEBUG: Reloaded map image")
+            except Exception as e:
+                print(f"DEBUG: Error reloading map: {e}")
+                
+    def set_current_map_path(self, map_path: str):
+        """Set the current map path for reloading"""
+        self.current_map_path = map_path

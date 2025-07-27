@@ -10,6 +10,7 @@ from roboto_viz.plan_manager import PlanManager, ExecutionPlan, PlanAction, Acti
 from roboto_viz.route_manager import RouteManager, BezierRoute
 from roboto_viz.dock_manager import DockManager, Dock
 from roboto_viz.map_view import MapView
+from roboto_viz.speed_zone_editor import SpeedZoneEditor
 
 
 class WaitActionDialog(QDialog):
@@ -168,6 +169,10 @@ class PlanEditor(QMainWindow):
         
         # Create a new map view for the editor
         self.map_view = MapView()
+        
+        # Create speed zone editor (will be shown as popup)
+        self.speed_zone_editor = None
+        self.speed_zone_window = None
         
         self.setWindowTitle("Plan Editor")
         self.setGeometry(100, 100, 1024, 550)
@@ -375,9 +380,10 @@ class PlanEditor(QMainWindow):
         map_controls_layout.addWidget(self.dock_editing_widget)
         self.dock_editing_widget.setVisible(False)  # Initially hidden
         
+        
         right_layout.addLayout(map_controls_layout)
         
-        # Create horizontal layout for map and routes/docks sections
+        # Create horizontal layout for map and side panels
         content_layout = QHBoxLayout()
         
         # Map section (left side)
@@ -389,7 +395,7 @@ class PlanEditor(QMainWindow):
         
         # Routes and Docks section (right side)
         routes_docks_section = self.create_routes_docks_section()
-        content_layout.addWidget(routes_docks_section, 1)  # Less space (weight 1)
+        content_layout.addWidget(routes_docks_section, 1)  # Less space than map (weight 1)
         
         right_layout.addLayout(content_layout)
         
@@ -443,6 +449,28 @@ class PlanEditor(QMainWindow):
         docks_layout.addLayout(dock_buttons_layout)
         
         section_layout.addWidget(docks_group)
+        
+        # Edit Speed Zones button
+        self.edit_speed_zones_btn = QPushButton("Edit Speed Zones")
+        self.edit_speed_zones_btn.setStyleSheet("""
+            QPushButton {
+                font-weight: bold;
+                font-size: 10px;
+                padding: 6px 12px;
+                background-color: #3498db;
+                color: white;
+                border: 1px solid #2980b9;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+        """)
+        section_layout.addWidget(self.edit_speed_zones_btn)
         
         # Save plan and exit button
         self.save_plan_btn = QPushButton("Save plan and exit")
@@ -519,6 +547,9 @@ class PlanEditor(QMainWindow):
         
         # Map view connections
         self.map_view.dock_placed.connect(self.on_dock_placed)
+        
+        # Speed zone editor connections
+        self.edit_speed_zones_btn.clicked.connect(self.start_speed_zone_editing)
     
     def refresh_plan_list(self):
         self.plan_list.clear()
@@ -540,29 +571,54 @@ class PlanEditor(QMainWindow):
     
     def on_plan_selected(self, item: QListWidgetItem):
         plan_name = item.text()
+        print(f"DEBUG: Plan selected: {plan_name}")
         self.current_plan = self.plan_manager.get_plan(plan_name)
         if self.current_plan:
+            print(f"DEBUG: Current plan map_name: '{self.current_plan.map_name}'")
             self.load_plan_details()
             self.refresh_actions_list()
             self.plan_selected.emit(plan_name)
+        else:
+            print(f"DEBUG: Failed to get plan: {plan_name}")
     
     def load_plan_details(self):
         if not self.current_plan:
+            print(f"DEBUG: load_plan_details - no current plan")
             return
+        
+        print(f"DEBUG: load_plan_details for plan '{self.current_plan.name}' with map '{self.current_plan.map_name}'")
         
         self.plan_name_edit.setText(self.current_plan.name)
         
         # Refresh maps and select current
         self.refresh_map_list()
         if self.current_plan.map_name:
+            print(f"DEBUG: Plan has assigned map: '{self.current_plan.map_name}'")
             index = self.map_combo.findText(self.current_plan.map_name)
+            print(f"DEBUG: Map combo index for '{self.current_plan.map_name}': {index}")
             if index >= 0:
+                # Temporarily disconnect signal to avoid triggering on_map_changed
+                try:
+                    self.map_combo.currentTextChanged.disconnect(self.on_map_changed)
+                except TypeError:
+                    # Signal might not be connected yet
+                    pass
                 self.map_combo.setCurrentIndex(index)
-                # Load routes for this map
+                # Reconnect signal
+                self.map_combo.currentTextChanged.connect(self.on_map_changed)
+                
+                # Load routes and docks for this map
                 self.route_manager.set_current_map(self.current_plan.map_name)
+                self.dock_manager.set_current_map(self.current_plan.map_name)
                 self.refresh_routes_list()
-                # Auto-load the map
+                self.refresh_docks_list()
+                # Auto-load the map assigned to this plan
                 self.load_selected_map(show_success_dialog=False)
+                print(f"DEBUG: Auto-loaded map '{self.current_plan.map_name}' for plan '{self.current_plan.name}'")
+            else:
+                print(f"DEBUG: Map '{self.current_plan.map_name}' not found in combo box")
+        else:
+            print(f"DEBUG: Plan '{self.current_plan.name}' has no assigned map")
     
     def refresh_actions_list(self):
         self.actions_list.clear()
@@ -672,6 +728,7 @@ class PlanEditor(QMainWindow):
     
     def load_selected_map(self, show_success_dialog=True):
         map_name = self.map_combo.currentText()
+        print(f"DEBUG: load_selected_map called with map_name: '{map_name}', show_success_dialog: {show_success_dialog}")
         if not map_name:
             if show_success_dialog:
                 QMessageBox.warning(self, "Warning", "Please select a map first!")
@@ -684,6 +741,7 @@ class PlanEditor(QMainWindow):
         # Load the map in the editor's map view
         from pathlib import Path
         import yaml
+        import shutil
         
         maps_dir = Path.home() / ".robotroutes" / "maps"
         map_path = maps_dir / f"{map_name}.pgm"
@@ -695,15 +753,41 @@ class PlanEditor(QMainWindow):
                     QMessageBox.warning(self, "Error", f"Map files not found for '{map_name}'!")
                 return
             
+            # Create speed_ prefixed copy if it doesn't exist
+            speed_map_path = maps_dir / f"speed_{map_name}.pgm"
+            speed_yaml_path = maps_dir / f"speed_{map_name}.yaml"
+            
+            if not speed_map_path.exists():
+                shutil.copy2(map_path, speed_map_path)
+                print(f"DEBUG: Created speed map copy: {speed_map_path}")
+            
+            if not speed_yaml_path.exists():
+                shutil.copy2(yaml_path, speed_yaml_path)
+                print(f"DEBUG: Created speed yaml copy: {speed_yaml_path}")
+            
             with open(yaml_path, 'r') as file:
                 yaml_data = yaml.safe_load(file)
             
+            # Always load original map in plan view (not speed_ version)
             self.map_view.load_image(str(map_path), yaml_data['origin'])
             # Initialize dock graphics after map is loaded
             self.map_view.init_dock_graphics(self.dock_manager)
             # Refresh routes and docks lists after map is loaded
             self.refresh_routes_list()
             self.refresh_docks_list()
+            
+            # Assign this map to the current plan
+            if self.current_plan:
+                if self.current_plan.map_name != map_name:
+                    old_map = self.current_plan.map_name
+                    self.current_plan.map_name = map_name
+                    print(f"DEBUG: Assigned map '{map_name}' to plan '{self.current_plan.name}' (was: '{old_map}')")
+                    # Save the plan to persist the map assignment
+                    success = self.plan_manager.update_plan(self.current_plan)
+                    print(f"DEBUG: Plan update success: {success}")
+                else:
+                    print(f"DEBUG: Map '{map_name}' already assigned to plan '{self.current_plan.name}'")
+            
             if show_success_dialog:
                 QMessageBox.information(self, "Success", f"Map '{map_name}' loaded successfully!")
             
@@ -1106,3 +1190,138 @@ class PlanEditor(QMainWindow):
             self.dock_editing_widget.setVisible(False)
             self.editing_dock_name = None
             QMessageBox.information(self, "Cancelled", "Dock editing cancelled.")
+    
+    # Speed zone editing methods
+    def start_speed_zone_editing(self):
+        """Start speed zone editing mode with popup window"""
+        print(f"DEBUG: start_speed_zone_editing called")
+        map_name = self.map_combo.currentText()
+        print(f"DEBUG: Current map name: {map_name}")
+        if not map_name:
+            QMessageBox.warning(self, "Warning", "Please select and load a map first!")
+            return
+            
+        # Create speed zone editor if it doesn't exist
+        if not self.speed_zone_editor:
+            self.speed_zone_editor = SpeedZoneEditor()
+            # Connect signals
+            self.speed_zone_editor.speed_zone_updated.connect(self.on_speed_zone_updated)
+            self.speed_zone_editor.editing_finished.connect(self.stop_speed_zone_editing)
+            print(f"DEBUG: Connected speed zone editor signals")
+            
+        # Ensure speed_ prefixed maps exist before loading in editor
+        from pathlib import Path
+        import shutil
+        maps_dir = Path.home() / ".robotroutes" / "maps"
+        map_path = maps_dir / f"{map_name}.pgm"
+        yaml_path = maps_dir / f"{map_name}.yaml"
+        speed_map_path = maps_dir / f"speed_{map_name}.pgm"
+        speed_yaml_path = maps_dir / f"speed_{map_name}.yaml"
+        
+        # Create speed_ prefixed copies if they don't exist
+        if not speed_map_path.exists() and map_path.exists():
+            shutil.copy2(map_path, speed_map_path)
+            print(f"DEBUG: Created speed map copy: {speed_map_path}")
+        
+        if not speed_yaml_path.exists() and yaml_path.exists():
+            shutil.copy2(yaml_path, speed_yaml_path)
+            print(f"DEBUG: Created speed yaml copy: {speed_yaml_path}")
+        
+        # Load the map in the speed zone editor
+        print(f"DEBUG: Loading map in speed zone editor")
+        if self.speed_zone_editor.load_map(map_name):
+            print(f"DEBUG: Map loaded successfully, creating popup window")
+            # Create popup window for speed zone editor
+            if not self.speed_zone_window:
+                print(f"DEBUG: Creating new speed zone window")
+                from PyQt5.QtWidgets import QDialog, QVBoxLayout
+                self.speed_zone_window = QDialog(self)
+                self.speed_zone_window.setWindowTitle("Speed Zone Editor")
+                self.speed_zone_window.setModal(False)  # Non-modal so user can interact with map
+                self.speed_zone_window.resize(300, 400)
+                
+                layout = QVBoxLayout(self.speed_zone_window)
+                layout.addWidget(self.speed_zone_editor)
+                
+                # Handle window close event
+                self.speed_zone_window.closeEvent = self.on_speed_zone_window_close
+                
+            # Load speed_ prefixed map in map view for editing
+            import yaml
+            speed_map_path = maps_dir / f"speed_{map_name}.pgm"
+            speed_yaml_path = maps_dir / f"speed_{map_name}.yaml"
+            
+            try:
+                with open(speed_yaml_path, 'r') as file:
+                    yaml_data = yaml.safe_load(file)
+                self.map_view.load_image(str(speed_map_path), yaml_data['origin'])
+                print(f"DEBUG: Loaded speed_ prefixed map for editing: {speed_map_path}")
+            except Exception as e:
+                print(f"Error loading speed map: {e}")
+            
+            # Start speed zone editing mode in map view
+            self.map_view.start_speed_zone_editing(self.speed_zone_editor)
+            
+            # Hide other editing controls
+            self.route_editing_widget.setVisible(False)
+            self.dock_editing_widget.setVisible(False)
+            
+            # Update button state
+            self.edit_speed_zones_btn.setEnabled(False)
+            
+            # Show the speed zone editor window
+            print(f"DEBUG: Showing speed zone window")
+            self.speed_zone_window.show()
+            print(f"DEBUG: Speed zone window shown")
+            
+        else:
+            print(f"DEBUG: Failed to load map in speed zone editor")
+            QMessageBox.warning(self, "Error", "Failed to load map for speed zone editing!")
+    
+    def stop_speed_zone_editing(self):
+        """Stop speed zone editing mode"""
+        # Stop speed zone editing mode in map view first
+        self.map_view.stop_speed_zone_editing()
+        
+        # Clean up speed zone editor state (removes working files)
+        if self.speed_zone_editor:
+            self.speed_zone_editor.cleanup_editing()
+        
+        # Hide the speed zone editor window
+        if self.speed_zone_window:
+            self.speed_zone_window.hide()
+            
+        # Update button state
+        self.edit_speed_zones_btn.setEnabled(True)
+        
+        # Reload original map to show clean version without speed zones
+        self.load_selected_map(show_success_dialog=False)
+    
+    def on_speed_zone_window_close(self, event):
+        """Handle speed zone window close event"""
+        self.stop_speed_zone_editing()
+        event.accept()
+    
+    def on_speed_zone_updated(self):
+        """Handle speed zone updates during editing"""
+        print(f"DEBUG: on_speed_zone_updated called")
+        # Reload speed_ prefixed map to show updated speed zones
+        if self.speed_zone_editor and self.speed_zone_editor.map_name:
+            from pathlib import Path
+            map_name = self.speed_zone_editor.map_name
+            maps_dir = Path.home() / ".robotroutes" / "maps"
+            speed_map_path = maps_dir / f"speed_{map_name}.pgm"
+            speed_yaml_path = maps_dir / f"speed_{map_name}.yaml"
+            
+            print(f"DEBUG: Reloading speed map: {speed_map_path}")
+            try:
+                import yaml
+                
+                with open(speed_yaml_path, 'r') as file:
+                    yaml_data = yaml.safe_load(file)
+                self.map_view.load_image(str(speed_map_path), yaml_data['origin'])
+                print(f"DEBUG: Successfully reloaded speed map")
+            except Exception as e:
+                print(f"Error reloading speed map: {e}")
+        else:
+            print(f"DEBUG: No map name available for reload")

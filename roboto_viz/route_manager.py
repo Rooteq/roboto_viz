@@ -524,9 +524,13 @@ class RouteManager:
             # Extract just the map names (without path and extension)
             map_names = [file.stem for file in yaml_files]
             
-            # Verify each map name has both .yaml and .pgm files
+            # Verify each map name has both .yaml and .pgm files, and filter out speed_ prefixed maps
             valid_maps = []
             for map_name in map_names:
+                # Skip speed_ prefixed maps from selection
+                if map_name.startswith('speed_'):
+                    continue
+                    
                 yaml_path = self.maps_dir / f"{map_name}.yaml"
                 pgm_path = self.maps_dir / f"{map_name}.pgm"
                 
