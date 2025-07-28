@@ -27,11 +27,12 @@ class ActiveTools(QWidget):
     start_keys_vel = pyqtSignal(str, float)
     stop_keys_vel = pyqtSignal()
 
-    def __init__(self, routes: dict, maps: list):
+    def __init__(self, routes: dict, maps: list, map_view=None):
         super().__init__()
 
         self.routes = routes
         self.maps = maps
+        self.map_view = map_view
 
         self.active_route_name = None 
 
@@ -140,11 +141,6 @@ class ActiveTools(QWidget):
         first_layout.insertSpacing(10,20)
         first_layout.addStretch()
 
-        statusLabel = QLabel("Status:")
-        self.status_display = StatusDisplay()
-        first_layout.addWidget(statusLabel)
-        first_layout.addWidget(self.status_display)
-
         # Add the navigation buttons
         self.button_go_to_base = QPushButton("Go to base")
         self.button_go_to_dest = QPushButton("Go to dest")
@@ -178,6 +174,9 @@ class ActiveTools(QWidget):
         map_layout.addWidget(map_label)
         map_layout.addWidget(self.map_combo)
         config_layout.addLayout(map_layout)
+        
+        # Map is now on the left side, not in configure tab
+        
         config_layout.addStretch()
 
         self.upButton =QPushButton("↑")
@@ -289,7 +288,6 @@ class ActiveTools(QWidget):
         # Make labels smaller
         label_font = QFont()
         label_font.setPointSize(8)
-        statusLabel.setFont(label_font)
         map_label.setFont(label_font)
 
         # Update the list style to include active state
@@ -328,18 +326,15 @@ class ActiveTools(QWidget):
                 padding: 3px;
             }
         """
-        statusLabel.setStyleSheet(status_label_style)
         map_label.setStyleSheet(status_label_style)
 
-    pyqtSlot(str)
-    def set_current_status(self, status: str):
-        """Update the status display"""
-        self.status_display.set_status(status)
 
     def emit_based_on_tab(self, index: int):
         if index == 0:
+            # Operation tab - show grid
             self.switch_to_active.emit()
         if index == 1:
+            # Configuration tab - show map
             self.switch_to_configure.emit()
 
     def update_maps(self, maps: list):

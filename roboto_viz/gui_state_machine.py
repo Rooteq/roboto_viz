@@ -172,7 +172,11 @@ class ConfiguringState(State):
 
         self.connect_and_store_connections(
             self.gui.gui_manager.manualStatus,
-            self.gui.main_view.active_view.active_tools.set_current_status
+            lambda status: (
+                self.gui.main_view.plan_active_view.set_current_status(status) 
+                if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
+                else self.gui.main_view.active_view.update_robot_status(status)
+            )
         )
 
         self.connect_and_store_connections(
@@ -193,7 +197,11 @@ class ConfiguringState(State):
 
         self.connect_and_store_connections(
             self.gui.gui_manager.dockingStatus,
-            self.gui.main_view.active_view.active_tools.set_current_status
+            lambda status: (
+                self.gui.main_view.plan_active_view.set_current_status(status) 
+                if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
+                else self.gui.main_view.active_view.update_robot_status(status)
+            )
         )
 
     def handle_activate(self):
@@ -261,7 +269,11 @@ class ActiveState(State):
 
         self.connect_and_store_connections(
             self.gui.gui_manager.navigator.navStatus,
-            self.gui.main_view.active_view.active_tools.set_current_status
+            lambda status: (
+                self.gui.main_view.plan_active_view.set_current_status(status) 
+                if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
+                else self.gui.main_view.active_view.update_robot_status(status)
+            )
         )
 
         # Connect docking signals
@@ -277,7 +289,11 @@ class ActiveState(State):
 
         self.connect_and_store_connections(
             self.gui.gui_manager.dockingStatus,
-            self.gui.main_view.active_view.active_tools.set_current_status
+            lambda status: (
+                self.gui.main_view.plan_active_view.set_current_status(status) 
+                if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
+                else self.gui.main_view.active_view.update_robot_status(status)
+            )
         )
 
         self.gui.gui_manager.send_routes()
@@ -285,20 +301,20 @@ class ActiveState(State):
     def handleDisconnection(self):
         self.gui.transition_to(DisconnectedState())
         self.gui.gui_manager.stop_nav()
-        self.gui.main_view.active_view.active_tools.set_current_status("Idle")
+        self.gui.main_view.active_view.update_robot_status("Idle")
         self.gui.handleGui()
     
     def startPlanning(self):
         # self.gui.main_view.set_position_signal.disconnect()
         self.gui.transition_to(PlannerState())
         self.gui.gui_manager.stop_nav()
-        self.gui.main_view.active_view.active_tools.set_current_status("Idle")
+        self.gui.main_view.active_view.update_robot_status("Idle")
         self.gui.handleGui()
 
     def handle_configuring(self):
         self.gui.transition_to(ConfiguringState())
         self.gui.gui_manager.stop_nav()
-        self.gui.main_view.active_view.active_tools.set_current_status("Idle")
+        self.gui.main_view.active_view.update_robot_status("Idle")
         self.gui.handleGui()
 
 #TODO: handleDisconnection in the planner mode

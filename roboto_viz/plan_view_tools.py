@@ -100,30 +100,7 @@ class PlanTools(QWidget):
     def create_active_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        
-        # Plan Status Section
-        status_group = QGroupBox("Plan Status")
-        status_layout = QVBoxLayout(status_group)
-        
-        # Current plan display
-        self.current_plan_label = QLabel("No plan selected")
-        self.current_plan_label.setFont(QFont("Arial", 10, QFont.Bold))  # Smaller font
-        self.current_plan_label.setStyleSheet("QLabel { color: #2c3e50; padding: 3px; }")  # Reduced padding
-        status_layout.addWidget(self.current_plan_label)
-        
-        # Current action display
-        self.current_action_label = QLabel("No action")
-        self.current_action_label.setStyleSheet("QLabel { color: #7f8c8d; padding: 3px; }")  # Reduced padding
-        status_layout.addWidget(self.current_action_label)
-        
-        # Execution status
-        self.execution_status_label = QLabel("")
-        self.execution_status_label.setStyleSheet("QLabel { color: #27ae60; padding: 3px; font-weight: bold; }")  # Reduced padding
-        self.execution_status_label.setVisible(False)
-        status_layout.addWidget(self.execution_status_label)
-        
-        layout.addWidget(status_group)
-        
+
         # Plan Control Section
         control_group = QGroupBox("Plan Control")
         control_layout = QVBoxLayout(control_group)
@@ -158,9 +135,7 @@ class PlanTools(QWidget):
         robot_group = QGroupBox("Robot Status")
         robot_layout = QVBoxLayout(robot_group)
         
-        self.robot_status_label = QLabel("Status: Unknown")
-        self.robot_status_label.setStyleSheet("QLabel { color: #7f8c8d; padding: 3px; }")  # Reduced padding
-        robot_layout.addWidget(self.robot_status_label)
+        # Robot status now shown in grid on left side
         
         layout.addWidget(robot_group)
         
@@ -366,7 +341,6 @@ class PlanTools(QWidget):
         success = self.plan_manager.set_current_plan(plan_name)
         if success:
             self.current_plan = self.plan_manager.get_current_plan()
-            self.update_plan_status()
             self.refresh_action_combo()
             
             # Load the plan's map if specified
@@ -376,28 +350,7 @@ class PlanTools(QWidget):
             QMessageBox.information(self, "Success", f"Plan '{plan_name}' selected!")
         else:
             QMessageBox.warning(self, "Error", f"Failed to select plan '{plan_name}'!")
-    
-    def update_plan_status(self):
-        """Update the plan status display"""
-        if not self.current_plan:
-            self.current_plan_label.setText("No plan selected")
-            self.current_action_label.setText("No action")
-            return
-        
-        self.current_plan_label.setText(f"Plan: {self.current_plan.name}")
-        
-        current_action = self.current_plan.get_current_action()
-        if current_action:
-            action_name = current_action.name
-            # Add (rev) for reversed route actions
-            if current_action.action_type == ActionType.ROUTE and current_action.parameters.get('reverse', False):
-                action_name = f"{current_action.name} (rev)"
-            
-            action_text = f"Action {self.current_plan.current_action_index + 1}: {action_name}"
-            self.current_action_label.setText(action_text)
-        else:
-            self.current_action_label.setText("No actions in plan")
-    
+
     def start_execution(self):
         """Start plan execution"""
         if not self.current_plan:
@@ -411,18 +364,14 @@ class PlanTools(QWidget):
         self.is_executing = True
         self.start_btn.setEnabled(False)
         # Stop button always stays enabled as precaution
-        self.execution_status_label.setText("In Progress")
-        self.execution_status_label.setVisible(True)
         
         self.start_plan_execution.emit(self.current_plan.name)
-        self.update_plan_status()
     
     def stop_execution(self):
         """Stop plan execution"""
         self.is_executing = False
         self.start_btn.setEnabled(True)
         # Stop button always stays enabled as precaution
-        self.execution_status_label.setVisible(False)
         self.signal_btn.setVisible(False)  # Hide signal button
         
         # Always stop both plan execution and navigation as precaution
@@ -444,12 +393,9 @@ class PlanTools(QWidget):
         self.is_executing = True
         self.start_btn.setEnabled(False)
         # Stop button always stays enabled as precaution
-        self.execution_status_label.setText("In Progress")
-        self.execution_status_label.setVisible(True)
         
         self.current_plan.set_current_action(action_index)
         self.execute_action.emit(self.current_plan.name, action_index)
-        self.update_plan_status()
     
     def on_action_completed(self):
         """Called when an action is completed during execution"""
@@ -457,9 +403,8 @@ class PlanTools(QWidget):
             return
         
         # This is called for continuous plan execution
-        # Move to next action for plan status display
+        # Move to next action
         next_action = self.current_plan.next_action()
-        self.update_plan_status()
     
     def on_plan_execution_stopped(self):
         """Called when plan execution is stopped externally"""
@@ -475,12 +420,11 @@ class PlanTools(QWidget):
         self.is_executing = False
         self.start_btn.setEnabled(True)
         # Stop button always stays enabled as precaution
-        self.execution_status_label.setVisible(False)
         self.signal_btn.setVisible(False)
     
     def update_robot_status(self, status: str):
-        """Update robot status display"""
-        self.robot_status_label.setText(f"Status: {status}")
+        """Robot status now updated in grid on left side"""
+        pass  # Status is now handled by the grid
     
     def switch_to_active(self):
         """Switch to active tab"""

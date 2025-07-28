@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QWidget, QHBoxLayout
-from PyQt5.QtCore import pyqtSignal, pyqtSlot
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
 from typing import Optional
 
 from roboto_viz.map_view import MapView
@@ -61,10 +61,162 @@ class PlanActiveView(QWidget):
         main_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
         main_layout.setSpacing(2)  # Reduced spacing
         
-        # Add map view (takes 3/4 of space)
-        main_layout.addWidget(self.map_view, 3)
+        # Create stacked widget for left side (grid or map)
+        from PyQt5.QtWidgets import QStackedWidget, QGridLayout, QVBoxLayout, QLabel
+        self.left_stacked_widget = QStackedWidget()
         
-        # Add plan tools (takes 1/4 of space)
+        # Create grid widget with status cells
+        self.grid_widget = QWidget()
+        self.grid_widget.setStyleSheet("QWidget { background-color: #f8f9fa; }")
+        self.grid_widget.setMinimumSize(300, 200)
+        grid_layout = QGridLayout(self.grid_widget)
+        grid_layout.setContentsMargins(10, 10, 10, 10)
+        grid_layout.setSpacing(10)
+        
+        # Create status cells in a grid format
+        # Robot Status Cell (full width top row, background color changes)
+        self.robot_status_frame = QWidget()
+        self.robot_status_frame.setMinimumSize(300, 80)
+        self.robot_status_frame.setStyleSheet("""
+            QWidget {
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                background-color: #f8f9fa;
+                padding: 12px;
+            }
+        """)
+        robot_layout = QVBoxLayout(self.robot_status_frame)
+        robot_layout.setContentsMargins(10, 8, 10, 8)
+        robot_layout.setSpacing(6)
+        
+        robot_title = QLabel("ROBOT STATUS")
+        robot_title.setAlignment(Qt.AlignCenter)
+        robot_title.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                font-weight: bold;
+                color: #2c3e50;
+                background: none;
+                border: none;
+            }
+        """)
+        robot_layout.addWidget(robot_title)
+        
+        # Create a container for the status display without the LED to save space
+        self.robot_status_text = QLabel("Idle")
+        self.robot_status_text.setAlignment(Qt.AlignCenter)
+        self.robot_status_text.setStyleSheet("""
+            QLabel {
+                font-size: 11px;
+                color: #2c3e50;
+                background: none;
+                border: none;
+                font-weight: normal;
+            }
+        """)
+        robot_layout.addWidget(self.robot_status_text)
+
+        # Plan Status Cell (bottom left, wider)
+        plan_status_frame = QWidget()
+        plan_status_frame.setMinimumSize(180, 80)
+        plan_status_frame.setStyleSheet("""
+            QWidget {
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                background-color: white;
+                padding: 12px;
+            }
+        """)
+        plan_layout = QVBoxLayout(plan_status_frame)
+        plan_layout.setContentsMargins(10, 8, 10, 8)
+        plan_layout.setSpacing(6)
+        
+        plan_title = QLabel("PLAN STATUS")
+        plan_title.setAlignment(Qt.AlignCenter)
+        plan_title.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                font-weight: bold;
+                color: #2c3e50;
+                background: none;
+                border: none;
+            }
+        """)
+        plan_layout.addWidget(plan_title)
+        
+        self.plan_status_display = QLabel("No active plan")
+        self.plan_status_display.setAlignment(Qt.AlignCenter)
+        self.plan_status_display.setStyleSheet("""
+            QLabel {
+                font-size: 11px;
+                color: #7f8c8d;
+                background: none;
+                border: none;
+                word-wrap: true;
+            }
+        """)
+        plan_layout.addWidget(self.plan_status_display)
+
+        # Battery Status Cell (bottom right, narrower)
+        battery_status_frame = QWidget()
+        battery_status_frame.setMinimumSize(100, 80)
+        battery_status_frame.setStyleSheet("""
+            QWidget {
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                background-color: white;
+                padding: 12px;
+            }
+        """)
+        battery_layout = QVBoxLayout(battery_status_frame)
+        battery_layout.setContentsMargins(10, 8, 10, 8)
+        battery_layout.setSpacing(6)
+        
+        battery_title = QLabel("BATTERY")
+        battery_title.setAlignment(Qt.AlignCenter)
+        battery_title.setStyleSheet("""
+            QLabel {
+                font-size: 14px;
+                font-weight: bold;
+                color: #2c3e50;
+                background: none;
+                border: none;
+            }
+        """)
+        battery_layout.addWidget(battery_title)
+        
+        self.battery_status_display = QLabel("Unknown")
+        self.battery_status_display.setAlignment(Qt.AlignCenter)
+        self.battery_status_display.setStyleSheet("""
+            QLabel {
+                font-size: 11px;
+                color: #7f8c8d;
+                background: none;
+                border: none;
+            }
+        """)
+        battery_layout.addWidget(self.battery_status_display)
+        
+        # Add cells to grid with new layout:
+        # Row 0: Robot status (full width)
+        # Row 1: Plan status (left, wider) and Battery status (right, narrower)
+        grid_layout.addWidget(self.robot_status_frame, 0, 0, 1, 3)  # Span 3 columns
+        grid_layout.addWidget(plan_status_frame, 1, 0, 1, 2)  # Span 2 columns (wider)
+        grid_layout.addWidget(battery_status_frame, 1, 2, 1, 1)  # 1 column (narrower)
+        
+        # Add both grid and map to stacked widget
+        self.left_stacked_widget.addWidget(self.grid_widget)  # Index 0
+        self.left_stacked_widget.addWidget(self.map_view)     # Index 1
+        
+        # Start with grid view
+        self.left_stacked_widget.setCurrentIndex(0)
+        print(f"DEBUG: PlanActiveView - Grid widget created")
+        print(f"DEBUG: PlanActiveView - Left stacked widget has {self.left_stacked_widget.count()} widgets")
+        print(f"DEBUG: PlanActiveView - Current index: {self.left_stacked_widget.currentIndex()}")
+        self.grid_widget.show()
+        
+        # Add stacked widget (takes 3/4 of space) and plan tools (takes 1/4 of space)
+        main_layout.addWidget(self.left_stacked_widget, 3)
         main_layout.addWidget(self.plan_tools, 1)
     
     def setup_connections(self):
@@ -79,7 +231,7 @@ class PlanActiveView(QWidget):
         # Navigation stop signal
         self.plan_tools.stop_navigation.connect(self.stop_navigation.emit)
         
-        # Tab change signal
+        # Tab change signal - control left stacked widget
         self.plan_tools.tab_changed.connect(self.on_tab_changed)
         
         # Robot control signals
@@ -155,6 +307,68 @@ class PlanActiveView(QWidget):
         self.curr_x = x
         self.curr_y = y
     
+    def set_current_status(self, status: str):
+        """Update the robot status display and change cell background color based on status"""
+        # Update the status text
+        if hasattr(self, 'robot_status_text'):
+            self.robot_status_text.setText(status)
+        
+        if hasattr(self, 'robot_status_frame'):
+            # Define background colors based on status
+            if status in ["Idle", "At base", "At destination", "Manual move"]:
+                # Light green for normal operational states
+                bg_color = "#d5f4e6"
+                text_color = "#27ae60"
+            elif status in ["Nav to base", "Nav to dest", "Navigating", "Docking", "Undocking", 
+                            "Waiting for signal", "Manual move"] or status.startswith("Executing"):
+                # Light blue for active operations  
+                bg_color = "#d6eaf8"
+                text_color = "#3498db"
+            elif status in ["Failed", "Error", "Connection lost", "Navigation Error"]:
+                # Light red for errors
+                bg_color = "#fadbd8"
+                text_color = "#e74c3c"
+            elif status in ["Warning", "Low battery", "Obstacle detected"]:
+                # Light orange for warnings
+                bg_color = "#fdebd0"
+                text_color = "#f39c12"
+            else:
+                # Default light gray for unknown states
+                bg_color = "#f8f9fa"
+                text_color = "#2c3e50"
+            
+            # Update the frame style with new background color
+            self.robot_status_frame.setStyleSheet(f"""
+                QWidget {{
+                    border: 2px solid #bdc3c7;
+                    border-radius: 8px;
+                    background-color: {bg_color};
+                    padding: 12px;
+                }}
+            """)
+            
+            # Update text color
+            if hasattr(self, 'robot_status_text'):
+                self.robot_status_text.setStyleSheet(f"""
+                    QLabel {{
+                        font-size: 11px;
+                        color: {text_color};
+                        background: none;
+                        border: none;
+                        font-weight: normal;
+                    }}
+                """)
+
+    def set_battery_status(self, status: str):
+        """Update the battery status display"""
+        if hasattr(self, 'battery_status_display'):
+            self.battery_status_display.setText(status)
+
+    def set_plan_status(self, status: str):
+        """Update the plan status display"""
+        if hasattr(self, 'plan_status_display'):
+            self.plan_status_display.setText(status)
+    
     def switch_to_active(self):
         """Switch to active tab in plan tools"""
         self.plan_tools.switch_to_active()
@@ -180,18 +394,26 @@ class PlanActiveView(QWidget):
     
     @pyqtSlot(int)
     def on_tab_changed(self, tab_index: int):
-        """Handle tab change to control enable_drawing"""
+        """Handle tab change to control enable_drawing and switch grid/map"""
         if tab_index == 0:  # Active tab
             self.map_view.enable_drawing = False
-            # No need to change editing_mode for active tab
+            # Show grid on left side
+            if hasattr(self, 'left_stacked_widget'):
+                self.left_stacked_widget.setCurrentIndex(0)  # Grid
+                print("DEBUG: Active tab - showing grid")
         elif tab_index == 1:  # Configure tab
             self.map_view.enable_drawing = True
             self.map_view.editing_mode = False  # Ensure we're not in route editing mode
+            # Show map on left side for pose setting
+            if hasattr(self, 'left_stacked_widget'):
+                self.left_stacked_widget.setCurrentIndex(1)  # Map
+                print("DEBUG: Configure tab - showing map")
             print(f"DEBUG: Configure tab activated - enable_drawing={self.map_view.enable_drawing}, editing_mode={self.map_view.editing_mode}")
     
     def update_robot_status(self, status: str):
         """Update robot status display"""
-        self.plan_tools.update_robot_status(status)
+        # Call the same logic as set_current_status to update grid cell
+        self.set_current_status(status)
     
     def close_plan_editor(self):
         """Close the plan editor if open"""
