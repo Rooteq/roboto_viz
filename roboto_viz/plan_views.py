@@ -315,7 +315,7 @@ class PlanActiveView(QWidget):
         
         if hasattr(self, 'robot_status_frame'):
             # Define background colors based on status
-            if status in ["Idle", "At base", "At destination", "Manual move"]:
+            if status in ["Idle", "At base", "At destination", "Manual move", "Stopped"]:
                 # Light green for normal operational states
                 bg_color = "#d5f4e6"
                 text_color = "#27ae60"
@@ -324,7 +324,8 @@ class PlanActiveView(QWidget):
                 # Light blue for active operations  
                 bg_color = "#d6eaf8"
                 text_color = "#3498db"
-            elif status in ["Failed", "Error", "Connection lost", "Navigation Error"]:
+            elif status in ["Failed", "Error", "Connection lost", "Navigation Error"] or \
+                 "failed" in status.lower() or "error" in status.lower() or "cancelled" in status.lower():
                 # Light red for errors
                 bg_color = "#fadbd8"
                 text_color = "#e74c3c"

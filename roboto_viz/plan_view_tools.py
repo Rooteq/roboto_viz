@@ -127,19 +127,10 @@ class PlanTools(QWidget):
         action_layout.addWidget(self.execute_action_btn)
         control_layout.addLayout(action_layout)
         
-        # Note: Signal button moved to below robot status
         
         layout.addWidget(control_group)
         
-        # Robot Status Section
-        robot_group = QGroupBox("Robot Status")
-        robot_layout = QVBoxLayout(robot_group)
-        
-        # Robot status now shown in grid on left side
-        
-        layout.addWidget(robot_group)
-        
-        # Main Control Buttons Section (moved here)
+        # Main Control Buttons Section
         control_buttons_group = QGroupBox("Control")
         control_buttons_layout = QVBoxLayout(control_buttons_group)
         
