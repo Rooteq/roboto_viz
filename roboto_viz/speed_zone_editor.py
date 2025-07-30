@@ -284,47 +284,54 @@ class SpeedZoneEditor(QWidget):
         self.box_end_pos = None
             
     def save_speed_mask(self):
-        """Save the current speed zones as speed_mask.pgm and speed_mask.yaml"""
-        if not self.current_map_path or not self.current_yaml_path:
+        """Save the current speed zones with proper speed_ prefix and nav2-compatible YAML"""
+        if not self.current_map_path or not self.current_yaml_path or not self.map_name:
             QMessageBox.warning(self, "Error", "No map loaded!")
             return
             
         try:
-            # Get map directory and name
+            # Get map directory
             map_path = Path(self.current_map_path)
             maps_dir = map_path.parent
-            original_name = map_path.stem
             
-            # Create speed mask files
-            speed_mask_pgm = maps_dir / "speed_mask.pgm"
-            speed_mask_yaml = maps_dir / "speed_mask.yaml"
+            # Use speed_ prefixed naming (maintaining consistency)
+            speed_map_pgm = maps_dir / f"speed_{self.map_name}.pgm"
+            speed_map_yaml = maps_dir / f"speed_{self.map_name}.yaml"
             
-            # Copy current working map to speed_mask.pgm
-            shutil.copy2(self.current_map_path, speed_mask_pgm)
+            # Save current working map (already has speed_ prefix)
+            # The current_map_path should already be the speed_ prefixed file
+            if str(map_path) != str(speed_map_pgm):
+                shutil.copy2(self.current_map_path, speed_map_pgm)
             
-            # Read original YAML and modify for speed mask
-            with open(self.current_yaml_path, 'r') as f:
-                yaml_data = yaml.safe_load(f)
+            # Read the original map's YAML to get base properties
+            original_yaml_path = maps_dir / f"{self.map_name}.yaml"
+            if original_yaml_path.exists():
+                with open(original_yaml_path, 'r') as f:
+                    yaml_data = yaml.safe_load(f)
+            else:
+                # Fallback to current yaml if original doesn't exist
+                with open(self.current_yaml_path, 'r') as f:
+                    yaml_data = yaml.safe_load(f)
             
-            # Update YAML for nav2 speed restrictions
-            yaml_data['image'] = 'speed_mask.pgm'
+            # Update YAML for nav2 speed restrictions according to specifications
+            yaml_data['image'] = f'speed_{self.map_name}.pgm'
             yaml_data['mode'] = 'scale'
             yaml_data['occupied_thresh'] = 1.0
             yaml_data['free_thresh'] = 0.0
             
             # Ensure origin has zero yaw component for Costmap2D compatibility
             if 'origin' in yaml_data and len(yaml_data['origin']) >= 3:
-                yaml_data['origin'][2] = 0.0
+                yaml_data['origin'][2] = 0
             
-            # Write speed mask YAML
-            with open(speed_mask_yaml, 'w') as f:
+            # Write speed map YAML with nav2-compatible parameters
+            with open(speed_map_yaml, 'w') as f:
                 yaml.dump(yaml_data, f, default_flow_style=False)
                 
             QMessageBox.information(self, "Success", 
-                                  f"Speed mask saved as:\n{speed_mask_pgm}\n{speed_mask_yaml}")
+                                  f"Speed map saved as:\n{speed_map_pgm}\n{speed_map_yaml}")
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save speed mask: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to save speed map: {str(e)}")
             
     def cancel_editing(self):
         """Cancel speed zone editing and return to original map"""
