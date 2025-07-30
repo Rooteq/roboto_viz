@@ -63,6 +63,7 @@ class ManagerNode(LifecycleNode):
 
         #INTERNAL STATES:
         self.srv_available: bool = False
+        self.suppress_docking_status = False  # Flag to suppress docking status during general stop
         
         self.cmd_vel_msg: Twist = Twist()
 
@@ -333,7 +334,7 @@ class ManagerNode(LifecycleNode):
                     self.docking_status_callback("Docked" if result.docked else "Dock Failed")
             elif status == GoalStatus.STATUS_CANCELED:
                 self.get_logger().info('Docking was cancelled')
-                if self.docking_status_callback:
+                if self.docking_status_callback and not self.suppress_docking_status:
                     self.docking_status_callback("Dock Cancelled")
             else:
                 self.get_logger().info('Docking failed')
@@ -369,10 +370,8 @@ class ManagerNode(LifecycleNode):
                 if self.docking_status_callback:
                     self.docking_status_callback("Dock Cancelled")
         else:
-            # No active docking goal to cancel
-            self.get_logger().info("No active docking operation to cancel")
-            if self.docking_status_callback:
-                self.docking_status_callback("Dock Cancelled")
+            # No active docking goal to cancel - don't emit status message
+            self.get_logger().debug("No active docking operation to cancel")
 
     def send_undock_goal(self):
         """Send an undocking goal to the robot"""
@@ -434,7 +433,7 @@ class ManagerNode(LifecycleNode):
                     self.docking_status_callback("Undocked" if result.undocked else "Undock Failed")
             elif status == GoalStatus.STATUS_CANCELED:
                 self.get_logger().info('Undocking was cancelled')
-                if self.docking_status_callback:
+                if self.docking_status_callback and not self.suppress_docking_status:
                     self.docking_status_callback("Undock Cancelled")
             else:
                 self.get_logger().info('Undocking failed')
@@ -469,10 +468,8 @@ class ManagerNode(LifecycleNode):
                 if self.docking_status_callback:
                     self.docking_status_callback("Undock Cancelled")
         else:
-            # No active undocking goal to cancel
-            self.get_logger().info("No active undocking operation to cancel")
-            if self.docking_status_callback:
-                self.docking_status_callback("Undock Cancelled")
+            # No active undocking goal to cancel - don't emit status message
+            self.get_logger().debug("No active undocking operation to cancel")
 
     def _undock_cancel_callback(self, future):
         """Handle undock cancellation response"""
@@ -534,16 +531,22 @@ class Navigator(QThread):
 
         self.curr_x: float = 0
         self.curr_y: float = 0
+        self._last_status = None  # Track last emitted status to avoid overriding failures
         
     def stop(self):
         # self._running = False
         if self.nav_data.navigator.isTaskComplete() is False:
             self.nav_data.navigator.cancelTask()
-            self.navStatus.emit("Idle")
+            # Only emit status if the last status wasn't a failure
+            if self._last_status not in ["Failed", "Navigation Error"]:
+                self._last_status = "Stopped"
+                self.navStatus.emit("Stopped")
 
 
     def set_goal(self, route: str, to_dest: bool, x:float, y:float):
         """Set a new goal, replacing any existing one"""
+        # Reset last status when setting a new goal
+        self._last_status = None
         with self._goal_lock:
             self.curr_x = x
             self.curr_y = y
@@ -562,8 +565,10 @@ class Navigator(QThread):
                     self.nav_data.navigator.cancelTask()
                 
                 if to_dest == True:
+                    self._last_status = "Nav to dest"
                     self.navStatus.emit("Nav to dest")
                 else:
+                    self._last_status = "Nav to base"
                     self.navStatus.emit("Nav to base")
             else:
                 print(f"Route '{route}' not found in routes")
@@ -663,10 +668,13 @@ class Navigator(QThread):
                     if self.nav_data.navigator.getResult() is TaskResult.SUCCEEDED:
                         print(f"DEBUG: Navigation completed, _to_dest = {self._to_dest}")
                         if self._to_dest:
+                            self._last_status = "At destination"
                             self.navStatus.emit("At destination")
                         else:
+                            self._last_status = "At base"
                             self.navStatus.emit("At base")
                     elif self.nav_data.navigator.getResult() is TaskResult.FAILED:
+                        self._last_status = "Failed"
                         self.navStatus.emit("Failed")
                         print(f"Navigation result: {self.nav_data.navigator.getResult()}")
                     
@@ -674,6 +682,7 @@ class Navigator(QThread):
                     
             except Exception as e:
                 print(f"Navigation error: {e}")
+                self._last_status = "Navigation Error"
                 self.navStatus.emit("Navigation Error")
 
 class GuiManager(QThread):
@@ -871,11 +880,21 @@ class GuiManager(QThread):
     @pyqtSlot()
     def stop_nav(self):
         """Stop navigation and cancel any ongoing docking/undocking operations"""
+        # Set flag to suppress docking status messages during general stop
+        self.node.suppress_docking_status = True
+        
         self.navigator.stop()
         # Also cancel any ongoing docking operations
         self.cancel_docking()
         # Also cancel any ongoing undocking operations
         self.cancel_undocking()
+        
+        # Reset the flag after a short delay to allow normal operation to resume
+        QTimer.singleShot(500, self.reset_suppress_flag)
+    
+    def reset_suppress_flag(self):
+        """Reset the suppress docking status flag"""
+        self.node.suppress_docking_status = False
     
     @pyqtSlot(str)
     def handle_start_plan_execution(self, plan_name: str):

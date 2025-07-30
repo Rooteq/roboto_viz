@@ -243,6 +243,12 @@ class MainView(QMainWindow):
         self.plan_executor.execution_stopped.connect(self.on_plan_stopped)
         self.plan_executor.uart_signal_received.connect(self.on_uart_signal_received)
         
+        # Connect plan executor status updates to plan status display
+        self.plan_executor.status_update.connect(self.plan_active_view.set_plan_status)
+        
+        # Connect plan executor error status updates to robot status display (for errors like navigation failed)
+        self.plan_executor.status_update.connect(self.update_robot_status_from_plan_executor)
+        
     def on_plan_stopped(self, plan_name: str):
         """Handle when plan execution stops"""
         if self.use_plan_system:
@@ -260,6 +266,14 @@ class MainView(QMainWindow):
         if self.use_plan_system:
             # Hide the signal button immediately when UART signal is received
             self.plan_active_view.plan_tools.hide_signal_button()
+    
+    def update_robot_status_from_plan_executor(self, status: str):
+        """Update robot status display for error messages from plan executor"""
+        if self.use_plan_system:
+            # Only update robot status for error conditions, let normal status updates handle other cases
+            if ("failed" in status.lower() or "error" in status.lower() or 
+                "cancelled" in status.lower() or status in ["Failed", "Error"]):
+                self.plan_active_view.set_current_status(status)
 
 
     def switch_to_disconnected(self):
