@@ -549,6 +549,7 @@ class RouteManager:
     def load_map_onto_robot(self, map_name: str) -> MapResult:
         """
         Load a map onto the robot using ros2 service call command.
+        Also loads the corresponding speed mask if it exists.
         
         Args:
             map_name: Name of the map file (without extension)
@@ -565,7 +566,7 @@ class RouteManager:
                 print(error_msg)
                 return False, error_msg
 
-            # Construct the ros2 service call command
+            # Construct the ros2 service call command for main map
             cmd = [
                 "ros2", "service", "call",
                 "/map_server/load_map",
@@ -582,13 +583,57 @@ class RouteManager:
             )
             
             # Check if the command was successful
-            if "success: True" in result.stdout:
-                print(f"Successfully loaded map '{map_name}' onto robot")
-                return True, ""
-            else:
+            # For LoadMap service, result=0 indicates success
+            if "result=0" not in result.stdout:
                 error_msg = f"Failed to load map: {result.stdout}"
                 print(error_msg)
                 return False, error_msg
+            
+            print(f"Successfully loaded map '{map_name}' onto robot")
+            
+            # Check if speed mask exists and load it
+            speed_map_path = self.maps_dir / f"speed_{map_name}.yaml"
+            print(f"DEBUG: Checking for speed mask at: {speed_map_path}")
+            print(f"DEBUG: Speed mask exists: {speed_map_path.exists()}")
+            
+            if speed_map_path.exists():
+                print(f"Found speed mask for '{map_name}', loading...")
+                
+                # Construct command for speed mask
+                speed_cmd = [
+                    "ros2", "service", "call",
+                    "/filter_mask_server/load_map",
+                    "nav2_msgs/srv/LoadMap",
+                    f"{{map_url: '{str(speed_map_path)}'}}"
+                ]
+                
+                print(f"DEBUG: Speed mask command: {' '.join(speed_cmd)}")
+                
+                try:
+                    speed_result = subprocess.run(
+                        speed_cmd,
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    
+                    print(f"DEBUG: Speed mask service stdout: {speed_result.stdout}")
+                    print(f"DEBUG: Speed mask service stderr: {speed_result.stderr}")
+                    
+                    if "result=0" in speed_result.stdout:
+                        print(f"Successfully loaded speed mask 'speed_{map_name}' onto robot")
+                    else:
+                        print(f"Warning: Failed to load speed mask: {speed_result.stdout}")
+                        
+                except subprocess.CalledProcessError as e:
+                    print(f"Warning: Error loading speed mask: {e.stderr}")
+                    print(f"DEBUG: Speed mask CalledProcessError stdout: {e.stdout}")
+                except Exception as e:
+                    print(f"Warning: Unexpected error loading speed mask: {str(e)}")
+            else:
+                print(f"No speed mask found for '{map_name}', skipping speed mask loading")
+            
+            return True, ""
                 
         except subprocess.CalledProcessError as e:
             error_msg = f"Error loading map onto robot: {e.stderr}"
