@@ -137,16 +137,16 @@ class PlanTools(QWidget):
         control_buttons_group = QGroupBox("Control")
         control_buttons_layout = QVBoxLayout(control_buttons_group)
         
-        # Signal button (top - initially hidden)
+        # Signal button (top - initially hidden) - made taller
         self.signal_btn = QPushButton("SIGNAL")
         self.signal_btn.setStyleSheet("""
             QPushButton {
-                min-height: 28px;
-                font-size: 14px;
-                padding: 8px 16px;
+                min-height: 50px;
+                font-size: 18px;
+                padding: 12px 25px;
                 font-weight: bold;
-                border: 1px solid #3498db;
-                border-radius: 6px;
+                border: 2px solid #3498db;
+                border-radius: 10px;
                 background-color: #5dade2;
                 color: white;
             }
@@ -162,16 +162,16 @@ class PlanTools(QWidget):
         self.signal_btn.setVisible(False)
         control_buttons_layout.addWidget(self.signal_btn)
         
-        # Start button (middle)
+        # Start button (middle) - made taller
         self.start_btn = QPushButton("START")
         self.start_btn.setStyleSheet("""
             QPushButton {
-                min-height: 55px;
-                font-size: 20px;
-                padding: 15px 30px;
+                min-height: 65px;
+                font-size: 22px;
+                padding: 18px 35px;
                 font-weight: bold;
                 border: 3px solid #27ae60;
-                border-radius: 10px;
+                border-radius: 12px;
                 background-color: #2ecc71;
                 color: white;
             }
@@ -191,16 +191,16 @@ class PlanTools(QWidget):
         """)
         control_buttons_layout.addWidget(self.start_btn)
         
-        # Stop button (bottom - always enabled)
+        # Stop button (bottom - always enabled) - made taller
         self.stop_btn = QPushButton("STOP")
         self.stop_btn.setStyleSheet("""
             QPushButton {
-                min-height: 55px;
-                font-size: 20px;
-                padding: 15px 30px;
+                min-height: 65px;
+                font-size: 22px;
+                padding: 18px 35px;
                 font-weight: bold;
                 border: 3px solid #c0392b;
-                border-radius: 10px;
+                border-radius: 12px;
                 background-color: #e74c3c;
                 color: white;
             }
@@ -218,11 +218,8 @@ class PlanTools(QWidget):
         
         layout.addWidget(control_buttons_group)
         
-        # Disconnect button
+        # Add stretch to push content to top
         layout.addStretch()
-        self.disconnect_btn = QPushButton("Disconnect")
-        self.disconnect_btn.setStyleSheet(self.button_style)
-        layout.addWidget(self.disconnect_btn)
         
         return widget
     
@@ -244,14 +241,7 @@ class PlanTools(QWidget):
         manual_group = QGroupBox("Manual Control")
         manual_layout = QGridLayout(manual_group)
         
-        # Docking controls
-        self.dock_btn = QPushButton("Dock")
-        self.dock_btn.setStyleSheet(self.button_style)
-        self.undock_btn = QPushButton("Undock")
-        self.undock_btn.setStyleSheet(self.button_style)
-        
-        manual_layout.addWidget(self.dock_btn, 0, 0)
-        manual_layout.addWidget(self.undock_btn, 0, 1)
+        # Docking controls removed - not used
         
         # Movement controls
         self.up_btn = QPushButton("↑")
@@ -263,10 +253,10 @@ class PlanTools(QWidget):
             btn.setStyleSheet(self.button_style)
             btn.setMinimumSize(40, 40)  # Smaller buttons
         
-        manual_layout.addWidget(self.up_btn, 1, 1)
-        manual_layout.addWidget(self.left_btn, 2, 0)
-        manual_layout.addWidget(self.right_btn, 2, 2)
-        manual_layout.addWidget(self.down_btn, 3, 1)
+        manual_layout.addWidget(self.up_btn, 0, 1)
+        manual_layout.addWidget(self.left_btn, 1, 0)
+        manual_layout.addWidget(self.right_btn, 1, 2)
+        manual_layout.addWidget(self.down_btn, 2, 1)
         
         layout.addWidget(manual_group)
         
@@ -284,8 +274,6 @@ class PlanTools(QWidget):
         
         # Configuration connections
         self.edit_plans_btn.clicked.connect(self.open_plan_editor.emit)
-        self.dock_btn.clicked.connect(self.dock_robot.emit)
-        self.undock_btn.clicked.connect(self.undock_robot.emit)
         
         # Manual control connections
         self.up_btn.pressed.connect(lambda: self.start_keys_vel.emit("f", 0.2))
@@ -297,8 +285,7 @@ class PlanTools(QWidget):
         self.right_btn.pressed.connect(lambda: self.start_keys_vel.emit("r", 0.5))
         self.right_btn.released.connect(self.stop_keys_vel.emit)
         
-        # Other connections
-        self.disconnect_btn.clicked.connect(self.on_disconnect.emit)
+        # Other connections - disconnect button removed
     
     def refresh_plans(self):
         """Refresh the plan combo box with available plans"""
