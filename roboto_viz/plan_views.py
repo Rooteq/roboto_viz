@@ -65,35 +65,35 @@ class PlanActiveView(QWidget):
         from PyQt5.QtWidgets import QStackedWidget, QGridLayout, QVBoxLayout, QLabel
         self.left_stacked_widget = QStackedWidget()
         
-        # Create grid widget with status cells
+        # Create grid widget with status cells (optimized for 1920x1080)
         self.grid_widget = QWidget()
         self.grid_widget.setStyleSheet("QWidget { background-color: #f8f9fa; }")
-        self.grid_widget.setMinimumSize(300, 200)
+        self.grid_widget.setMinimumSize(600, 400)  # Much larger for big screens
         grid_layout = QGridLayout(self.grid_widget)
-        grid_layout.setContentsMargins(10, 10, 10, 10)
-        grid_layout.setSpacing(10)
+        grid_layout.setContentsMargins(20, 20, 20, 20)  # Larger margins
+        grid_layout.setSpacing(20)  # More spacing between cells
         
         # Create status cells in a grid format
-        # Robot Status Cell (full width top row, background color changes)
+        # Robot Status Cell (full width top row, background color changes) - LARGE for 1920x1080
         self.robot_status_frame = QWidget()
-        self.robot_status_frame.setMinimumSize(300, 80)
+        self.robot_status_frame.setMinimumSize(600, 200)  # Even larger to prevent clipping
         self.robot_status_frame.setStyleSheet("""
             QWidget {
-                border: 2px solid #bdc3c7;
-                border-radius: 8px;
+                border: 4px solid #bdc3c7;
+                border-radius: 12px;
                 background-color: #f8f9fa;
-                padding: 12px;
+                padding: 20px;
             }
         """)
         robot_layout = QVBoxLayout(self.robot_status_frame)
-        robot_layout.setContentsMargins(10, 8, 10, 8)
-        robot_layout.setSpacing(6)
+        robot_layout.setContentsMargins(20, 15, 20, 15)
+        robot_layout.setSpacing(12)
         
         robot_title = QLabel("ROBOT STATUS")
         robot_title.setAlignment(Qt.AlignCenter)
         robot_title.setStyleSheet("""
             QLabel {
-                font-size: 14px;
+                font-size: 24px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -102,40 +102,40 @@ class PlanActiveView(QWidget):
         """)
         robot_layout.addWidget(robot_title)
         
-        # Create a container for the status display without the LED to save space
+        # Create a container for the status display - VERY LARGE AND VISIBLE
         self.robot_status_text = QLabel("Idle")
         self.robot_status_text.setAlignment(Qt.AlignCenter)
         self.robot_status_text.setStyleSheet("""
             QLabel {
-                font-size: 11px;
+                font-size: 28px;
                 color: #2c3e50;
                 background: none;
                 border: none;
-                font-weight: normal;
+                font-weight: bold;
             }
         """)
         robot_layout.addWidget(self.robot_status_text)
 
-        # Plan Status Cell (bottom left, wider)
+        # Plan Status Cell (bottom left, wider) - LARGE for 1920x1080
         plan_status_frame = QWidget()
-        plan_status_frame.setMinimumSize(180, 80)
+        plan_status_frame.setMinimumSize(400, 180)  # Even larger to prevent clipping
         plan_status_frame.setStyleSheet("""
             QWidget {
-                border: 2px solid #bdc3c7;
-                border-radius: 8px;
+                border: 4px solid #bdc3c7;
+                border-radius: 12px;
                 background-color: white;
-                padding: 12px;
+                padding: 20px;
             }
         """)
         plan_layout = QVBoxLayout(plan_status_frame)
-        plan_layout.setContentsMargins(10, 8, 10, 8)
-        plan_layout.setSpacing(6)
+        plan_layout.setContentsMargins(20, 15, 20, 15)
+        plan_layout.setSpacing(12)
         
         plan_title = QLabel("PLAN STATUS")
         plan_title.setAlignment(Qt.AlignCenter)
         plan_title.setStyleSheet("""
             QLabel {
-                font-size: 14px;
+                font-size: 22px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -148,35 +148,36 @@ class PlanActiveView(QWidget):
         self.plan_status_display.setAlignment(Qt.AlignCenter)
         self.plan_status_display.setStyleSheet("""
             QLabel {
-                font-size: 11px;
+                font-size: 24px;
                 color: #7f8c8d;
                 background: none;
                 border: none;
                 word-wrap: true;
+                font-weight: bold;
             }
         """)
         plan_layout.addWidget(self.plan_status_display)
 
-        # Battery Status Cell (bottom right, narrower)
+        # Battery Status Cell (bottom right, narrower) - LARGE for 1920x1080
         battery_status_frame = QWidget()
-        battery_status_frame.setMinimumSize(100, 80)
+        battery_status_frame.setMinimumSize(240, 180)  # Even larger to prevent clipping
         battery_status_frame.setStyleSheet("""
             QWidget {
-                border: 2px solid #bdc3c7;
-                border-radius: 8px;
+                border: 4px solid #bdc3c7;
+                border-radius: 12px;
                 background-color: white;
-                padding: 12px;
+                padding: 20px;
             }
         """)
         battery_layout = QVBoxLayout(battery_status_frame)
-        battery_layout.setContentsMargins(10, 8, 10, 8)
-        battery_layout.setSpacing(6)
+        battery_layout.setContentsMargins(20, 15, 20, 15)
+        battery_layout.setSpacing(12)
         
         battery_title = QLabel("BATTERY")
         battery_title.setAlignment(Qt.AlignCenter)
         battery_title.setStyleSheet("""
             QLabel {
-                font-size: 14px;
+                font-size: 22px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -189,10 +190,11 @@ class PlanActiveView(QWidget):
         self.battery_status_display.setAlignment(Qt.AlignCenter)
         self.battery_status_display.setStyleSheet("""
             QLabel {
-                font-size: 11px;
+                font-size: 24px;
                 color: #7f8c8d;
                 background: none;
                 border: none;
+                font-weight: bold;
             }
         """)
         battery_layout.addWidget(self.battery_status_display)
@@ -347,25 +349,25 @@ class PlanActiveView(QWidget):
                 bg_color = "#f8f9fa"
                 text_color = "#2c3e50"
             
-            # Update the frame style with new background color
+            # Update the frame style with new background color (large screen optimized)
             self.robot_status_frame.setStyleSheet(f"""
                 QWidget {{
-                    border: 2px solid #bdc3c7;
-                    border-radius: 8px;
+                    border: 4px solid #bdc3c7;
+                    border-radius: 12px;
                     background-color: {bg_color};
-                    padding: 12px;
+                    padding: 20px;
                 }}
             """)
             
-            # Update text color
+            # Update text color with large fonts
             if hasattr(self, 'robot_status_text'):
                 self.robot_status_text.setStyleSheet(f"""
                     QLabel {{
-                        font-size: 11px;
+                        font-size: 28px;
                         color: {text_color};
                         background: none;
                         border: none;
-                        font-weight: normal;
+                        font-weight: bold;
                     }}
                 """)
 

@@ -357,12 +357,12 @@ class DisconnectedView(QWidget):
         # Define styles matching the other widgets
         button_style = """
             QPushButton {
-                min-height: 16px;
-                font-size: 12px;
-                padding: 4px 8px;
+                min-height: 50px;
+                font-size: 18px;
+                padding: 15px 25px;
                 font-weight: bold;
-                border: 1px solid #2c3e50;
-                border-radius: 4px;
+                border: 3px solid #2c3e50;
+                border-radius: 10px;
                 background-color: #ecf0f1;
                 color: #2c3e50;
             }
@@ -383,18 +383,18 @@ class DisconnectedView(QWidget):
 
         label_style = """
             QLabel {
-                font-size: 12px;
+                font-size: 20px;
                 font-weight: bold;
                 color: #2c3e50;
-                padding: 3px;
-                min-height: 24px;
+                padding: 10px;
+                min-height: 50px;
             }
         """
 
-        # Create layout with proper spacing
+        # Create layout with proper spacing for large screens
         layout = QVBoxLayout(self)
-        layout.setSpacing(5)  # Reduced spacing
-        layout.setContentsMargins(10, 10, 10, 10)  # Reduced margins
+        layout.setSpacing(20)  # Larger spacing for big screens
+        layout.setContentsMargins(40, 40, 40, 40)  # Larger margins
 
         # Create and style the service state label
         self.service_state = QLabel('Service: Not Available')
@@ -407,9 +407,9 @@ class DisconnectedView(QWidget):
         self.connect_button.clicked.connect(self.on_connect)
         self.connect_button.setEnabled(False)
 
-        # Set fonts
+        # Set fonts for large screens
         font = QFont()
-        font.setPointSize(10)  # Smaller font size
+        font.setPointSize(18)  # Larger font size for 1920x1080
         self.service_state.setFont(font)
         self.connect_button.setFont(font)
 

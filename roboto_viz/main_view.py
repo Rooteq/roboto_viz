@@ -61,54 +61,60 @@ class MainView(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        # self.showFullScreen()
         self.setWindowTitle("Robot Control")
-        self.setFixedSize(1024, 550)  # Ensure window fits your screen exactly
+        # Optimized for 1920x1080 displays
+        self.setFixedSize(1800, 1000)  # Large window for 1920x1080 screens
         self.showFullScreen()
         
-        # Apply global font scaling for smaller screens
+        # Apply global font scaling for large screens (1920x1080)
         font = self.font()
-        font.setPointSize(8)  # Smaller base font size
+        font.setPointSize(14)  # Much larger base font size for visibility
         self.setFont(font)
         
-        # Apply global scaling to all child widgets
+        # Apply global scaling optimized for large screens
         self.setStyleSheet("""
             QWidget {
-                font-size: 8px;
+                font-size: 14px;
             }
             QLabel {
-                font-size: 8px;
+                font-size: 14px;
             }
             QPushButton {
-                font-size: 8px;
-                min-height: 16px;
-                padding: 2px 4px;
-            }
-            QComboBox {
-                font-size: 8px;
-                min-height: 16px;
-            }
-            QListWidget {
-                font-size: 8px;
-            }
-            QLineEdit {
-                font-size: 8px;
-                min-height: 16px;
-            }
-            QTextEdit {
-                font-size: 8px;
-            }
-            QGroupBox {
-                font-size: 8px;
+                font-size: 16px;
+                min-height: 40px;
+                padding: 8px 16px;
                 font-weight: bold;
             }
+            QComboBox {
+                font-size: 14px;
+                min-height: 35px;
+                padding: 5px;
+            }
+            QListWidget {
+                font-size: 14px;
+            }
+            QLineEdit {
+                font-size: 14px;
+                min-height: 35px;
+                padding: 5px;
+            }
+            QTextEdit {
+                font-size: 14px;
+            }
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                padding-top: 25px;
+                margin-top: 10px;
+            }
             QTabWidget {
-                font-size: 8px;
+                font-size: 14px;
             }
             QTabBar::tab {
-                font-size: 8px;
-                min-height: 16px;
-                padding: 2px 4px;
+                font-size: 14px;
+                min-height: 35px;
+                padding: 8px 16px;
+                font-weight: bold;
             }
         """)
 

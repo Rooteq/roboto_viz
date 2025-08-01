@@ -20,7 +20,7 @@ class WaitActionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Add Wait Action")
         self.setModal(True)
-        self.resize(350, 200)
+        self.resize(500, 300)  # Larger for 1920x1080 screens
         
         self.signal_name = 'default'
         self.activate_on_high = False
@@ -78,7 +78,7 @@ class RouteSelectionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Add Route Action")
         self.setModal(True)
-        self.resize(250, 120)  # Smaller dialog size
+        self.resize(400, 180)  # Larger for 1920x1080 screens
         
         self.route_name = None
         self.reverse = False
@@ -123,7 +123,7 @@ class DockSelectionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Add Dock Action")
         self.setModal(True)
-        self.resize(250, 100)  # Smaller dialog size
+        self.resize(400, 150)  # Larger for 1920x1080 screens
         
         layout = QVBoxLayout()
         
@@ -175,51 +175,67 @@ class PlanEditor(QMainWindow):
         self.speed_zone_window = None
         
         self.setWindowTitle("Plan Editor")
-        self.setGeometry(100, 100, 1024, 550)
+        self.setGeometry(100, 100, 1600, 900)  # Much larger for 1920x1080 screens
         
-        # Apply global font scaling for smaller screens
+        # Apply global font scaling for large screens (1920x1080)
         font = self.font()
-        font.setPointSize(8)  # Smaller base font size
+        font.setPointSize(14)  # Larger base font size for visibility
         self.setFont(font)
         
-        # Apply global scaling to all child widgets
+        # Apply global scaling optimized for large screens (1920x1080)
         self.setStyleSheet("""
             QWidget {
-                font-size: 8px;
+                font-size: 14px;
             }
             QLabel {
-                font-size: 8px;
+                font-size: 14px;
             }
             QPushButton {
-                font-size: 8px;
-                min-height: 16px;
-                padding: 2px 4px;
-            }
-            QComboBox {
-                font-size: 8px;
-                min-height: 16px;
-            }
-            QListWidget {
-                font-size: 8px;
-            }
-            QLineEdit {
-                font-size: 8px;
-                min-height: 16px;
-            }
-            QTextEdit {
-                font-size: 8px;
-            }
-            QGroupBox {
-                font-size: 8px;
+                font-size: 16px;
+                min-height: 40px;
+                padding: 8px 16px;
                 font-weight: bold;
             }
+            QComboBox {
+                font-size: 14px;
+                min-height: 35px;
+                padding: 5px;
+            }
+            QListWidget {
+                font-size: 14px;
+            }
+            QLineEdit {
+                font-size: 14px;
+                min-height: 35px;
+                padding: 5px;
+            }
+            QTextEdit {
+                font-size: 14px;
+            }
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                padding-top: 25px;
+                margin-top: 10px;
+            }
             QTabWidget {
-                font-size: 8px;
+                font-size: 14px;
             }
             QTabBar::tab {
-                font-size: 8px;
-                min-height: 16px;
-                padding: 2px 4px;
+                font-size: 14px;
+                min-height: 35px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QDialog {
+                font-size: 14px;
+            }
+            QCheckBox {
+                font-size: 14px;
+                min-height: 25px;
+            }
+            QMessageBox {
+                font-size: 14px;
             }
         """)
         
@@ -250,8 +266,8 @@ class PlanEditor(QMainWindow):
         right_panel = self.create_right_panel()
         splitter.addWidget(right_panel)
         
-        # Set initial splitter proportions - adjusted for smaller screen
-        splitter.setSizes([250, 774])  # Smaller left panel for 1024 width
+        # Set initial splitter proportions - adjusted for large screen (1600px width)
+        splitter.setSizes([400, 1200])  # Larger left panel for 1600px total width
     
     def create_left_panel(self) -> QWidget:
         left_widget = QWidget()

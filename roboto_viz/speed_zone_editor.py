@@ -34,9 +34,48 @@ class SpeedZoneEditor(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         
+        # Apply global scaling for large screens (1920x1080)
+        self.setStyleSheet("""
+            QWidget {
+                font-size: 14px;
+            }
+            QLabel {
+                font-size: 14px;
+            }
+            QPushButton {
+                font-size: 16px;
+                min-height: 40px;
+                padding: 8px 16px;
+                font-weight: bold;
+                border: 2px solid #2c3e50;
+                border-radius: 8px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+            QComboBox {
+                font-size: 14px;
+                min-height: 35px;
+                padding: 5px;
+            }
+            QGroupBox {
+                font-size: 16px;
+                font-weight: bold;
+                padding-top: 25px;
+                margin-top: 10px;
+            }
+        """)
+        
         # Title
         title = QLabel('Speed Zone Editor')
-        title.setStyleSheet('font-weight: bold; font-size: 12px;')
+        title.setStyleSheet('font-weight: bold; font-size: 18px;')
         layout.addWidget(title)
         
         # Tool selection
@@ -101,8 +140,10 @@ class SpeedZoneEditor(QWidget):
                 background-color: #27ae60;
                 color: white;
                 font-weight: bold;
-                padding: 8px;
-                border-radius: 4px;
+                font-size: 16px;
+                min-height: 40px;
+                padding: 12px 20px;
+                border-radius: 8px;
             }
             QPushButton:hover {
                 background-color: #2ecc71;
@@ -114,8 +155,11 @@ class SpeedZoneEditor(QWidget):
             QPushButton {
                 background-color: #e74c3c;
                 color: white;
-                padding: 8px;
-                border-radius: 4px;
+                font-size: 16px;
+                font-weight: bold;
+                min-height: 40px;
+                padding: 12px 20px;
+                border-radius: 8px;
             }
             QPushButton:hover {
                 background-color: #c0392b;

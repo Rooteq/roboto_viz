@@ -46,12 +46,12 @@ class PlanTools(QWidget):
         # Styles
         self.button_style = """
             QPushButton {
-                min-height: 16px;
-                font-size: 12px;
-                padding: 4px 8px;
+                min-height: 45px;
+                font-size: 16px;
+                padding: 12px 20px;
                 font-weight: bold;
-                border: 1px solid #2c3e50;
-                border-radius: 4px;
+                border: 2px solid #2c3e50;
+                border-radius: 8px;
                 background-color: #ecf0f1;
                 color: #2c3e50;
             }
@@ -166,12 +166,12 @@ class PlanTools(QWidget):
         self.start_btn = QPushButton("START")
         self.start_btn.setStyleSheet("""
             QPushButton {
-                min-height: 28px;
-                font-size: 14px;
-                padding: 8px 16px;
+                min-height: 55px;
+                font-size: 20px;
+                padding: 15px 30px;
                 font-weight: bold;
-                border: 1px solid #27ae60;
-                border-radius: 6px;
+                border: 3px solid #27ae60;
+                border-radius: 10px;
                 background-color: #2ecc71;
                 color: white;
             }
@@ -195,12 +195,12 @@ class PlanTools(QWidget):
         self.stop_btn = QPushButton("STOP")
         self.stop_btn.setStyleSheet("""
             QPushButton {
-                min-height: 28px;
-                font-size: 14px;
-                padding: 8px 16px;
+                min-height: 55px;
+                font-size: 20px;
+                padding: 15px 30px;
                 font-weight: bold;
-                border: 1px solid #c0392b;
-                border-radius: 6px;
+                border: 3px solid #c0392b;
+                border-radius: 10px;
                 background-color: #e74c3c;
                 color: white;
             }
