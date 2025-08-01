@@ -48,6 +48,11 @@ class MapView(QGraphicsView):
         self.zoom_factor = 1.15  # How fast to zoom in/out
         self.current_zoom = 1.0
         self.min_zoom = 0.1      # Allow zooming out further
+        
+        # Store view state to preserve zoom and pan
+        self.preserve_view_state = True
+        self.stored_transform = None
+        self.stored_center_point = None
         self.max_zoom = 100.0    # Allow extreme zoom levels
         
         # Set drag mode to make panning work with right mouse button
@@ -170,13 +175,46 @@ class MapView(QGraphicsView):
         # Force scene update
         self.scene.update()
         
-        # Update view to fit new image
-        self.update_view()
+        # Update view to fit new image (force reset for new maps)
+        self.update_view(force_reset=True)
         
         print(f"DEBUG: Map loaded successfully, origin: {self.map_origin}")
 
-    def update_view(self):
+    def save_view_state(self):
+        """Save the current zoom and pan state"""
         if self.image_item:
+            self.stored_transform = self.transform()
+            self.stored_center_point = self.mapToScene(self.viewport().rect().center())
+            print(f"DEBUG: Saved view state - zoom: {self.stored_transform.m11():.2f}, center: ({self.stored_center_point.x():.1f}, {self.stored_center_point.y():.1f})")
+
+    def restore_view_state(self):
+        """Restore the previously saved zoom and pan state"""
+        if self.stored_transform is not None and self.stored_center_point is not None and self.image_item:
+            self.setTransform(self.stored_transform)
+            self.centerOn(self.stored_center_point)
+            self.current_zoom = self.stored_transform.m11()
+            print(f"DEBUG: Restored view state - zoom: {self.current_zoom:.2f}, center: ({self.stored_center_point.x():.1f}, {self.stored_center_point.y():.1f})")
+            return True
+        return False
+
+    def preserve_view_during_operation(self, operation_func, *args, **kwargs):
+        """Execute an operation while preserving the current view state"""
+        self.save_view_state()
+        try:
+            result = operation_func(*args, **kwargs)
+            return result
+        finally:
+            # Small delay to ensure any UI updates are processed
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(10, self.restore_view_state)
+
+    def update_view(self, force_reset=False):
+        if self.image_item:
+            # If we should preserve view state and have stored state, restore it
+            if not force_reset and self.preserve_view_state and self.restore_view_state():
+                return
+            
+            # Otherwise, do the default fit-to-view behavior
             view_rect = self.viewport().rect()
             scene_rect = self.pixmap.rect()
             
@@ -195,10 +233,16 @@ class MapView(QGraphicsView):
             
             # Center on the image
             self.centerOn(self.image_item)
+            
+            # Save the new view state
+            self.save_view_state()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.update_view()
+        # Save current view state before resize, then restore it
+        if self.image_item:
+            self.save_view_state()
+        # Don't force reset on resize - just maintain current view
 
     def update_robot_pose(self, x, y, theta):
         map_x = (x - self.map_origin[0]) * 20
@@ -322,6 +366,8 @@ class MapView(QGraphicsView):
                 super().mouseReleaseEvent(fake_event)
             else:
                 super().mouseReleaseEvent(event)
+            # Save view state after panning
+            self.save_view_state()
             return
             
         # Handle speed zone editing mode
@@ -388,6 +434,9 @@ class MapView(QGraphicsView):
         
         # Update grid visibility based on new zoom level
         self.update_grid_visibility()
+        
+        # Save the new view state after zooming
+        self.save_view_state()
                 
         # Accept the event to prevent it from being propagated
         event.accept()
@@ -501,7 +550,7 @@ class MapView(QGraphicsView):
         Reset zoom level to the original scale that fits the viewport
         """
         self.resetTransform()
-        self.update_view()
+        self.update_view(force_reset=True)
 
     @property
     def enable_drawing(self):
