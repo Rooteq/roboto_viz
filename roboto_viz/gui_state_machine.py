@@ -476,6 +476,22 @@ class PlanActiveState(State):
             self.gui.main_view.stop_navigation,
             self.gui.gui_manager.stop_nav
         )
+        
+        # Connect GUI manager plan execution signals to plan executor
+        self.connect_and_store_connections(
+            self.gui.gui_manager.plan_execution_start,
+            self.gui.main_view.plan_executor.start_plan_execution
+        )
+        
+        self.connect_and_store_connections(
+            self.gui.gui_manager.plan_execution_stop,
+            self.gui.main_view.plan_executor.stop_plan_execution
+        )
+        
+        self.connect_and_store_connections(
+            self.gui.gui_manager.plan_action_execute,
+            self.gui.main_view.plan_executor.execute_action
+        )
 
     def handleDisconnection(self):
         self.gui.transition_to(DisconnectedState())

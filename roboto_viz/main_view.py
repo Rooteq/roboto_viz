@@ -210,10 +210,10 @@ class MainView(QMainWindow):
     
     def setup_plan_connections(self):
         """Setup connections for the new plan system"""
-        # Plan active view connections
-        self.plan_active_view.start_plan_execution.connect(self.plan_executor.start_plan_execution)
-        self.plan_active_view.stop_plan_execution.connect(self.plan_executor.stop_plan_execution)
-        self.plan_active_view.execute_plan_action.connect(self.plan_executor.execute_action)
+        # Plan active view connections - forward to main view signals for GUI state machine
+        self.plan_active_view.start_plan_execution.connect(self.start_plan_execution.emit)
+        self.plan_active_view.stop_plan_execution.connect(self.stop_plan_execution.emit)
+        self.plan_active_view.execute_plan_action.connect(self.execute_plan_action.emit)
         self.plan_active_view.map_load_requested.connect(self.load_map)
         
         # Plan executor connections

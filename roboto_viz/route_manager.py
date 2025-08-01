@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import subprocess
 import math
+import time
 
 # Type alias for clarity
 Point4D = Tuple[float, float, float, float]
@@ -574,20 +575,38 @@ class RouteManager:
                 f"{{map_url: '{str(map_path)}'}}"
             ]
             
-            # Execute the command
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=True  # This will raise CalledProcessError if the command fails
-            )
-            
-            # Check if the command was successful
-            # For LoadMap service, result=0 indicates success
-            if "result=0" not in result.stdout:
-                error_msg = f"Failed to load map: {result.stdout}"
-                print(error_msg)
-                return False, error_msg
+            # Retry mechanism for map loading
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    print(f"Attempting to load map '{map_name}' (attempt {attempt + 1}/{max_retries})")
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=10.0,  # 10 second timeout to prevent hanging
+                        check=False  # Don't raise exception, handle return code manually
+                    )
+                    
+                    # Check if the command was successful
+                    if result.returncode == 0 and "result=0" in result.stdout:
+                        print(f"Successfully loaded map '{map_name}' onto robot on attempt {attempt + 1}")
+                        break
+                    else:
+                        error_msg = f"Attempt {attempt + 1} failed: return code {result.returncode}, output: {result.stdout}"
+                        print(error_msg)
+                        if attempt == max_retries - 1:  # Last attempt
+                            return False, f"Failed to load map after {max_retries} attempts. Last error: {error_msg}"
+                        
+                except subprocess.TimeoutExpired:
+                    error_msg = f"Attempt {attempt + 1} timed out after 10 seconds"
+                    print(error_msg)
+                    if attempt == max_retries - 1:  # Last attempt
+                        return False, f"Map server service call timed out after {max_retries} attempts. The nav2 map server may not be responding."
+                    
+                # Wait a bit before retrying
+                if attempt < max_retries - 1:
+                    time.sleep(2.0)  # Wait 2 seconds before retry
             
             print(f"Successfully loaded map '{map_name}' onto robot")
             
@@ -614,20 +633,20 @@ class RouteManager:
                         speed_cmd,
                         capture_output=True,
                         text=True,
-                        check=True
+                        timeout=10.0,  # 10 second timeout for speed mask too
+                        check=False
                     )
                     
                     print(f"DEBUG: Speed mask service stdout: {speed_result.stdout}")
                     print(f"DEBUG: Speed mask service stderr: {speed_result.stderr}")
                     
-                    if "result=0" in speed_result.stdout:
+                    if speed_result.returncode == 0 and "result=0" in speed_result.stdout:
                         print(f"Successfully loaded speed mask 'speed_{map_name}' onto robot")
                     else:
-                        print(f"Warning: Failed to load speed mask: {speed_result.stdout}")
+                        print(f"Warning: Failed to load speed mask (return code: {speed_result.returncode}): {speed_result.stdout}")
                         
-                except subprocess.CalledProcessError as e:
-                    print(f"Warning: Error loading speed mask: {e.stderr}")
-                    print(f"DEBUG: Speed mask CalledProcessError stdout: {e.stdout}")
+                except subprocess.TimeoutExpired:
+                    print(f"Warning: Speed mask service call timed out after 10 seconds. Filter mask server may not be responding.")
                 except Exception as e:
                     print(f"Warning: Unexpected error loading speed mask: {str(e)}")
             else:

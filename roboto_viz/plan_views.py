@@ -248,6 +248,9 @@ class PlanActiveView(QWidget):
         # Plan editor signals
         self.plan_tools.open_plan_editor.connect(self.open_plan_editor)
         
+        # Plan selection signal
+        self.plan_tools.plan_selected.connect(self.on_plan_selected)
+        
         # Disconnection signal
         self.plan_tools.on_disconnect.connect(lambda: self.on_disconnection.emit("Disconnect from PlanActiveView"))
     
@@ -284,6 +287,10 @@ class PlanActiveView(QWidget):
         """Handle map selection request"""
         self.map_load_requested.emit(map_name)
     
+    def on_plan_selected(self, plan_name: str):
+        """Handle plan selection and update status"""
+        self.set_plan_status(f"Plan '{plan_name}' selected")
+    
     def open_plan_editor(self):
         """Open the plan editor window"""
         if self.plan_editor is None:
@@ -315,18 +322,20 @@ class PlanActiveView(QWidget):
         
         if hasattr(self, 'robot_status_frame'):
             # Define background colors based on status
-            if status in ["Idle", "At base", "At destination", "Manual move", "Stopped"]:
-                # Light green for normal operational states
+            if status in ["At base", "At destination", "Docked", "Undocked", "Waiting for signal", 
+                          "Stopped", "Idle"]:
+                # Light green for completed/stable states
                 bg_color = "#d5f4e6"
                 text_color = "#27ae60"
-            elif status in ["Nav to base", "Nav to dest", "Navigating", "Docking", "Undocking", 
-                            "Waiting for signal", "Manual move"] or status.startswith("Executing"):
-                # Light blue for active operations  
-                bg_color = "#d6eaf8"
-                text_color = "#3498db"
-            elif status in ["Failed", "Error", "Connection lost", "Navigation Error"] or \
+            elif status in ["Nav to base", "Nav to dest", "Navigating", "Docking", "Undocking",
+                            "Manual move"] or status.startswith("Executing"):
+                # No color (white/light gray) for moving/active states
+                bg_color = "#f8f9fa"
+                text_color = "#2c3e50"
+            elif status in ["Failed", "Error", "Connection lost", "Navigation Error", 
+                           "Dock Cancelled", "Undock Cancelled", "Dock cancelled", "Undock cancelled"] or \
                  "failed" in status.lower() or "error" in status.lower() or "cancelled" in status.lower():
-                # Light red for errors
+                # Light red for errors and cancellations
                 bg_color = "#fadbd8"
                 text_color = "#e74c3c"
             elif status in ["Warning", "Low battery", "Obstacle detected"]:

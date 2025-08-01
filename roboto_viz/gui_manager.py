@@ -646,16 +646,42 @@ class Navigator(QThread):
                     
                     path_msg.poses.append(pose_stamped)
                 
-                # Wait for nav2 to be active first
-                self.nav_data.navigator.waitUntilNav2Active()
+                # Wait for nav2 to be active first (with timeout)
+                print("DEBUG: Waiting for nav2 to become active...")
+                try:
+                    # Add timeout to prevent infinite blocking
+                    nav2_ready = threading.Event()
+                    
+                    def wait_for_nav2():
+                        try:
+                            self.nav_data.navigator.waitUntilNav2Active()
+                            nav2_ready.set()
+                        except Exception as e:
+                            print(f"DEBUG: Error waiting for nav2: {e}")
+                    
+                    wait_thread = threading.Thread(target=wait_for_nav2)
+                    wait_thread.daemon = True
+                    wait_thread.start()
+                    
+                    # Wait up to 10 seconds for nav2 to be ready
+                    if not nav2_ready.wait(timeout=10.0):
+                        print("DEBUG: Timeout waiting for nav2 to become active, proceeding anyway...")
+                    else:
+                        print("DEBUG: Nav2 is now active!")
+                        
+                except Exception as e:
+                    print(f"DEBUG: Exception in nav2 wait: {e}")
+                    # Continue anyway
                 
                 # Start path navigation with specific controller and goal checker
                 # Try with precise_goal_checker to maintain orientation
+                print(f"DEBUG: Starting navigation with followPath, {len(path_msg.poses)} poses")
                 self.nav_data.navigator.followPath(
                     path_msg,
                     controller_id='FollowPath',
                     goal_checker_id='goal_checker'
                 )
+                print("DEBUG: followPath() call completed, navigation should now be active")
                 
                 while not self.nav_data.navigator.isTaskComplete() and self._running:
                     # Check if there's a new goal
@@ -691,6 +717,11 @@ class GuiManager(QThread):
 
     service_response = pyqtSignal(bool)
     update_pose = pyqtSignal(float, float, float)
+    
+    # Plan execution signals
+    plan_execution_start = pyqtSignal(str)  # plan_name
+    plan_execution_stop = pyqtSignal()
+    plan_action_execute = pyqtSignal(str, int)  # plan_name, action_index
 
     """ 
     DISCONNECTED STATE:
@@ -733,8 +764,14 @@ class GuiManager(QThread):
         if self.nav_data.maps:
             default_map = "robots_map"
             if default_map in self.nav_data.maps:
-                self.nav_data.route_manager.load_map_onto_robot(default_map)
-                self.nav_data.set_current_map(default_map)
+                success, error_msg = self.nav_data.route_manager.load_map_onto_robot(default_map)
+                if success:
+                    self.nav_data.set_current_map(default_map)
+                    print(f"Default map '{default_map}' loaded successfully during connection")
+                else:
+                    print(f"Warning: Failed to load default map '{default_map}' during connection: {error_msg}")
+                    # Still set it as current map so the GUI works, but don't block connection
+                    self.nav_data.set_current_map(default_map)
             else:
                 # If default map doesn't exist, use first available map
                 self.nav_data.set_current_map(self.nav_data.maps[0])
@@ -757,12 +794,17 @@ class GuiManager(QThread):
         """Handle map selection from GUI"""
         self.nav_data.set_current_map(map_name)
         
+        # Emit status update to inform user that map loading is starting
+        self.manualStatus.emit(f"Loading map '{map_name}'...")
+        
         # Load the map into nav2 navigation stack
         success, error_msg = self.nav_data.route_manager.load_map_onto_robot(map_name)
         if success:
             print(f"Map '{map_name}' loaded into nav2 successfully")
+            self.manualStatus.emit(f"Map '{map_name}' loaded successfully")
         else:
             print(f"Failed to load map '{map_name}' into nav2: {error_msg}")
+            self.manualStatus.emit(f"Failed to load map '{map_name}': {error_msg}")
         
         self.send_routes()  # Send updated routes for new map
         
@@ -900,22 +942,30 @@ class GuiManager(QThread):
     def handle_start_plan_execution(self, plan_name: str):
         """Handle plan execution start request"""
         print(f"Starting plan execution: {plan_name}")
-        # For now, just emit a status update
-        # In a real implementation, you would integrate with the plan executor
-        self.manualStatus.emit(f"Executing plan: {plan_name}")
+        # Forward to plan executor
+        self.plan_execution_start.emit(plan_name)
     
     @pyqtSlot()
     def handle_stop_plan_execution(self):
         """Handle plan execution stop request"""
         print("Stopping plan execution")
-        # Stop any ongoing navigation
-        self.navigator.stop()
-        self.manualStatus.emit("Plan execution stopped")
+        
+        # Check if we're currently docking/undocking and emit status before suppression
+        if self.node and hasattr(self.node, 'current_dock_goal_handle') and self.node.current_dock_goal_handle is not None:
+            # We're docking - emit cancellation status before suppression
+            self.dockingStatus.emit("Dock Cancelled")
+        elif self.node and hasattr(self.node, 'current_undock_goal_handle') and self.node.current_undock_goal_handle is not None:
+            # We're undocking - emit cancellation status before suppression  
+            self.dockingStatus.emit("Undock Cancelled")
+        
+        # Stop navigation and cancel any ongoing docking/undocking operations
+        self.stop_nav()
+        # Forward to plan executor
+        self.plan_execution_stop.emit()
     
     @pyqtSlot(str, int)
     def handle_execute_plan_action(self, plan_name: str, action_index: int):
         """Handle execution of a specific plan action"""
         print(f"Executing action {action_index} from plan {plan_name}")
-        # This would be handled by the plan executor in main_view
-        # The GUI manager just updates status
-        self.manualStatus.emit(f"Executing action {action_index + 1}")
+        # Forward to plan executor
+        self.plan_action_execute.emit(plan_name, action_index)

@@ -33,6 +33,9 @@ class PlanTools(QWidget):
     
     # Tab change signal
     tab_changed = pyqtSignal(int)  # tab_index
+    
+    # Plan selection signal
+    plan_selected = pyqtSignal(str)  # plan_name
 
     def __init__(self, plan_manager: PlanManager):
         super().__init__()
@@ -337,6 +340,9 @@ class PlanTools(QWidget):
             # Load the plan's map if specified
             if self.current_plan.map_name:
                 self.map_selected.emit(self.current_plan.map_name)
+            
+            # Emit plan selected signal for status updates
+            self.plan_selected.emit(plan_name)
             
             QMessageBox.information(self, "Success", f"Plan '{plan_name}' selected!")
         else:
