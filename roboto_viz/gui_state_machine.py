@@ -296,7 +296,20 @@ class ActiveState(State):
             )
         )
 
+        # CAN status forwarding connections
+        self.setup_can_status_forwarding()
+
         self.gui.gui_manager.send_routes()
+
+    def setup_can_status_forwarding(self):
+        """Setup CAN status forwarding connections"""
+        try:
+            from roboto_viz.can_integration_helper import add_can_forwarding_to_state_connections
+            add_can_forwarding_to_state_connections(self, self.gui.gui_manager)
+        except ImportError as e:
+            print(f"CAN integration helper not available: {e}")
+        except Exception as e:
+            print(f"Failed to setup CAN status forwarding: {e}")
 
     def handleDisconnection(self):
         self.gui.transition_to(DisconnectedState())
@@ -453,6 +466,9 @@ class PlanActiveState(State):
             lambda status: self.gui.main_view.plan_active_view.update_robot_status(status)
         )
         
+        # CAN status forwarding connections
+        self.setup_can_status_forwarding()
+        
         # Connect navigation failure to plan executor
         self.connect_and_store_connections(
             self.gui.gui_manager.navigator.navStatus,
@@ -492,6 +508,16 @@ class PlanActiveState(State):
             self.gui.gui_manager.plan_action_execute,
             self.gui.main_view.plan_executor.execute_action
         )
+
+    def setup_can_status_forwarding(self):
+        """Setup CAN status forwarding connections"""
+        try:
+            from roboto_viz.can_integration_helper import add_can_forwarding_to_state_connections
+            add_can_forwarding_to_state_connections(self, self.gui.gui_manager)
+        except ImportError as e:
+            print(f"CAN integration helper not available: {e}")
+        except Exception as e:
+            print(f"Failed to setup CAN status forwarding: {e}")
 
     def handleDisconnection(self):
         self.gui.transition_to(DisconnectedState())

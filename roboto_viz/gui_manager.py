@@ -32,6 +32,7 @@ except ImportError:
     Undock = None
 
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
+from roboto_viz.can_status_manager import CANStatusManager
 
 class LState(Enum):
     UNCONFIGURED = 0
@@ -714,6 +715,11 @@ class Navigator(QThread):
 class GuiManager(QThread):
     manualStatus = pyqtSignal(str)
     dockingStatus = pyqtSignal(str)
+    
+    # Additional status signals for CAN forwarding
+    robotStatusCAN = pyqtSignal(str)  # For robot status updates 
+    batteryStatusCAN = pyqtSignal(str)  # For battery status updates
+    planStatusCAN = pyqtSignal(str)  # For plan status updates
 
     service_response = pyqtSignal(bool)
     update_pose = pyqtSignal(float, float, float)
@@ -745,7 +751,7 @@ class GuiManager(QThread):
     send_route_names = pyqtSignal(dict)
     send_map_names = pyqtSignal(list)
 
-    def __init__(self, dock_manager=None):
+    def __init__(self, dock_manager=None, can_interface="can0", enable_can=True):
         super().__init__()
         self.node: ManagerNode = None
         self.executor = MultiThreadedExecutor()
@@ -753,9 +759,43 @@ class GuiManager(QThread):
         self.navigator: Navigator = Navigator(self.nav_data)
         self.dock_manager = dock_manager
 
+        # Initialize CAN status manager
+        self.can_manager = None
+        if enable_can:
+            self.can_manager = CANStatusManager(can_interface)
+            self._connect_can_signals()
+
         # self.nav_data.send_routes.connect(lambda: self.send_route_names)
 
         self.navigator.start()
+
+    def _connect_can_signals(self):
+        """Connect all status signals to CAN manager"""
+        if not self.can_manager:
+            return
+            
+        # Connect the various status signals to CAN handlers
+        self.manualStatus.connect(self.can_manager.handle_manual_status)
+        self.dockingStatus.connect(self.can_manager.handle_docking_status)
+        self.robotStatusCAN.connect(self.can_manager.handle_robot_status)
+        self.batteryStatusCAN.connect(self.can_manager.handle_battery_status)
+        self.planStatusCAN.connect(self.can_manager.handle_plan_status)
+        
+        # Connect navigation status from navigator if available
+        if hasattr(self.navigator, 'navStatus'):
+            self.navigator.navStatus.connect(self.can_manager.handle_navigation_status)
+    
+    def send_robot_status_to_can(self, status: str):
+        """Send robot status to CAN bus via signal"""
+        self.robotStatusCAN.emit(status)
+    
+    def send_battery_status_to_can(self, status: str):
+        """Send battery status to CAN bus via signal"""
+        self.batteryStatusCAN.emit(status)
+    
+    def send_plan_status_to_can(self, status: str):
+        """Send plan status to CAN bus via signal"""
+        self.planStatusCAN.emit(status)
 
     def send_maps(self):
         """Load and send available maps"""
@@ -811,9 +851,17 @@ class GuiManager(QThread):
     @pyqtSlot()
     def trigger_configure(self):
         self.node.trigger_configure()
+        
+        # Connect CAN interface when configuring
+        if self.can_manager and not self.can_manager.socket_fd:
+            self.can_manager.connect_can()
 
     @pyqtSlot()
     def trigger_deactivate(self):
+        # Disconnect CAN interface when deactivating
+        if self.can_manager:
+            self.can_manager.disconnect_can()
+            
         self.node.trigger_deactivate()
         self.node.trigger_shutdown()
     
