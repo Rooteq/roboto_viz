@@ -14,17 +14,17 @@ from roboto_viz.speed_zone_editor import SpeedZoneEditor
 
 
 class WaitActionDialog(QDialog):
-    """Custom dialog for configuring wait actions with CAN options"""
+    """Custom dialog for configuring wait actions"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Add Wait Action")
         self.setModal(True)
-        self.resize(500, 300)  # Larger for 1920x1080 screens
+        self.resize(400, 200)  # Smaller since we removed options
         
         self.signal_name = 'default'
-        self.activate_on_high = False
-        self.activate_on_low = False
+        self.activate_on_high = True  # Always activate on UART "1"
+        self.activate_on_low = False  # Never activate on UART "0"
         
         layout = QVBoxLayout()
         
@@ -34,20 +34,10 @@ class WaitActionDialog(QDialog):
         layout.addWidget(signal_label)
         layout.addWidget(self.signal_input)
         
-        # UART activation options
-        uart_group = QGroupBox("UART Activation Options")
-        uart_layout = QVBoxLayout()
-        
-        # Activate on high checkbox (UART "1")
-        self.high_checkbox = QCheckBox("Activate on UART '1' (high)")
-        uart_layout.addWidget(self.high_checkbox)
-        
-        # Activate on low checkbox (UART "0")
-        self.low_checkbox = QCheckBox("Activate on UART '0' (low)")
-        uart_layout.addWidget(self.low_checkbox)
-        
-        uart_group.setLayout(uart_layout)
-        layout.addWidget(uart_group)
+        # Info label explaining the behavior
+        info_label = QLabel("Wait action will activate on blue button press or UART '1' signal.")
+        info_label.setStyleSheet("color: #666; font-style: italic; margin: 10px 0;")
+        layout.addWidget(info_label)
         
         # Buttons
         buttons_layout = QHBoxLayout()
@@ -65,8 +55,7 @@ class WaitActionDialog(QDialog):
     
     def accept(self):
         self.signal_name = self.signal_input.text() or 'default'
-        self.activate_on_high = self.high_checkbox.isChecked()
-        self.activate_on_low = self.low_checkbox.isChecked()
+        # activate_on_high is always True, activate_on_low is always False
         
         super().accept()
 

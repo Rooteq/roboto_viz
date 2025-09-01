@@ -37,6 +37,8 @@ class UARTListener(QThread):
                         print(f"UART RAW: Received '{line}' from {self.port}")
                         if line in ['0', '1']:
                             print(f"UART: Valid message '{line}' - emitting signal")
+                            if line == '1':
+                                print(f"UART DEBUG: Received '1' signal - triggering wait action completion")
                             self.uart_message_received.emit(line)
                         else:
                             print(f"UART: Invalid message '{line}' - ignoring")
