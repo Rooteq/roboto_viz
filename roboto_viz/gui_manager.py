@@ -537,12 +537,17 @@ class Navigator(QThread):
         
     def stop(self):
         # self._running = False
-        if self.nav_data.navigator.isTaskComplete() is False:
-            self.nav_data.navigator.cancelTask()
-            # Only emit status if the last status wasn't a failure
-            if self._last_status not in ["Failed", "Navigation Error"]:
-                self._last_status = "Stopped"
-                self.navStatus.emit("Stopped")
+        # Always try to cancel any ongoing navigation task
+        try:
+            if self.nav_data.navigator.isTaskComplete() is False:
+                self.nav_data.navigator.cancelTask()
+        except Exception as e:
+            print(f"Warning: Error canceling navigation task: {e}")
+        
+        # Always emit "Stopped" status when explicitly stopping navigation
+        # This ensures the UI always updates when STOP is pressed
+        self._last_status = "Stopped"
+        self.navStatus.emit("Stopped")
 
 
     def set_goal(self, route: str, to_dest: bool, x:float, y:float):
@@ -1012,11 +1017,19 @@ class GuiManager(QThread):
         # Set flag to suppress docking status messages during general stop
         self.node.suppress_docking_status = True
         
+        # Force stop navigation
         self.navigator.stop()
         # Also cancel any ongoing docking operations
         self.cancel_docking()
         # Also cancel any ongoing undocking operations
         self.cancel_undocking()
+        
+        # Always emit "Stopped" status to ensure UI updates
+        self.navStatus.emit("Stopped")
+        
+        # Send OK CAN message for STOP command (only if battery warning is not active)
+        if self.can_manager:
+            self.can_manager.send_stop_ok_message()
         
         # Reset the flag after a short delay to allow normal operation to resume
         QTimer.singleShot(500, self.reset_suppress_flag)

@@ -32,6 +32,8 @@ class CANStatusManager(QObject):
         self.can_interface = can_interface
         self.socket_fd = None
         self.last_status_cache: Dict[str, tuple] = {}
+        self.battery_warning_active = False  # Track if battery is in warning state
+        self.last_battery_warning_state = None  # Track battery warning state changes
         
         # Status level mapping for different status strings
         self.status_level_map = {
@@ -158,6 +160,10 @@ class CANStatusManager(QObject):
             return True
             
         return False
+    
+    def _should_block_ok_status(self, status_level: StatusLevel) -> bool:
+        """Check if OK status should be blocked due to battery warning"""
+        return status_level == StatusLevel.OK and self.battery_warning_active
         
     def send_led_status_if_changed(self, status_text: str):
         """
@@ -167,6 +173,11 @@ class CANStatusManager(QObject):
             return
             
         status_level = self._get_status_level(status_text)
+        
+        # Block OK status if battery is in warning state
+        if self._should_block_ok_status(status_level):
+            print(f"CAN Status: Blocking OK status due to battery warning - keeping WARNING/ERROR LED")
+            return
         
         if self._should_send_led(status_level):
             # Map status level to LED CAN ID
@@ -202,8 +213,27 @@ class CANStatusManager(QObject):
         
     @pyqtSlot(str)
     def handle_battery_status(self, status: str):
-        """Handle battery status updates"""
-        self.send_led_status_if_changed(status)
+        """Handle battery status updates - only send on warning state changes"""
+        # Check if this is a battery warning state
+        is_battery_warning = "WARNING" in status.upper() or "LOW BATTERY" in status.upper()
+        
+        # Only send CAN message if battery warning state changed
+        if self.last_battery_warning_state != is_battery_warning:
+            print(f"CAN Status: Battery warning state changed: {self.last_battery_warning_state} -> {is_battery_warning}")
+            self.last_battery_warning_state = is_battery_warning
+            self.battery_warning_active = is_battery_warning
+            
+            # Send appropriate CAN message for battery state change
+            if is_battery_warning:
+                # Send WARNING LED for low battery
+                self._send_led_can_message(CANLEDType.ORANGE_LED)
+                print("CAN Status: Sent ORANGE LED for battery warning")
+            else:
+                # Battery recovered - send OK LED only if no other issues
+                self._send_led_can_message(CANLEDType.GREEN_LED)
+                print("CAN Status: Sent GREEN LED for battery recovery")
+        else:
+            print(f"CAN Status: Battery status unchanged, not sending CAN message: {status}")
         
     @pyqtSlot(str)
     def handle_plan_status(self, status: str):
@@ -216,6 +246,21 @@ class CANStatusManager(QObject):
         Allows dynamic addition of new status mappings
         """
         self.status_level_map[status_text.lower().strip()] = level
+    
+    def send_stop_ok_message(self):
+        """Send OK message when STOP is pressed, but only if battery warning is not active"""
+        if not self.socket_fd:
+            return False
+            
+        if self.battery_warning_active:
+            print("CAN Status: Not sending OK message for STOP - battery warning is active")
+            return False
+        
+        # Send GREEN LED for successful stop
+        success = self._send_led_can_message(CANLEDType.GREEN_LED)
+        if success:
+            print("CAN Status: Sent GREEN LED for STOP command")
+        return success
         
     def get_status_info(self) -> Dict:
         """

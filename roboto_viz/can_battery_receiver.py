@@ -137,13 +137,12 @@ class CANBatteryReceiver(QObject):
                         percentage = self.voltage_to_percentage(voltage)
                         status_string = self.get_battery_status_string(percentage, voltage)
                         
-                        print(f'DEBUG: CAN Battery - ADC: {battery_adc}, Voltage: {voltage:.1f}V, Percentage: {percentage}%')
                         
                         # Emit both raw ADC and processed percentage/status
                         self.battery_status_update.emit(battery_adc)
                         self.battery_percentage_update.emit(percentage, status_string)
                     else:
-                        print(f'DEBUG: CAN Battery out of range: {battery_adc}')
+                        pass  # ADC value out of range
             except socket.timeout:
                 # Normal timeout, continue receiving
                 continue
