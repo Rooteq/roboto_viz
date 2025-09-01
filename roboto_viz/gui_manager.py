@@ -34,6 +34,7 @@ except ImportError:
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 from roboto_viz.can_status_manager import CANStatusManager
 from roboto_viz.can_battery_receiver import CANBatteryReceiver
+from roboto_viz.can_signal_receiver import CANSignalReceiver
 
 class LState(Enum):
     UNCONFIGURED = 0
@@ -734,6 +735,10 @@ class GuiManager(QThread):
     battery_adc_update = pyqtSignal(int)  # Raw ADC value (0-1023)
     battery_percentage_update = pyqtSignal(int, str)  # Battery percentage and status string
     
+    # CAN wait signal
+    can_signal_received = pyqtSignal()  # CAN signal for wait actions
+    wait_action_status = pyqtSignal(str)  # Wait action status for CAN WARNING messages
+    
     # Plan execution signals
     plan_execution_start = pyqtSignal(str)  # plan_name
     plan_execution_stop = pyqtSignal()
@@ -771,11 +776,13 @@ class GuiManager(QThread):
 
         # Initialize CAN status manager
         self.can_manager = None
-        # Initialize CAN battery receiver
+        # Initialize CAN receivers
         self.can_battery_receiver = None
+        self.can_signal_receiver = None
         if enable_can:
             self.can_manager = CANStatusManager(can_interface)
             self.can_battery_receiver = CANBatteryReceiver(can_interface)
+            self.can_signal_receiver = CANSignalReceiver(can_interface)
             self._connect_can_signals()
 
         # self.nav_data.send_routes.connect(lambda: self.send_route_names)
@@ -793,6 +800,7 @@ class GuiManager(QThread):
         self.robotStatusCAN.connect(self.can_manager.handle_robot_status)
         self.batteryStatusCAN.connect(self.can_manager.handle_battery_status)
         self.planStatusCAN.connect(self.can_manager.handle_plan_status)
+        self.wait_action_status.connect(self.can_manager.handle_wait_action_status)
         
         # Connect navigation status from navigator if available
         if hasattr(self.navigator, 'navStatus'):
@@ -802,6 +810,10 @@ class GuiManager(QThread):
         if self.can_battery_receiver:
             self.can_battery_receiver.battery_status_update.connect(self.handle_battery_adc_update)
             self.can_battery_receiver.battery_percentage_update.connect(self.handle_battery_percentage_update)
+            
+        # Connect signal receiver if available
+        if self.can_signal_receiver:
+            self.can_signal_receiver.signal_received.connect(self.handle_can_signal_received)
     
     def send_robot_status_to_can(self, status: str):
         """Send robot status to CAN bus via signal"""
@@ -832,6 +844,11 @@ class GuiManager(QThread):
         
         # Send battery status to CAN bus (for LED control)
         self.send_battery_status_to_can(status_string)
+    
+    def handle_can_signal_received(self):
+        """Handle CAN wait signal received from ID 0x69"""
+        print("DEBUG: CAN Signal received on ID 0x69 - forwarding to plan executor")
+        self.can_signal_received.emit()
 
     def send_maps(self):
         """Load and send available maps"""
@@ -892,15 +909,21 @@ class GuiManager(QThread):
         if self.can_manager and not self.can_manager.socket_fd:
             self.can_manager.connect_can()
             
-        # Start CAN battery receiver when configuring
+        # Start CAN receivers when configuring
         if self.can_battery_receiver:
             self.can_battery_receiver.start_receiving()
+            
+        if self.can_signal_receiver:
+            self.can_signal_receiver.start_receiving()
 
     @pyqtSlot()
     def trigger_deactivate(self):
-        # Stop CAN battery receiver when deactivating
+        # Stop CAN receivers when deactivating
         if self.can_battery_receiver:
             self.can_battery_receiver.stop_receiving()
+            
+        if self.can_signal_receiver:
+            self.can_signal_receiver.stop_receiving()
             
         # Disconnect CAN interface when deactivating
         if self.can_manager:
@@ -1010,6 +1033,10 @@ class GuiManager(QThread):
     def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):
         print(f"New goal set!, To_dest: {to_dest}")
         self.navigator.set_goal(route, to_dest, x, y)
+        
+        # Send OK CAN message for navigation start (respects battery warning)
+        if self.can_manager:
+            self.can_manager.send_navigation_start_ok_message()
 
     @pyqtSlot()
     def stop_nav(self):
@@ -1025,7 +1052,7 @@ class GuiManager(QThread):
         self.cancel_undocking()
         
         # Always emit "Stopped" status to ensure UI updates
-        self.navStatus.emit("Stopped")
+        self.navigator.navStatus.emit("Stopped")
         
         # Send OK CAN message for STOP command (only if battery warning is not active)
         if self.can_manager:

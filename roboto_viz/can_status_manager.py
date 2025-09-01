@@ -240,6 +240,21 @@ class CANStatusManager(QObject):
         """Handle plan execution status updates"""
         self.send_led_status_if_changed(status)
         
+    @pyqtSlot(str)
+    def handle_wait_action_status(self, status: str):
+        """Handle wait action status - always send WARNING without blocking other messages"""
+        if "waiting for" in status.lower():
+            # Always send WARNING LED for wait actions, regardless of battery state
+            print(f"CAN Status: Sending ORANGE LED for wait action: {status}")
+            self._send_led_can_message(CANLEDType.ORANGE_LED)
+        elif "received" in status.lower():
+            # Wait action completed - send OK LED only if no battery warning
+            if not self.battery_warning_active:
+                print(f"CAN Status: Sending GREEN LED for wait action completion: {status}")
+                self._send_led_can_message(CANLEDType.GREEN_LED)
+            else:
+                print(f"CAN Status: Wait action completed but battery warning active - keeping WARNING LED")
+        
     def add_status_mapping(self, status_text: str, level: StatusLevel):
         """
         Add or update status level mapping
@@ -260,6 +275,21 @@ class CANStatusManager(QObject):
         success = self._send_led_can_message(CANLEDType.GREEN_LED)
         if success:
             print("CAN Status: Sent GREEN LED for STOP command")
+        return success
+    
+    def send_navigation_start_ok_message(self):
+        """Send OK message when navigation starts, but only if battery warning is not active"""
+        if not self.socket_fd:
+            return False
+            
+        if self.battery_warning_active:
+            print("CAN Status: Not sending OK message for navigation start - battery warning is active")
+            return False
+        
+        # Send GREEN LED for navigation start
+        success = self._send_led_can_message(CANLEDType.GREEN_LED)
+        if success:
+            print("CAN Status: Sent GREEN LED for navigation start")
         return success
         
     def get_status_info(self) -> Dict:

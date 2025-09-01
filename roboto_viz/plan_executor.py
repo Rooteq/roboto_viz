@@ -1,64 +1,21 @@
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer, QThread
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer
 from typing import Optional
 import time
-import serial
-import threading
 
 from roboto_viz.plan_manager import PlanManager, ExecutionPlan, ActionType
 
 
-class UARTListener(QThread):
-    """Thread for listening to UART messages"""
-    uart_message_received = pyqtSignal(str)  # UART message ('0' or '1')
+class CANSignalForwarder(QObject):
+    """Forwards CAN signals from GUI manager to plan executor (replaces UART)"""
+    can_signal_received = pyqtSignal()  # CAN signal received from ID 0x69
     
-    def __init__(self, port='/dev/ttyUSB1', baudrate=9600):
+    def __init__(self):
         super().__init__()
-        self.port = port
-        self.baudrate = baudrate
-        self.running = False
-        self.serial_connection = None
         
-    def run(self):
-        """Main thread loop for UART listening"""
-        try:
-            # Create UART connection
-            self.serial_connection = serial.Serial(
-                port=self.port,
-                baudrate=self.baudrate,
-                timeout=1.0  # 1 second timeout for checking running flag
-            )
-            self.running = True
-            
-            while self.running:
-                try:
-                    if self.serial_connection.in_waiting > 0:
-                        # Read line and decode
-                        line = self.serial_connection.readline().decode('utf-8').strip()
-                        print(f"UART RAW: Received '{line}' from {self.port}")
-                        if line in ['0', '1']:
-                            print(f"UART: Valid message '{line}' - emitting signal")
-                            if line == '1':
-                                print(f"UART DEBUG: Received '1' signal - triggering wait action completion")
-                            self.uart_message_received.emit(line)
-                        else:
-                            print(f"UART: Invalid message '{line}' - ignoring")
-                except serial.SerialTimeoutException:
-                    continue  # Check running flag
-                except Exception as e:
-                    print(f"UART receive error: {e}")
-                    break
-                    
-        except Exception as e:
-            print(f"UART connection error: {e}")
-        finally:
-            if self.serial_connection and self.serial_connection.is_open:
-                self.serial_connection.close()
-                
-    def stop(self):
-        """Stop the UART listener"""
-        self.running = False
-        if self.isRunning():
-            self.wait(3000)  # Wait up to 3 seconds for thread to finish
+    def forward_signal(self):
+        """Forward CAN signal (called by GUI manager)"""
+        print("CAN Signal: Forwarding signal to plan executor")
+        self.can_signal_received.emit()
 
 
 class PlanExecutor(QObject):
@@ -79,6 +36,7 @@ class PlanExecutor(QObject):
     waiting_for_signal = pyqtSignal(str)  # signal_name - emitted when waiting for external signal
     signal_received = pyqtSignal()  # emitted when signal button is pressed
     uart_signal_received = pyqtSignal()  # emitted when UART signal is received to hide button
+    wait_status_update = pyqtSignal(str)  # Wait action status for CAN messages
     single_action_completed = pyqtSignal(str, int)  # plan_name, action_index - for single action execution
 
     def __init__(self, plan_manager: PlanManager):
@@ -101,19 +59,16 @@ class PlanExecutor(QObject):
         self.robot_y = 0.0
         self.robot_theta = 0.0
         
-        # UART support
-        self.uart_listener = UARTListener()
-        self.uart_listener.uart_message_received.connect(self.on_uart_message_received)
-        self.uart_listener.start()
+        # CAN signal support (replaces UART)
+        self.can_signal_forwarder = CANSignalForwarder()
+        self.can_signal_forwarder.can_signal_received.connect(self.on_can_signal_received)
         
-        # UART wait parameters
-        self.waiting_for_uart_high = False  # Wait for "1" message
-        self.waiting_for_uart_low = False   # Wait for "0" message
+        # CAN wait parameters (simplified from UART)
+        self.waiting_for_can_signal = False  # Wait for CAN signal on ID 0x69
     
     def __del__(self):
-        """Destructor to clean up UART listener"""
-        if hasattr(self, 'uart_listener'):
-            self.uart_listener.stop()
+        """Destructor to clean up CAN signal forwarder"""
+        pass  # No cleanup needed for CAN signal forwarder
     
     @pyqtSlot(str)
     def start_plan_execution(self, plan_name: str):
@@ -157,8 +112,7 @@ class PlanExecutor(QObject):
         self.waiting_for_completion = False
         self.current_action_type = None
         self.waiting_for_signal_name = None
-        self.waiting_for_uart_high = False
-        self.waiting_for_uart_low = False
+        self.waiting_for_can_signal = False
     
     @pyqtSlot(str, int)
     def execute_action(self, plan_name: str, action_index: int):
@@ -264,20 +218,18 @@ class PlanExecutor(QObject):
         """Execute a wait for signal action"""
         signal_name = action.parameters.get('signal_name', 'default')
         
-        # Extract UART parameters
-        activate_on_high = action.parameters.get('activate_on_high', False)  # Wait for "1"
-        activate_on_low = action.parameters.get('activate_on_low', False)    # Wait for "0"
-        
-        self.status_update.emit(f"Waiting for signal: {signal_name}")
+        self.status_update.emit(f"Waiting for CAN signal: {signal_name}")
         
         # Set waiting state and emit signal for UI to show signal button
         self.waiting_for_completion = True
         self.current_action_type = ActionType.WAIT_FOR_SIGNAL
         self.waiting_for_signal_name = signal_name
         
-        # Set UART wait parameters
-        self.waiting_for_uart_high = activate_on_high
-        self.waiting_for_uart_low = activate_on_low
+        # Set CAN wait parameters (simplified - just wait for any CAN signal on ID 0x69)
+        self.waiting_for_can_signal = True
+        
+        # Emit wait status for CAN WARNING message
+        self.wait_status_update.emit(f"Waiting for CAN signal: {signal_name}")
         
         self.waiting_for_signal.emit(signal_name)
     
@@ -291,8 +243,7 @@ class PlanExecutor(QObject):
         self.waiting_for_completion = False
         self.current_action_type = None
         self.waiting_for_signal_name = None
-        self.waiting_for_uart_high = False
-        self.waiting_for_uart_low = False
+        self.waiting_for_can_signal = False
         
         plan_name = self.current_plan.name
         action_index = self.current_action_index
@@ -355,40 +306,30 @@ class PlanExecutor(QObject):
         if (self.is_executing and self.waiting_for_completion and 
             self.current_action_type == ActionType.WAIT_FOR_SIGNAL):
             self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (button)")
+            
+            # Emit wait completion status for CAN message
+            self.wait_status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (button)")
+            
             self.on_action_completed()
     
-    @pyqtSlot(str)
-    def on_uart_message_received(self, message: str):
-        """Called when a UART message is received"""
+    @pyqtSlot()
+    def on_can_signal_received(self):
+        """Called when a CAN signal is received on ID 0x69"""
         if (self.is_executing and self.waiting_for_completion and 
-            self.current_action_type == ActionType.WAIT_FOR_SIGNAL):
+            self.current_action_type == ActionType.WAIT_FOR_SIGNAL and
+            self.waiting_for_can_signal):
             
-            # Debug: Print all UART messages received while waiting for signal
-            print(f"UART DEBUG: Received message '{message}' while waiting for signal '{self.waiting_for_signal_name}'")
-            print(f"UART DEBUG: Waiting for high={self.waiting_for_uart_high}, waiting for low={self.waiting_for_uart_low}")
+            print(f"CAN Signal: Received signal on ID 0x69 for '{self.waiting_for_signal_name}'")
+            self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (CAN)")
             
-            # Check if this UART message matches our waiting criteria
-            signal_triggered = False
-            trigger_type = ""
+            # Emit wait completion status for CAN message
+            self.wait_status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (CAN)")
             
-            if self.waiting_for_uart_high and message == "1":
-                signal_triggered = True
-                trigger_type = "high (1)"
-                print(f"UART DEBUG: Signal triggered by high condition")
-            elif self.waiting_for_uart_low and message == "0":
-                signal_triggered = True  
-                trigger_type = "low (0)"
-                print(f"UART DEBUG: Signal triggered by low condition")
-            else:
-                print(f"UART DEBUG: Message '{message}' did not match waiting criteria")
-            
-            if signal_triggered:
-                self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (UART {trigger_type})")
-                self.uart_signal_received.emit()  # Immediately hide signal button
-                self.on_action_completed()
+            self.waiting_for_can_signal = False
+            self.uart_signal_received.emit()  # Hide signal button (keeping same signal name for UI compatibility)
+            self.on_action_completed()
         else:
-            # Debug: Print UART messages received when not waiting for signal
-            print(f"UART DEBUG: Received message '{message}' (not waiting for signal)")
+            print(f"CAN Signal: Received signal on ID 0x69 but not waiting for signal - ignoring")
     
     @pyqtSlot(str)
     def on_navigation_failed(self, status: str):

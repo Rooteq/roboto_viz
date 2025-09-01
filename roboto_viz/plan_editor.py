@@ -23,8 +23,7 @@ class WaitActionDialog(QDialog):
         self.resize(400, 200)  # Smaller since we removed options
         
         self.signal_name = 'default'
-        self.activate_on_high = True  # Always activate on UART "1"
-        self.activate_on_low = False  # Never activate on UART "0"
+        # CAN signal activation (no parameters needed - any CAN message on ID 0x69 triggers)
         
         layout = QVBoxLayout()
         
@@ -35,7 +34,7 @@ class WaitActionDialog(QDialog):
         layout.addWidget(self.signal_input)
         
         # Info label explaining the behavior
-        info_label = QLabel("Wait action will activate on blue button press or UART '1' signal.")
+        info_label = QLabel("Wait action will activate on blue button press or CAN signal (ID 0x69).")
         info_label.setStyleSheet("color: #666; font-style: italic; margin: 10px 0;")
         layout.addWidget(info_label)
         
@@ -55,8 +54,6 @@ class WaitActionDialog(QDialog):
     
     def accept(self):
         self.signal_name = self.signal_input.text() or 'default'
-        # activate_on_high is always True, activate_on_low is always False
-        
         super().accept()
 
 
@@ -855,9 +852,7 @@ class PlanEditor(QMainWindow):
         if dialog.exec_() == QDialog.Accepted:
             action = self.plan_manager.create_wait_signal_action(dialog.signal_name)
             
-            # Add UART configuration parameters
-            action.parameters['activate_on_high'] = dialog.activate_on_high
-            action.parameters['activate_on_low'] = dialog.activate_on_low
+            # No additional parameters needed for CAN signal (any message on ID 0x69 triggers)
             
             self.current_plan.add_action(action)
             self.refresh_actions_list()

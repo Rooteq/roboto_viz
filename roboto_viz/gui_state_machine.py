@@ -534,6 +534,18 @@ class PlanActiveState(State):
             self.gui.gui_manager.plan_action_execute,
             self.gui.main_view.plan_executor.execute_action
         )
+        
+        # Connect CAN signal to plan executor
+        self.connect_and_store_connections(
+            self.gui.gui_manager.can_signal_received,
+            self.gui.main_view.plan_executor.can_signal_forwarder.forward_signal
+        )
+        
+        # Connect plan executor wait status to GUI manager for CAN messages
+        self.connect_and_store_connections(
+            self.gui.main_view.plan_executor.wait_status_update,
+            self.gui.gui_manager.wait_action_status.emit
+        )
 
     def setup_can_status_forwarding(self):
         """Setup CAN status forwarding connections"""
