@@ -15,6 +15,7 @@ class CANBatteryReceiver(QObject):
     """
 
     battery_status_update = pyqtSignal(int)  # Raw ADC value (0-1023)
+    battery_percentage_update = pyqtSignal(int, str)  # Battery percentage (0-100) and status string
 
     def __init__(self, can_interface: str = 'can0'):
         super().__init__()
@@ -24,7 +25,35 @@ class CANBatteryReceiver(QObject):
         self.receive_thread = None
 
         # Battery frame ID
-        self.BATTERY_FRAME_ID = 0x2A  # Frame ID 42
+        self.BATTERY_FRAME_ID = 0x42  # Frame ID 42
+        
+        # Battery voltage constants for 10S Li-ion pack
+        self.MAX_VOLTAGE = 42.0  # 100% - 1023 ADC value
+        self.MIN_VOLTAGE = 32.0  # 0% - lowest safe voltage
+        self.NOMINAL_VOLTAGE = 36.0  # 10S * 3.6V nominal
+        self.WARNING_PERCENTAGE = 10  # Warning threshold
+
+    def adc_to_voltage(self, adc_value: int) -> float:
+        """Convert ADC value (0-1023) to voltage (V)."""
+        return (adc_value / 1023.0) * self.MAX_VOLTAGE
+    
+    def voltage_to_percentage(self, voltage: float) -> int:
+        """Convert voltage to battery percentage (0-100)."""
+        if voltage >= self.MAX_VOLTAGE:
+            return 100
+        elif voltage <= self.MIN_VOLTAGE:
+            return 0
+        else:
+            # Linear interpolation between min and max voltage
+            percentage = ((voltage - self.MIN_VOLTAGE) / (self.MAX_VOLTAGE - self.MIN_VOLTAGE)) * 100
+            return max(0, min(100, int(round(percentage))))
+    
+    def get_battery_status_string(self, percentage: int, voltage: float) -> str:
+        """Get battery status string based on percentage."""
+        if percentage <= self.WARNING_PERCENTAGE:
+            return f"{percentage}% WARNING"
+        else:
+            return f"{percentage}%"
 
     def connect_can(self) -> bool:
         """Connect to CAN interface for receiving messages."""
@@ -103,8 +132,16 @@ class CANBatteryReceiver(QObject):
 
                     # Ensure value is in expected range
                     if 0 <= battery_adc <= 1023:
-                        print(f'DEBUG: CAN Battery received: {battery_adc} (0x{battery_adc:03X})')
+                        # Convert ADC to voltage and percentage
+                        voltage = self.adc_to_voltage(battery_adc)
+                        percentage = self.voltage_to_percentage(voltage)
+                        status_string = self.get_battery_status_string(percentage, voltage)
+                        
+                        print(f'DEBUG: CAN Battery - ADC: {battery_adc}, Voltage: {voltage:.1f}V, Percentage: {percentage}%')
+                        
+                        # Emit both raw ADC and processed percentage/status
                         self.battery_status_update.emit(battery_adc)
+                        self.battery_percentage_update.emit(percentage, status_string)
                     else:
                         print(f'DEBUG: CAN Battery out of range: {battery_adc}')
             except socket.timeout:

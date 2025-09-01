@@ -727,6 +727,7 @@ class GuiManager(QThread):
     
     # Battery ADC value signal
     battery_adc_update = pyqtSignal(int)  # Raw ADC value (0-1023)
+    battery_percentage_update = pyqtSignal(int, str)  # Battery percentage and status string
     
     # Plan execution signals
     plan_execution_start = pyqtSignal(str)  # plan_name
@@ -795,6 +796,7 @@ class GuiManager(QThread):
         # Connect battery receiver if available
         if self.can_battery_receiver:
             self.can_battery_receiver.battery_status_update.connect(self.handle_battery_adc_update)
+            self.can_battery_receiver.battery_percentage_update.connect(self.handle_battery_percentage_update)
     
     def send_robot_status_to_can(self, status: str):
         """Send robot status to CAN bus via signal"""
@@ -815,6 +817,16 @@ class GuiManager(QThread):
         
         # Emit the raw ADC value for GUI updates
         self.battery_adc_update.emit(adc_value)
+    
+    def handle_battery_percentage_update(self, percentage: int, status_string: str):
+        """Handle battery percentage updates and emit warning CAN messages if needed"""
+        print(f"DEBUG: Battery percentage: {percentage}%, Status: {status_string}")
+        
+        # Emit the percentage update for GUI
+        self.battery_percentage_update.emit(percentage, status_string)
+        
+        # Send battery status to CAN bus (for LED control)
+        self.send_battery_status_to_can(status_string)
 
     def send_maps(self):
         """Load and send available maps"""

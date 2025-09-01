@@ -31,7 +31,7 @@ class CANStatusManager(QObject):
         super().__init__()
         self.can_interface = can_interface
         self.socket_fd = None
-        self.last_status_cache: Dict[CANStatusType, tuple] = {}
+        self.last_status_cache: Dict[str, tuple] = {}
         
         # Status level mapping for different status strings
         self.status_level_map = {

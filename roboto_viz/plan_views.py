@@ -159,9 +159,9 @@ class PlanActiveView(QWidget):
         plan_layout.addWidget(self.plan_status_display)
 
         # Battery Status Cell (bottom right, narrower) - LARGE for 1920x1080
-        battery_status_frame = QWidget()
-        battery_status_frame.setMinimumSize(240, 180)  # Even larger to prevent clipping
-        battery_status_frame.setStyleSheet("""
+        self.battery_status_frame = QWidget()
+        self.battery_status_frame.setMinimumSize(240, 180)  # Even larger to prevent clipping
+        self.battery_status_frame.setStyleSheet("""
             QWidget {
                 border: 4px solid #bdc3c7;
                 border-radius: 12px;
@@ -169,7 +169,7 @@ class PlanActiveView(QWidget):
                 padding: 20px;
             }
         """)
-        battery_layout = QVBoxLayout(battery_status_frame)
+        battery_layout = QVBoxLayout(self.battery_status_frame)
         battery_layout.setContentsMargins(20, 15, 20, 15)
         battery_layout.setSpacing(12)
         
@@ -204,7 +204,7 @@ class PlanActiveView(QWidget):
         # Row 1: Plan status (left, wider) and Battery status (right, narrower)
         grid_layout.addWidget(self.robot_status_frame, 0, 0, 1, 3)  # Span 3 columns
         grid_layout.addWidget(plan_status_frame, 1, 0, 1, 2)  # Span 2 columns (wider)
-        grid_layout.addWidget(battery_status_frame, 1, 2, 1, 1)  # 1 column (narrower)
+        grid_layout.addWidget(self.battery_status_frame, 1, 2, 1, 1)  # 1 column (narrower)
         
         # Add both grid and map to stacked widget
         self.left_stacked_widget.addWidget(self.grid_widget)  # Index 0
@@ -375,6 +375,37 @@ class PlanActiveView(QWidget):
         """Update the battery status display"""
         if hasattr(self, 'battery_status_display'):
             self.battery_status_display.setText(status)
+    
+    def update_battery_status(self, percentage: int, status_string: str):
+        """Update battery status display with color coding based on percentage."""
+        # Update the text
+        if hasattr(self, 'battery_status_display'):
+            self.battery_status_display.setText(status_string)
+        
+        # Update the battery status frame background color based on percentage
+        if hasattr(self, 'battery_status_frame'):
+            if percentage <= 10:
+                # Orange for warning (low battery)
+                bg_color = '#fdebd0'
+                border_color = '#f39c12'
+            elif percentage <= 25:
+                # Light yellow for caution
+                bg_color = '#fef9e7'
+                border_color = '#f1c40f'
+            else:
+                # Normal light gray background
+                bg_color = '#f7f9fc'
+                border_color = '#bdc3c7'
+            
+            # Update the frame style with new background color
+            self.battery_status_frame.setStyleSheet(f'''
+                QWidget {{
+                    border: 4px solid {border_color};
+                    border-radius: 12px;
+                    background-color: {bg_color};
+                    padding: 20px;
+                }}
+            ''')
 
     def set_plan_status(self, status: str):
         """Update the plan status display"""

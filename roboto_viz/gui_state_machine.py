@@ -204,13 +204,13 @@ class ConfiguringState(State):
             )
         )
 
-        # Battery ADC updates  
+        # Battery percentage updates  
         self.connect_and_store_connections(
-            self.gui.gui_manager.battery_adc_update,
-            lambda adc_value: (
-                self.gui.main_view.plan_active_view.set_battery_status(str(adc_value)) 
+            self.gui.gui_manager.battery_percentage_update,
+            lambda percentage, status_string: (
+                self.gui.main_view.plan_active_view.update_battery_status(percentage, status_string) 
                 if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
-                else self.gui.main_view.active_view.set_battery_status(str(adc_value))
+                else self.gui.main_view.active_view.update_battery_status(percentage, status_string)
             )
         )
 
@@ -306,13 +306,13 @@ class ActiveState(State):
             )
         )
 
-        # Battery ADC updates
+        # Battery percentage updates
         self.connect_and_store_connections(
-            self.gui.gui_manager.battery_adc_update,
-            lambda adc_value: (
-                self.gui.main_view.plan_active_view.set_battery_status(str(adc_value)) 
+            self.gui.gui_manager.battery_percentage_update,
+            lambda percentage, status_string: (
+                self.gui.main_view.plan_active_view.update_battery_status(percentage, status_string) 
                 if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
-                else self.gui.main_view.active_view.set_battery_status(str(adc_value))
+                else self.gui.main_view.active_view.update_battery_status(percentage, status_string)
             )
         )
 
@@ -486,10 +486,10 @@ class PlanActiveState(State):
             lambda status: self.gui.main_view.plan_active_view.update_robot_status(status)
         )
         
-        # Battery ADC updates
+        # Battery percentage updates
         self.connect_and_store_connections(
-            self.gui.gui_manager.battery_adc_update,
-            lambda adc_value: self.gui.main_view.plan_active_view.set_battery_status(str(adc_value))
+            self.gui.gui_manager.battery_percentage_update,
+            lambda percentage, status_string: self.gui.main_view.plan_active_view.update_battery_status(percentage, status_string)
         )
         
         # CAN status forwarding connections
