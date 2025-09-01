@@ -204,6 +204,16 @@ class ConfiguringState(State):
             )
         )
 
+        # Battery ADC updates  
+        self.connect_and_store_connections(
+            self.gui.gui_manager.battery_adc_update,
+            lambda adc_value: (
+                self.gui.main_view.plan_active_view.set_battery_status(str(adc_value)) 
+                if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
+                else self.gui.main_view.active_view.set_battery_status(str(adc_value))
+            )
+        )
+
     def handle_activate(self):
         if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system:
             self.gui.transition_to(PlanActiveState())
@@ -293,6 +303,16 @@ class ActiveState(State):
                 self.gui.main_view.plan_active_view.set_current_status(status) 
                 if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
                 else self.gui.main_view.active_view.update_robot_status(status)
+            )
+        )
+
+        # Battery ADC updates
+        self.connect_and_store_connections(
+            self.gui.gui_manager.battery_adc_update,
+            lambda adc_value: (
+                self.gui.main_view.plan_active_view.set_battery_status(str(adc_value)) 
+                if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system 
+                else self.gui.main_view.active_view.set_battery_status(str(adc_value))
             )
         )
 
@@ -464,6 +484,12 @@ class PlanActiveState(State):
         self.connect_and_store_connections(
             self.gui.gui_manager.navigator.navStatus,
             lambda status: self.gui.main_view.plan_active_view.update_robot_status(status)
+        )
+        
+        # Battery ADC updates
+        self.connect_and_store_connections(
+            self.gui.gui_manager.battery_adc_update,
+            lambda adc_value: self.gui.main_view.plan_active_view.set_battery_status(str(adc_value))
         )
         
         # CAN status forwarding connections

@@ -33,6 +33,7 @@ except ImportError:
 
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 from roboto_viz.can_status_manager import CANStatusManager
+from roboto_viz.can_battery_receiver import CANBatteryReceiver
 
 class LState(Enum):
     UNCONFIGURED = 0
@@ -724,6 +725,9 @@ class GuiManager(QThread):
     service_response = pyqtSignal(bool)
     update_pose = pyqtSignal(float, float, float)
     
+    # Battery ADC value signal
+    battery_adc_update = pyqtSignal(int)  # Raw ADC value (0-1023)
+    
     # Plan execution signals
     plan_execution_start = pyqtSignal(str)  # plan_name
     plan_execution_stop = pyqtSignal()
@@ -761,8 +765,11 @@ class GuiManager(QThread):
 
         # Initialize CAN status manager
         self.can_manager = None
+        # Initialize CAN battery receiver
+        self.can_battery_receiver = None
         if enable_can:
             self.can_manager = CANStatusManager(can_interface)
+            self.can_battery_receiver = CANBatteryReceiver(can_interface)
             self._connect_can_signals()
 
         # self.nav_data.send_routes.connect(lambda: self.send_route_names)
@@ -770,7 +777,7 @@ class GuiManager(QThread):
         self.navigator.start()
 
     def _connect_can_signals(self):
-        """Connect all status signals to CAN manager"""
+        """Connect all status signals to CAN manager and battery receiver"""
         if not self.can_manager:
             return
             
@@ -784,6 +791,10 @@ class GuiManager(QThread):
         # Connect navigation status from navigator if available
         if hasattr(self.navigator, 'navStatus'):
             self.navigator.navStatus.connect(self.can_manager.handle_navigation_status)
+            
+        # Connect battery receiver if available
+        if self.can_battery_receiver:
+            self.can_battery_receiver.battery_status_update.connect(self.handle_battery_adc_update)
     
     def send_robot_status_to_can(self, status: str):
         """Send robot status to CAN bus via signal"""
@@ -796,6 +807,14 @@ class GuiManager(QThread):
     def send_plan_status_to_can(self, status: str):
         """Send plan status to CAN bus via signal"""
         self.planStatusCAN.emit(status)
+    
+    def handle_battery_adc_update(self, adc_value: int):
+        """Handle battery ADC updates from CAN"""
+        # Print debug information
+        print(f"DEBUG: Battery ADC received: {adc_value} (0-1023 range)")
+        
+        # Emit the raw ADC value for GUI updates
+        self.battery_adc_update.emit(adc_value)
 
     def send_maps(self):
         """Load and send available maps"""
@@ -855,9 +874,17 @@ class GuiManager(QThread):
         # Connect CAN interface when configuring
         if self.can_manager and not self.can_manager.socket_fd:
             self.can_manager.connect_can()
+            
+        # Start CAN battery receiver when configuring
+        if self.can_battery_receiver:
+            self.can_battery_receiver.start_receiving()
 
     @pyqtSlot()
     def trigger_deactivate(self):
+        # Stop CAN battery receiver when deactivating
+        if self.can_battery_receiver:
+            self.can_battery_receiver.stop_receiving()
+            
         # Disconnect CAN interface when deactivating
         if self.can_manager:
             self.can_manager.disconnect_can()
