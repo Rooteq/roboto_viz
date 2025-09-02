@@ -445,18 +445,23 @@ class CANStatusManager(QObject):
         # Send buzzer control message (buzzer logic already handles navigation state)
         self.send_buzzer_status(collision_detected)
         
-        # Send LED status based on collision state and battery warning
-        if collision_detected:
-            # Always send WARNING LED for collision detection
-            print("CAN Status: Collision detected - sending ORANGE LED (WARNING)")
-            self._send_led_can_message(CANLEDType.ORANGE_LED)
-        else:
-            # No collision detected
-            if self.battery_warning_active:
-                # Battery warning is active - keep sending WARNING LED
-                print("CAN Status: No collision but battery warning active - sending ORANGE LED (WARNING)")
+        # Only send collision-related LED status when robot is actively navigating
+        if self.is_navigating:
+            if collision_detected:
+                # Always send WARNING LED for collision detection during navigation
+                print("CAN Status: Collision detected during navigation - sending ORANGE LED (WARNING)")
                 self._send_led_can_message(CANLEDType.ORANGE_LED)
             else:
-                # No collision and no battery warning - send OK LED
-                print("CAN Status: No collision and no battery warning - sending GREEN LED (OK)")
-                self._send_led_can_message(CANLEDType.GREEN_LED)
+                # No collision detected during navigation
+                if self.battery_warning_active:
+                    # Battery warning is active - keep sending WARNING LED
+                    print("CAN Status: No collision during navigation but battery warning active - sending ORANGE LED (WARNING)")
+                    self._send_led_can_message(CANLEDType.ORANGE_LED)
+                else:
+                    # No collision and no battery warning during navigation - send OK LED
+                    print("CAN Status: No collision during navigation and no battery warning - sending GREEN LED (OK)")
+                    self._send_led_can_message(CANLEDType.GREEN_LED)
+        else:
+            # Robot is not navigating - don't send collision-related CAN messages
+            # Let normal status flow handle LED messages (once per status change)
+            print(f"CAN Status: Collision detection ignored - robot not navigating (collision: {collision_detected})")
