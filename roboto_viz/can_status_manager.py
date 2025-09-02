@@ -441,5 +441,22 @@ class CANStatusManager(QObject):
     
     @pyqtSlot(bool)
     def handle_collision_detection(self, collision_detected: bool):
-        """Handle collision detection updates and control buzzer"""
+        """Handle collision detection updates and control buzzer and LED status"""
+        # Send buzzer control message (buzzer logic already handles navigation state)
         self.send_buzzer_status(collision_detected)
+        
+        # Send LED status based on collision state and battery warning
+        if collision_detected:
+            # Always send WARNING LED for collision detection
+            print("CAN Status: Collision detected - sending ORANGE LED (WARNING)")
+            self._send_led_can_message(CANLEDType.ORANGE_LED)
+        else:
+            # No collision detected
+            if self.battery_warning_active:
+                # Battery warning is active - keep sending WARNING LED
+                print("CAN Status: No collision but battery warning active - sending ORANGE LED (WARNING)")
+                self._send_led_can_message(CANLEDType.ORANGE_LED)
+            else:
+                # No collision and no battery warning - send OK LED
+                print("CAN Status: No collision and no battery warning - sending GREEN LED (OK)")
+                self._send_led_can_message(CANLEDType.GREEN_LED)
