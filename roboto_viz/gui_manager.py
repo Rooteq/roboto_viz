@@ -830,14 +830,14 @@ class GuiManager(QThread):
     def handle_battery_adc_update(self, adc_value: int):
         """Handle battery ADC updates from CAN"""
         # Print debug information
-        print(f"DEBUG: Battery ADC received: {adc_value} (0-1023 range)")
+        # print(f"DEBUG: Battery ADC received: {adc_value} (0-1023 range)")
         
         # Emit the raw ADC value for GUI updates
         self.battery_adc_update.emit(adc_value)
     
     def handle_battery_percentage_update(self, percentage: int, status_string: str):
         """Handle battery percentage updates and emit warning CAN messages if needed"""
-        print(f"DEBUG: Battery percentage: {percentage}%, Status: {status_string}")
+        # print(f"DEBUG: Battery percentage: {percentage}%, Status: {status_string}")
         
         # Emit the percentage update for GUI
         self.battery_percentage_update.emit(percentage, status_string)

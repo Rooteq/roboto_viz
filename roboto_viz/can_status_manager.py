@@ -233,7 +233,8 @@ class CANStatusManager(QObject):
                 self._send_led_can_message(CANLEDType.GREEN_LED)
                 print("CAN Status: Sent GREEN LED for battery recovery")
         else:
-            print(f"CAN Status: Battery status unchanged, not sending CAN message: {status}")
+            pass
+            # print(f"CAN Status: Battery status unchanged, not sending CAN message: {status}")
         
     @pyqtSlot(str)
     def handle_plan_status(self, status: str):
@@ -286,11 +287,38 @@ class CANStatusManager(QObject):
             print("CAN Status: Not sending OK message for navigation start - battery warning is active")
             return False
         
-        # Send GREEN LED for navigation start
+        # Send GREEN LED for navigation start (first time)
         success = self._send_led_can_message(CANLEDType.GREEN_LED)
         if success:
             print("CAN Status: Sent GREEN LED for navigation start")
+            
+            # Send the same message again after 117ms for reliability
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(117, self._send_navigation_start_ok_delayed)
+        
         return success
+    
+    def _send_navigation_start_ok_delayed(self):
+        """Send the navigation start OK message again after 117ms delay"""
+        if self.socket_fd and not self.battery_warning_active:
+            success = self._send_led_can_message(CANLEDType.GREEN_LED)
+            if success:
+                print("CAN Status: Sent GREEN LED for navigation start (delayed repeat)")
+                
+                # Send third message after another 117ms (234ms total)
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(117, self._send_navigation_start_ok_third)
+            else:
+                print("CAN Status: Failed to send delayed navigation start OK message")
+    
+    def _send_navigation_start_ok_third(self):
+        """Send the navigation start OK message a third time after 234ms total delay"""
+        if self.socket_fd and not self.battery_warning_active:
+            success = self._send_led_can_message(CANLEDType.GREEN_LED)
+            if success:
+                print("CAN Status: Sent GREEN LED for navigation start (third repeat)")
+            else:
+                print("CAN Status: Failed to send third navigation start OK message")
         
     def get_status_info(self) -> Dict:
         """
