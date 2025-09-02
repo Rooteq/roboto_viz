@@ -14,6 +14,12 @@ class CANLEDType(IntEnum):
     RED_LED = 0x203     # Error status (red LED)
 
 
+class CANBuzzerType(IntEnum):
+    """CAN message IDs for buzzer control"""
+    BUZZER_ON = 0x204   # Buzzer on (collision detected)
+    BUZZER_OFF = 0x205  # Buzzer off (no collision)
+
+
 class StatusLevel(IntEnum):
     """Status severity levels"""
     OK = 0
@@ -145,6 +151,42 @@ class CANStatusManager(QObject):
             print(f"Error sending CAN LED message: {e}")
             return False
             
+    def _send_buzzer_can_message(self, buzzer_can_id: CANBuzzerType):
+        """
+        Send empty CAN message for buzzer control
+        
+        Message format: Empty frame (0 bytes) - just the CAN ID triggers buzzer
+        """
+        if not self.socket_fd:
+            return False
+            
+        try:
+            # Create empty CAN frame - just the ID is needed for buzzer control
+            can_frame = struct.pack("=IB3x8s", 
+                                  int(buzzer_can_id),  # CAN ID
+                                  0,                   # Data length (0 bytes - empty frame)
+                                  b'\x00' * 8)        # Empty data payload
+            
+            # Send frame
+            self.socket_fd.send(can_frame)
+            
+            print(f"CAN Buzzer: Sent {buzzer_can_id.name} (ID: 0x{int(buzzer_can_id):03X})")
+            return True
+            
+        except Exception as e:
+            print(f"Error sending CAN buzzer message: {e}")
+            return False
+
+    def send_buzzer_status(self, collision_detected: bool):
+        """
+        Send buzzer control message based on collision detection status
+        """
+        if not self.socket_fd:
+            return False
+            
+        buzzer_id = CANBuzzerType.BUZZER_ON if collision_detected else CANBuzzerType.BUZZER_OFF
+        return self._send_buzzer_can_message(buzzer_id)
+
     def _should_send_led(self, status_level: StatusLevel) -> bool:
         """
         Check if LED status should be sent (only send on change)
@@ -337,5 +379,15 @@ class CANStatusManager(QObject):
                 'GREEN_LED': f"0x{int(CANLEDType.GREEN_LED):03X}",
                 'ORANGE_LED': f"0x{int(CANLEDType.ORANGE_LED):03X}",
                 'RED_LED': f"0x{int(CANLEDType.RED_LED):03X}"
+            },
+            'buzzer_can_ids': {
+                'BUZZER_ON': f"0x{int(CANBuzzerType.BUZZER_ON):03X}",
+                'BUZZER_OFF': f"0x{int(CANBuzzerType.BUZZER_OFF):03X}"
             }
         }
+    
+    @pyqtSlot(bool)
+    def handle_collision_detection(self, collision_detected: bool):
+        """Handle collision detection updates and control buzzer"""
+        print(f"CAN Status: Collision detection status: {collision_detected}")
+        self.send_buzzer_status(collision_detected)

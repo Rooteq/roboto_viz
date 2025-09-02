@@ -16,6 +16,24 @@ from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Path
+
+# Try to import CollisionDetectorState message from various possible packages
+try:
+    from nav2_msgs.msg import CollisionDetectorState
+except ImportError:
+    try:
+        from collision_detector_msgs.msg import CollisionDetectorState
+    except ImportError:
+        try:
+            from custom_msgs.msg import CollisionDetectorState
+        except ImportError:
+            try:
+                # Try to import a local definition as fallback
+                from roboto_viz.collision_detector_state import CollisionDetectorState
+                print("Using local CollisionDetectorState definition")
+            except ImportError:
+                print("Warning: CollisionDetectorState message not found in any known package. Collision detection functionality will be disabled.")
+                CollisionDetectorState = None
 from rclpy.duration import Duration
 from action_msgs.msg import GoalStatus
 
@@ -48,6 +66,7 @@ class ManagerNode(LifecycleNode):
         self.twist_callback = None
 
         self.pose_subscriber = None
+        self.collision_subscriber = None
         self.init_pose_pub = None
         self.cmd_vel_pub = None
 
@@ -63,6 +82,7 @@ class ManagerNode(LifecycleNode):
         self.disconnect_callback = None
         self.connect_callback = None
         self.docking_status_callback = None
+        self.collision_detection_callback = None
 
         #INTERNAL STATES:
         self.srv_available: bool = False
@@ -142,6 +162,15 @@ class ManagerNode(LifecycleNode):
                 10
             )
 
+        if self.collision_subscriber is None and CollisionDetectorState is not None:
+            self.collision_subscriber = self.create_subscription(
+                CollisionDetectorState,
+                '/collision_detector_state',
+                self.collision_callback,
+                10
+            )
+            self.get_logger().info("Created collision detector subscriber")
+
         if self.init_pose_pub is None:
             self.init_pose_pub = self.create_lifecycle_publisher(
                 PoseWithCovarianceStamped,
@@ -177,6 +206,11 @@ class ManagerNode(LifecycleNode):
             self.destroy_subscription(self.pose_subscriber)
             self.pose_subscriber = None
             self.get_logger().info("Destroyed pose subscriber")
+
+        if self.collision_subscriber is not None:
+            self.destroy_subscription(self.collision_subscriber)
+            self.collision_subscriber = None
+            self.get_logger().info("Destroyed collision detector subscriber")
 
         if self.init_pose_pub is not None:
             self.destroy_lifecycle_publisher(self.init_pose_pub)
@@ -490,6 +524,21 @@ class ManagerNode(LifecycleNode):
             if self.docking_status_callback:
                 self.docking_status_callback("Undock Cancelled")
         
+    def collision_callback(self, msg):
+        """Handle collision detector state messages"""
+        if msg.detections:
+            # Check if any detection is true
+            collision_detected = any(msg.detections)
+            self.get_logger().info(f"Collision detection: {collision_detected}, Polygons: {msg.polygons}")
+            
+            # Call the callback if set
+            if self.collision_detection_callback:
+                self.collision_detection_callback(collision_detected)
+        else:
+            # No detections array, assume no collision
+            if self.collision_detection_callback:
+                self.collision_detection_callback(False)
+        
 class NavData(QObject):
     def __init__(self):
         super().__init__()
@@ -771,6 +820,9 @@ class GuiManager(QThread):
     can_signal_received = pyqtSignal()  # CAN signal for wait actions
     wait_action_status = pyqtSignal(str)  # Wait action status for CAN WARNING messages
     
+    # Collision detection signal
+    collision_detected = pyqtSignal(bool)  # Collision detection status
+    
     # Plan execution signals
     plan_execution_start = pyqtSignal(str)  # plan_name
     plan_execution_stop = pyqtSignal()
@@ -834,6 +886,9 @@ class GuiManager(QThread):
         self.planStatusCAN.connect(self.can_manager.handle_plan_status)
         self.wait_action_status.connect(self.can_manager.handle_wait_action_status)
         
+        # Connect collision detection signal to buzzer control
+        self.collision_detected.connect(self.can_manager.handle_collision_detection)
+
         # Connect navigation status from navigator if available
         if hasattr(self.navigator, 'navStatus'):
             self.navigator.navStatus.connect(self.can_manager.handle_navigation_status)
@@ -1032,6 +1087,7 @@ class GuiManager(QThread):
         self.node.disconnect_callback = self.emit_disconnect_call
         self.node.connect_callback = self.emit_connect_call
         self.node.docking_status_callback = self.emit_docking_status
+        self.node.collision_detection_callback = self.emit_collision_detection
 
         self.executor.spin()
 
@@ -1060,6 +1116,10 @@ class GuiManager(QThread):
         
     def emit_docking_status(self, status: str):
         self.dockingStatus.emit(status)
+    
+    def emit_collision_detection(self, collision_detected: bool):
+        """Emit collision detection status"""
+        self.collision_detected.emit(collision_detected)
 
     @pyqtSlot(str, bool, float, float)
     def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):
