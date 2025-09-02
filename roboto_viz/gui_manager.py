@@ -545,10 +545,15 @@ class Navigator(QThread):
         except Exception as e:
             print(f"Warning: Error canceling navigation task: {e}")
         
-        # Always emit "Stopped" status when explicitly stopping navigation
-        # This ensures the UI always updates when STOP is pressed
-        self._last_status = "Stopped"
-        self.navStatus.emit("Stopped")
+        # Only emit "Stopped" if the last status wasn't a failure
+        # This preserves failure messages when stopping after a failure
+        if self._last_status and ("fail" in self._last_status.lower() or "error" in self._last_status.lower()):
+            print(f"Navigator: Preserving failure status '{self._last_status}' instead of emitting 'Stopped'")
+            # Don't emit Stopped - keep the failure status
+        else:
+            # Normal stop case - emit "Stopped" status
+            self._last_status = "Stopped"
+            self.navStatus.emit("Stopped")
 
 
     def set_goal(self, route: str, to_dest: bool, x:float, y:float):
@@ -708,9 +713,36 @@ class Navigator(QThread):
                             self._last_status = "At base"
                             self.navStatus.emit("At base")
                     elif self.nav_data.navigator.getResult() is TaskResult.FAILED:
-                        self._last_status = "Failed"
-                        self.navStatus.emit("Failed")
-                        print(f"Navigation result: {self.nav_data.navigator.getResult()}")
+                        # Try to get detailed error message from nav2
+                        error_msg = "Failed"
+                        try:
+                            # Get detailed feedback from the navigator
+                            if hasattr(self.nav_data.navigator, '_action_client'):
+                                action_client = self.nav_data.navigator._action_client
+                                if hasattr(action_client, '_goal_handle') and action_client._goal_handle:
+                                    # Try to get the result with more detail
+                                    result = action_client._goal_handle.get_result()
+                                    if hasattr(result, 'result') and hasattr(result.result, 'error_code'):
+                                        error_code = result.result.error_code
+                                        if error_code != 0:
+                                            error_msg = f"Nav2 Error {error_code}"
+                            
+                            # Also check for common nav2 error patterns in logs
+                            # Since we can't directly access nav2 logs, provide more context
+                            if hasattr(self.nav_data.navigator, 'getFeedback'):
+                                feedback = self.nav_data.navigator.getFeedback()
+                                if feedback and hasattr(feedback, 'distance_remaining'):
+                                    if feedback.distance_remaining > 100.0:  # Very far from goal
+                                        error_msg = "Failed - Goal unreachable"
+                                    else:
+                                        error_msg = "Failed - Navigation timeout"
+                        except Exception as e:
+                            print(f"DEBUG: Could not extract detailed nav2 error: {e}")
+                            error_msg = "Failed - Nav2 error"
+                        
+                        self._last_status = error_msg
+                        self.navStatus.emit(error_msg)
+                        print(f"Navigation failed: {self.nav_data.navigator.getResult()}, detailed: {error_msg}")
                     
                     self.finished.emit()
                     
@@ -1051,8 +1083,9 @@ class GuiManager(QThread):
         # Also cancel any ongoing undocking operations
         self.cancel_undocking()
         
-        # Always emit "Stopped" status to ensure UI updates
-        self.navigator.navStatus.emit("Stopped")
+        # Only emit "Stopped" if navigator didn't preserve a failure status
+        if not (self.navigator._last_status and ("fail" in self.navigator._last_status.lower() or "error" in self.navigator._last_status.lower())):
+            self.navigator.navStatus.emit("Stopped")
         
         # Send OK CAN message for STOP command (only if battery warning is not active)
         if self.can_manager:

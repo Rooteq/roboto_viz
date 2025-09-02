@@ -5,7 +5,9 @@ import os
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QPushButton, QStackedWidget, QLabel, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QGridLayout
 from abc import ABC, abstractmethod
 import yaml
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, pyqtSlot
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, pyqtSlot, QTimer
+import json
+import time
 
 import rclpy
 from rclpy.node import Node
@@ -138,6 +140,19 @@ class MainView(QMainWindow):
         self.current_map_path = None
         self.current_yaml_path = None
         self.use_plan_system = True  # Flag to use new plan system
+        
+        # Robot position tracking for saving/loading (per-map)
+        self.robot_x = 0.0
+        self.robot_y = 0.0 
+        self.robot_theta = 0.0
+        self.current_map_name = None
+        self.positions_dir = Path.home() / ".robotroutes" / "positions"
+        
+        # Timer for periodic position saving (every 10 seconds)
+        self.position_save_timer = QTimer()
+        self.position_save_timer.timeout.connect(self.save_robot_position)
+        self.position_save_timer.start(10000)  # 10 seconds in milliseconds
+        
         self.setup_ui()
 
 
@@ -198,10 +213,16 @@ class MainView(QMainWindow):
         
             print(f"map name is {map_name}")
 
-            if map_name == 'pokoj1':
-                self.set_position_signal.emit(3.0,3.0,0.0)
-            if map_name == 'sypialnia':
-                self.set_position_signal.emit(1.0,1.0,0.0)
+            # Track current map for position saving
+            self.current_map_name = map_name
+
+            # Try to load saved robot position for this map first, fallback to hardcoded positions
+            if not self.load_robot_position(map_name):
+                # Fallback to hardcoded positions if no saved position exists
+                if map_name == 'pokoj1':
+                    self.set_position_signal.emit(3.0,3.0,0.0)
+                elif map_name == 'sypialnia':
+                    self.set_position_signal.emit(1.0,1.0,0.0)
             return True, ""
         
             
@@ -229,6 +250,7 @@ class MainView(QMainWindow):
         self.plan_executor.undock_robot.connect(self.undock_robot.emit)
         self.plan_executor.action_completed.connect(self.plan_active_view.on_action_completed)
         self.plan_executor.execution_stopped.connect(self.plan_active_view.on_plan_execution_stopped)
+        self.plan_executor.execution_stopped_due_to_failure.connect(self.plan_active_view.on_plan_execution_stopped_due_to_failure)
         self.plan_executor.single_action_completed.connect(self.plan_active_view.on_single_action_completed)
         
         # Connect navigation completion signal - this will be connected in GUI state machine
@@ -247,6 +269,7 @@ class MainView(QMainWindow):
         # Connect plan executor signals to UI
         self.plan_executor.waiting_for_signal.connect(self.on_waiting_for_signal)
         self.plan_executor.execution_stopped.connect(self.on_plan_stopped)
+        self.plan_executor.execution_stopped_due_to_failure.connect(self.on_plan_stopped_due_to_failure)
         self.plan_executor.uart_signal_received.connect(self.on_uart_signal_received)
         
         # Connect plan executor status updates to plan status display
@@ -260,6 +283,14 @@ class MainView(QMainWindow):
         if self.use_plan_system:
             # Hide the signal button when plan stops
             self.plan_active_view.plan_tools.hide_signal_button()
+    
+    def on_plan_stopped_due_to_failure(self, plan_name: str, failure_reason: str):
+        """Handle when plan execution stops due to failure - preserve failure status"""
+        if self.use_plan_system:
+            # Hide the signal button when plan stops
+            self.plan_active_view.plan_tools.hide_signal_button()
+            # Don't call any stop navigation - let the failure status remain displayed
+            print(f"Plan stopped due to failure: {failure_reason} - preserving failure status")
         
     def on_waiting_for_signal(self, signal_name: str):
         """Handle when plan executor is waiting for a signal"""
@@ -327,6 +358,11 @@ class MainView(QMainWindow):
     
     def update_robot_pose_plan_system(self, x: float, y: float, theta: float):
         """Update robot pose in plan system"""
+        # Update internal position tracking
+        self.robot_x = x
+        self.robot_y = y
+        self.robot_theta = theta
+        
         if self.use_plan_system:
             self.plan_active_view.update_robot_pose(x, y, theta)
             self.plan_executor.update_robot_pose(x, y, theta)
@@ -342,3 +378,51 @@ class MainView(QMainWindow):
         if self.use_plan_system:
             # Maps are handled through route manager in plan system
             pass
+    
+    def save_robot_position(self):
+        """Save current robot position to map-specific file every 10 seconds"""
+        if not self.current_map_name:
+            return  # No map loaded, can't save position
+            
+        try:
+            # Ensure the directory exists
+            self.positions_dir.mkdir(parents=True, exist_ok=True)
+            
+            position_file = self.positions_dir / f"{self.current_map_name}_position.txt"
+            
+            # Save in simple text format for easy reading
+            position_text = f"x={self.robot_x:.3f}\ny={self.robot_y:.3f}\ntheta={self.robot_theta:.3f}\ntimestamp={time.time():.0f}\n"
+            
+            with open(position_file, 'w') as f:
+                f.write(position_text)
+                
+        except Exception as e:
+            print(f"Error saving robot position for map '{self.current_map_name}': {e}")
+    
+    def load_robot_position(self, map_name: str):
+        """Load saved robot position for specific map"""
+        try:
+            position_file = self.positions_dir / f"{map_name}_position.txt"
+            
+            if position_file.exists():
+                with open(position_file, 'r') as f:
+                    lines = f.readlines()
+                
+                # Parse the text file
+                x, y, theta = 0.0, 0.0, 0.0
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith('x='):
+                        x = float(line.split('=')[1])
+                    elif line.startswith('y='):
+                        y = float(line.split('=')[1])
+                    elif line.startswith('theta='):
+                        theta = float(line.split('=')[1])
+                
+                print(f"Loading saved position for map '{map_name}': x={x}, y={y}, theta={theta}")
+                self.set_position_signal.emit(x, y, theta)
+                return True
+        except Exception as e:
+            print(f"Error loading robot position for map '{map_name}': {e}")
+        
+        return False

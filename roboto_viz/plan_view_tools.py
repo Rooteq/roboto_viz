@@ -324,7 +324,7 @@ class PlanTools(QWidget):
             self.current_plan = self.plan_manager.get_current_plan()
             self.refresh_action_combo()
             
-            # Load the plan's map if specified
+            # Load the plan's map if specified - this will trigger position loading
             if self.current_plan.map_name:
                 self.map_selected.emit(self.current_plan.map_name)
             
@@ -393,6 +393,14 @@ class PlanTools(QWidget):
     def on_plan_execution_stopped(self):
         """Called when plan execution is stopped externally"""
         self.stop_execution()
+    
+    def on_plan_execution_stopped_due_to_failure(self):
+        """Called when plan execution stops due to failure - don't call stop_navigation"""
+        # Update UI state without calling stop signals that would override failure status
+        self.is_executing = False
+        self.start_btn.setEnabled(True)
+        self.signal_btn.setVisible(False)
+        # DON'T emit stop_plan_execution or stop_navigation signals
     
     def on_signal_button_clicked(self):
         """Called when signal button is clicked"""

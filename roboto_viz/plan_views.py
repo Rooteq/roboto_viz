@@ -430,6 +430,11 @@ class PlanActiveView(QWidget):
         """Called when plan execution is stopped"""
         self.plan_tools.on_plan_execution_stopped()
     
+    def on_plan_execution_stopped_due_to_failure(self, plan_name: str, failure_reason: str):
+        """Called when plan execution stops due to failure - don't override status"""
+        # Only update the UI state, don't emit stop signals that would override the failure status
+        self.plan_tools.on_plan_execution_stopped_due_to_failure()
+    
     @pyqtSlot(str, int)
     def on_single_action_completed(self, plan_name: str, action_index: int):
         """Called when a single action execution is completed"""

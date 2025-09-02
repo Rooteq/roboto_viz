@@ -173,6 +173,7 @@ class CANStatusManager(QObject):
             return
             
         status_level = self._get_status_level(status_text)
+        print(f"CAN Status: Processing '{status_text}' -> {status_level.name}")
         
         # Block OK status if battery is in warning state
         if self._should_block_ok_status(status_level):
@@ -199,6 +200,8 @@ class CANStatusManager(QObject):
     @pyqtSlot(str) 
     def handle_navigation_status(self, status: str):
         """Handle navigation status updates"""
+        if "fail" in status.lower() or "error" in status.lower():
+            print(f"CAN Status: Navigation failure detected: {status} - sending ERROR message")
         self.send_led_status_if_changed(status)
         
     @pyqtSlot(str)
@@ -272,6 +275,7 @@ class CANStatusManager(QObject):
             print("CAN Status: Not sending OK message for STOP - battery warning is active")
             return False
         
+        print("CAN Status: Sending GREEN LED message for STOP command")
         # Send GREEN LED for successful stop
         success = self._send_led_can_message(CANLEDType.GREEN_LED)
         if success:

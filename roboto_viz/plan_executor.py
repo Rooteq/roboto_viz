@@ -24,6 +24,7 @@ class PlanExecutor(QObject):
     action_completed = pyqtSignal(str, int)  # plan_name, action_index
     plan_completed = pyqtSignal(str)  # plan_name
     execution_stopped = pyqtSignal(str)  # plan_name
+    execution_stopped_due_to_failure = pyqtSignal(str, str)  # plan_name, failure_reason
     
     # Robot control signals
     start_nav = pyqtSignal(str, bool, float, float)  # route_name, to_dest, curr_x, curr_y
@@ -101,6 +102,7 @@ class PlanExecutor(QObject):
         if not self.is_executing:
             return
         
+        print("Plan Executor: stop_plan_execution() called - manual stop")
         self.is_executing = False
         self.continuous_execution = False
         
@@ -266,11 +268,20 @@ class PlanExecutor(QObject):
                 # Execute next action after a short delay
                 QTimer.singleShot(1000, self.execute_current_action)
             else:
-                # Single action execution - stop after completion
-                self.status_update.emit(f"Action '{self.current_plan.actions[action_index].name}' completed")
-                self.is_executing = False
-                self.continuous_execution = False
-                self.single_action_completed.emit(plan_name, action_index)
+                # Single action execution - automatically continue with remaining actions
+                self.current_action_index += 1
+                self.current_plan.set_current_action(self.current_action_index)
+                
+                if self.current_action_index >= len(self.current_plan.actions):
+                    # All actions completed
+                    self.status_update.emit(f"All actions in plan '{plan_name}' completed")
+                    self.is_executing = False
+                    self.continuous_execution = False
+                    self.single_action_completed.emit(plan_name, action_index)
+                else:
+                    # Continue with next action automatically
+                    self.status_update.emit(f"Action '{self.current_plan.actions[action_index].name}' completed, continuing with next action...")
+                    QTimer.singleShot(1000, self.execute_current_action)
     
     @pyqtSlot(float, float, float)
     def update_robot_pose(self, x: float, y: float, theta: float):
@@ -335,9 +346,23 @@ class PlanExecutor(QObject):
     def on_navigation_failed(self, status: str):
         """Called when navigation fails"""
         if (self.is_executing and self.waiting_for_completion and 
-            self.current_action_type == ActionType.ROUTE and status == "Failed"):
-            self.status_update.emit("Navigation failed - stopping plan execution")
-            self.stop_plan_execution()
+            self.current_action_type == ActionType.ROUTE and 
+            ("Failed" in status or "Error" in status)):
+            print(f"Plan Executor: Navigation failed with status: {status}")
+            
+            # Don't emit any status update from plan executor - let the navigation status flow through
+            # The navigation status will be displayed directly via the navStatus connection
+            
+            # Stop execution state but preserve failure status
+            self.is_executing = False
+            self.continuous_execution = False
+            self.waiting_for_completion = False
+            self.current_action_type = None
+            self.waiting_for_signal_name = None
+            self.waiting_for_can_signal = False
+            
+            plan_name = self.current_plan.name if self.current_plan else "Unknown"
+            self.execution_stopped_due_to_failure.emit(plan_name, status)
     
     @pyqtSlot(str)
     def on_docking_status_changed(self, status: str):
