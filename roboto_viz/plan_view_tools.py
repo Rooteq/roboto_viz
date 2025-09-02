@@ -81,7 +81,7 @@ class PlanTools(QWidget):
         main_layout = QVBoxLayout(self)
         
         # Title
-        title_label = QLabel("Robot Plan Control")
+        title_label = QLabel("Sterowanie Planem Robota")
         title_label.setFont(QFont("Arial", 12, QFont.Bold))  # Smaller font
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("QLabel { color: #2c3e50; padding: 5px; }")  # Reduced padding
@@ -94,18 +94,18 @@ class PlanTools(QWidget):
         
         # Active tab
         self.active_tab = self.create_active_tab()
-        self.tab_widget.addTab(self.active_tab, "Active")
+        self.tab_widget.addTab(self.active_tab, "Aktywny")
         
         # Configure tab
         self.configure_tab = self.create_configure_tab()
-        self.tab_widget.addTab(self.configure_tab, "Configure")
+        self.tab_widget.addTab(self.configure_tab, "Konfiguracja")
     
     def create_active_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
         # Plan Control Section
-        control_group = QGroupBox("Plan Control")
+        control_group = QGroupBox("Sterowanie Planem")
         control_layout = QVBoxLayout(control_group)
         
         # Plan selection
@@ -113,7 +113,7 @@ class PlanTools(QWidget):
         plan_select_layout.addWidget(QLabel("Plan:"))
         self.plan_combo = QComboBox()
         plan_select_layout.addWidget(self.plan_combo)
-        self.choose_plan_btn = QPushButton("Choose Plan")
+        self.choose_plan_btn = QPushButton("Wybierz Plan")
         self.choose_plan_btn.setStyleSheet(self.button_style)
         plan_select_layout.addWidget(self.choose_plan_btn)
         control_layout.addLayout(plan_select_layout)
@@ -122,10 +122,10 @@ class PlanTools(QWidget):
         
         # Action selection
         action_layout = QHBoxLayout()
-        action_layout.addWidget(QLabel("Jump to Action:"))
+        action_layout.addWidget(QLabel("Przejdź do Akcji:"))
         self.action_combo = QComboBox()
         action_layout.addWidget(self.action_combo)
-        self.execute_action_btn = QPushButton("Execute")
+        self.execute_action_btn = QPushButton("Wykonaj")
         self.execute_action_btn.setStyleSheet(self.button_style)
         action_layout.addWidget(self.execute_action_btn)
         control_layout.addLayout(action_layout)
@@ -134,11 +134,11 @@ class PlanTools(QWidget):
         layout.addWidget(control_group)
         
         # Main Control Buttons Section
-        control_buttons_group = QGroupBox("Control")
+        control_buttons_group = QGroupBox("Sterowanie")
         control_buttons_layout = QVBoxLayout(control_buttons_group)
         
         # Signal button (top - initially hidden) - made taller
-        self.signal_btn = QPushButton("SIGNAL")
+        self.signal_btn = QPushButton("SYGNAŁ")
         self.signal_btn.setStyleSheet("""
             QPushButton {
                 min-height: 50px;
@@ -228,17 +228,17 @@ class PlanTools(QWidget):
         layout = QVBoxLayout(widget)
         
         # Plan Management Section
-        plan_group = QGroupBox("Plan Management")
+        plan_group = QGroupBox("Zarządzanie Planami")
         plan_layout = QVBoxLayout(plan_group)
         
-        self.edit_plans_btn = QPushButton("Edit Plans")
+        self.edit_plans_btn = QPushButton("Edytuj Plany")
         self.edit_plans_btn.setStyleSheet(self.button_style)
         plan_layout.addWidget(self.edit_plans_btn)
         
         layout.addWidget(plan_group)
         
         # Manual Control Section
-        manual_group = QGroupBox("Manual Control")
+        manual_group = QGroupBox("Sterowanie Ręczne")
         manual_layout = QGridLayout(manual_group)
         
         # Docking controls removed - not used
@@ -316,7 +316,7 @@ class PlanTools(QWidget):
         """Choose the selected plan as current"""
         plan_name = self.plan_combo.currentText()
         if not plan_name:
-            QMessageBox.warning(self, "Warning", "Please select a plan first!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę najpierw wybrać plan!")
             return
         
         success = self.plan_manager.set_current_plan(plan_name)
@@ -331,18 +331,18 @@ class PlanTools(QWidget):
             # Emit plan selected signal for status updates
             self.plan_selected.emit(plan_name)
             
-            QMessageBox.information(self, "Success", f"Plan '{plan_name}' selected!")
+            QMessageBox.information(self, "Sukces", f"Plan '{plan_name}' został wybrany!")
         else:
-            QMessageBox.warning(self, "Error", f"Failed to select plan '{plan_name}'!")
+            QMessageBox.warning(self, "Błąd", f"Nie udało się wybrać planu '{plan_name}'!")
 
     def start_execution(self):
         """Start plan execution"""
         if not self.current_plan:
-            QMessageBox.warning(self, "Warning", "No plan selected!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Nie wybrano planu!")
             return
         
         if len(self.current_plan.actions) == 0:
-            QMessageBox.warning(self, "Warning", "Plan has no actions!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Plan nie ma żadnych akcji!")
             return
         
         self.is_executing = True
@@ -365,12 +365,12 @@ class PlanTools(QWidget):
     def execute_selected_action(self):
         """Execute the selected action immediately"""
         if not self.current_plan:
-            QMessageBox.warning(self, "Warning", "No plan selected!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Nie wybrano planu!")
             return
         
         action_index = self.action_combo.currentIndex()
         if action_index < 0:
-            QMessageBox.warning(self, "Warning", "No action selected!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Nie wybrano akcji!")
             return
         
         # Set execution state like start button

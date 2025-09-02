@@ -334,15 +334,15 @@ class ManagerNode(LifecycleNode):
             if status == GoalStatus.STATUS_SUCCEEDED:
                 self.get_logger().info(f'Docking succeeded! Docked: {result.docked}')
                 if self.docking_status_callback:
-                    self.docking_status_callback("Docked" if result.docked else "Dock Failed")
+                    self.docking_status_callback("Zadokowany" if result.docked else "Dokowanie Nieudane")
             elif status == GoalStatus.STATUS_CANCELED:
                 self.get_logger().info('Docking was cancelled')
                 if self.docking_status_callback and not self.suppress_docking_status:
-                    self.docking_status_callback("Dock Cancelled")
+                    self.docking_status_callback("Dokowanie Anulowane")
             else:
                 self.get_logger().info('Docking failed')
                 if self.docking_status_callback:
-                    self.docking_status_callback("Dock Failed")
+                    self.docking_status_callback("Dokowanie Nieudane")
         except Exception as e:
             self.get_logger().error(f'Error in dock result: {e}')
             if self.docking_status_callback:
@@ -552,8 +552,8 @@ class Navigator(QThread):
             # Don't emit Stopped - keep the failure status
         else:
             # Normal stop case - emit "Stopped" status
-            self._last_status = "Stopped"
-            self.navStatus.emit("Stopped")
+            self._last_status = "Zatrzymany"
+            self.navStatus.emit("Zatrzymany")
 
 
     def set_goal(self, route: str, to_dest: bool, x:float, y:float):
@@ -579,10 +579,10 @@ class Navigator(QThread):
                 
                 if to_dest == True:
                     self._last_status = "Nav to dest"
-                    self.navStatus.emit("Nav to dest")
+                    self.navStatus.emit("Nawigacja do celu")
                 else:
                     self._last_status = "Nav to base"
-                    self.navStatus.emit("Nav to base")
+                    self.navStatus.emit("Nawigacja do bazy")
             else:
                 print(f"Route '{route}' not found in routes")
 
@@ -707,11 +707,11 @@ class Navigator(QThread):
                     if self.nav_data.navigator.getResult() is TaskResult.SUCCEEDED:
                         print(f"DEBUG: Navigation completed, _to_dest = {self._to_dest}")
                         if self._to_dest:
-                            self._last_status = "At destination"
-                            self.navStatus.emit("At destination")
+                            self._last_status = "Na miejscu docelowym"
+                            self.navStatus.emit("Na miejscu docelowym")
                         else:
-                            self._last_status = "At base"
-                            self.navStatus.emit("At base")
+                            self._last_status = "W bazie"
+                            self.navStatus.emit("W bazie")
                     elif self.nav_data.navigator.getResult() is TaskResult.FAILED:
                         # Try to get detailed error message from nav2
                         error_msg = "Failed"
@@ -725,7 +725,7 @@ class Navigator(QThread):
                                     if hasattr(result, 'result') and hasattr(result.result, 'error_code'):
                                         error_code = result.result.error_code
                                         if error_code != 0:
-                                            error_msg = f"Nav2 Error {error_code}"
+                                            error_msg = f"Błąd Nav2 {error_code}"
                             
                             # Also check for common nav2 error patterns in logs
                             # Since we can't directly access nav2 logs, provide more context
@@ -733,12 +733,12 @@ class Navigator(QThread):
                                 feedback = self.nav_data.navigator.getFeedback()
                                 if feedback and hasattr(feedback, 'distance_remaining'):
                                     if feedback.distance_remaining > 100.0:  # Very far from goal
-                                        error_msg = "Failed - Goal unreachable"
+                                        error_msg = "Błąd - Cel nieosiągalny"
                                     else:
-                                        error_msg = "Failed - Navigation timeout"
+                                        error_msg = "Błąd - Przekroczono czas nawigacji"
                         except Exception as e:
                             print(f"DEBUG: Could not extract detailed nav2 error: {e}")
-                            error_msg = "Failed - Nav2 error"
+                            error_msg = "Błąd - Błąd Nav2"
                         
                         self._last_status = error_msg
                         self.navStatus.emit(error_msg)
@@ -748,8 +748,8 @@ class Navigator(QThread):
                     
             except Exception as e:
                 print(f"Navigation error: {e}")
-                self._last_status = "Navigation Error"
-                self.navStatus.emit("Navigation Error")
+                self._last_status = "Błąd Nawigacji"
+                self.navStatus.emit("Błąd Nawigacji")
 
 class GuiManager(QThread):
     manualStatus = pyqtSignal(str)
@@ -920,16 +920,16 @@ class GuiManager(QThread):
         self.nav_data.set_current_map(map_name)
         
         # Emit status update to inform user that map loading is starting
-        self.manualStatus.emit(f"Loading map '{map_name}'...")
+        self.manualStatus.emit(f"Ładowanie mapy '{map_name}'...")
         
         # Load the map into nav2 navigation stack
         success, error_msg = self.nav_data.route_manager.load_map_onto_robot(map_name)
         if success:
             print(f"Map '{map_name}' loaded into nav2 successfully")
-            self.manualStatus.emit(f"Map '{map_name}' loaded successfully")
+            self.manualStatus.emit(f"Mapa '{map_name}' załadowana pomyślnie")
         else:
             print(f"Failed to load map '{map_name}' into nav2: {error_msg}")
-            self.manualStatus.emit(f"Failed to load map '{map_name}': {error_msg}")
+            self.manualStatus.emit(f"Nie udało się załadować mapy '{map_name}': {error_msg}")
         
         self.send_routes()  # Send updated routes for new map
         
@@ -970,13 +970,13 @@ class GuiManager(QThread):
 
     @pyqtSlot(str, float)
     def start_cmd_vel_pub(self, dir: str, vel: float):
-        self.manualStatus.emit("Manual move")
+        self.manualStatus.emit("Ruch ręczny")
 
         self.node.start_publishing(dir,vel)
 
     @pyqtSlot()
     def stop_cmd_vel_pub(self):
-        self.manualStatus.emit("Idle")
+        self.manualStatus.emit("Bezczynny")
 
         self.node.stop_publishing()
         
@@ -1085,7 +1085,7 @@ class GuiManager(QThread):
         
         # Only emit "Stopped" if navigator didn't preserve a failure status
         if not (self.navigator._last_status and ("fail" in self.navigator._last_status.lower() or "error" in self.navigator._last_status.lower())):
-            self.navigator.navStatus.emit("Stopped")
+            self.navigator.navStatus.emit("Zatrzymany")
         
         # Send OK CAN message for STOP command (only if battery warning is not active)
         if self.can_manager:

@@ -50,7 +50,7 @@ class CANStatusManager(QObject):
             'warning': StatusLevel.WARNING,
             'low battery': StatusLevel.WARNING,
             'obstacle detected': StatusLevel.WARNING,
-            'waiting for signal': StatusLevel.WARNING,
+            'oczekiwanie na sygnał': StatusLevel.WARNING,
             
             # Error states
             'failed': StatusLevel.ERROR,

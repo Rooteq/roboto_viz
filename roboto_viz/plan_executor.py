@@ -75,7 +75,7 @@ class PlanExecutor(QObject):
     def start_plan_execution(self, plan_name: str):
         """Start executing a plan"""
         if self.is_executing:
-            self.status_update.emit("Already executing a plan. Stop current execution first.")
+            self.status_update.emit("Plan już w toku. Najpierw zatrzymaj bieżące wykonanie.")
             return
         
         plan = self.plan_manager.get_plan(plan_name)
@@ -107,7 +107,7 @@ class PlanExecutor(QObject):
         self.continuous_execution = False
         
         plan_name = self.current_plan.name if self.current_plan else "Unknown"
-        self.status_update.emit(f"Stopped execution of plan '{plan_name}'")
+        self.status_update.emit(f"Zatrzymano wykonywanie planu '{plan_name}'")
         self.execution_stopped.emit(plan_name)
         
         # Clear waiting states
@@ -134,7 +134,7 @@ class PlanExecutor(QObject):
         self.continuous_execution = False  # This is single action execution
         
         action = plan.actions[action_index]
-        self.status_update.emit(f"Executing action: {action.name}")
+        self.status_update.emit(f"Wykonywanie akcji: {action.name}")
         self.action_started.emit(plan_name, action_index)
         
         self.perform_action(action)
@@ -150,7 +150,7 @@ class PlanExecutor(QObject):
             self.current_plan.set_current_action(0)
         
         action = self.current_plan.actions[self.current_action_index]
-        self.status_update.emit(f"Executing action {self.current_action_index + 1}: {action.name}")
+        self.status_update.emit(f"Wykonywanie akcji {self.current_action_index + 1}: {action.name}")
         self.action_started.emit(self.current_plan.name, self.current_action_index)
         
         self.perform_action(action)
@@ -220,7 +220,7 @@ class PlanExecutor(QObject):
         """Execute a wait for signal action"""
         signal_name = action.parameters.get('signal_name', 'default')
         
-        self.status_update.emit(f"Waiting for CAN signal: {signal_name}")
+        self.status_update.emit(f"Oczekiwanie na sygnał CAN: {signal_name}")
         
         # Set waiting state and emit signal for UI to show signal button
         self.waiting_for_completion = True
@@ -231,7 +231,7 @@ class PlanExecutor(QObject):
         self.waiting_for_can_signal = True
         
         # Emit wait status for CAN WARNING message
-        self.wait_status_update.emit(f"Waiting for CAN signal: {signal_name}")
+        self.wait_status_update.emit(f"Oczekiwanie na sygnał CAN: {signal_name}")
         
         self.waiting_for_signal.emit(signal_name)
     
@@ -391,11 +391,11 @@ class PlanExecutor(QObject):
     def get_current_status(self) -> str:
         """Get current execution status"""
         if not self.is_executing:
-            return "Idle"
+            return "Bezczynny"
         
         if self.current_plan:
             action = self.current_plan.get_current_action()
             if action:
-                return f"Executing: {action.name}"
+                return f"Wykonywanie: {action.name}"
         
-        return "Executing..."
+        return "Wykonywanie..."

@@ -126,15 +126,15 @@ class ActiveTools(QWidget):
         
         # Create button layout for first row
         button_layout_1 = QHBoxLayout()
-        self.button_add = QPushButton("Add Route")
-        self.button_remove = QPushButton("Remove Route")
+        self.button_add = QPushButton("Dodaj Trasę")
+        self.button_remove = QPushButton("Usuń Trasę")
         button_layout_1.addWidget(self.button_add)
         button_layout_1.addWidget(self.button_remove)
         first_layout.addLayout(button_layout_1)
         
         # Create button layout for second row
         button_layout_2 = QHBoxLayout()
-        self.button_set_active = QPushButton("Set selection as active")
+        self.button_set_active = QPushButton("Ustaw zaznaczenie jako aktywne")
         button_layout_2.addWidget(self.button_set_active)
         first_layout.addLayout(button_layout_2)
         
@@ -142,23 +142,23 @@ class ActiveTools(QWidget):
         first_layout.addStretch()
 
         # Add the navigation buttons
-        self.button_go_to_base = QPushButton("Go to base")
-        self.button_go_to_dest = QPushButton("Go to dest")
+        self.button_go_to_base = QPushButton("Idź do bazy")
+        self.button_go_to_dest = QPushButton("Idź do celu")
         
         # Add dock and undock buttons in a horizontal layout
         dock_layout = QHBoxLayout()
-        self.button_dock = QPushButton("Dock")
-        self.button_undock = QPushButton("Undock")
+        self.button_dock = QPushButton("Dokuj")
+        self.button_undock = QPushButton("Oddokuj")
         dock_layout.addWidget(self.button_dock)
         dock_layout.addWidget(self.button_undock)
         
-        self.button_stop = QPushButton("Stop")
+        self.button_stop = QPushButton("Zatrzymaj")
         first_layout.addWidget(self.button_go_to_base)
         first_layout.addWidget(self.button_go_to_dest)
         first_layout.addLayout(dock_layout)
         first_layout.addWidget(self.button_stop)
         
-        self.tab_widget.addTab(operation_tab, "Operation")
+        self.tab_widget.addTab(operation_tab, "Operacje")
         
         # Create second tab (Configuration tab)
         config_tab = QWidget()
@@ -166,7 +166,7 @@ class ActiveTools(QWidget):
         
         # Add map selection combo box
         map_layout = QVBoxLayout()
-        map_label = QLabel("Select Map:")
+        map_label = QLabel("Wybierz Mapę:")
         self.map_combo = QComboBox()
         self.map_combo.addItems(self.maps)
         self.map_combo.currentTextChanged.connect(self.on_map_selected)
@@ -203,7 +203,7 @@ class ActiveTools(QWidget):
 
         config_layout.addLayout(spaced_keys_layout)
         
-        self.tab_widget.addTab(config_tab, "Configuration")
+        self.tab_widget.addTab(config_tab, "Konfiguracja")
         
         main_layout.addWidget(self.tab_widget)
         self.setLayout(main_layout)
@@ -471,18 +471,18 @@ class PlanningTools(QWidget):
         self.route_name = QLineEdit(self)
         self.main_layout = QVBoxLayout()
 
-        self.route_name_label = QLabel("Route Name:")
+        self.route_name_label = QLabel("Nazwa Trasy:")
         label_font = QFont()
         label_font.setPointSize(16)  # Larger font size for big screens
         self.route_name_label.setFont(label_font)
 
         # Instructions
-        self.instructions_label = QLabel("Click on map to add nodes.\nDrag nodes to move them.\nDouble-click or right-click nodes to delete.")
+        self.instructions_label = QLabel("Kliknij na mapę, aby dodać węzły.\nPrzeciągnij węzły, aby je przesunąć.\nKliknij dwukrotnie lub prawym przyciskiem, aby usunąć.")
         self.instructions_label.setWordWrap(True)
         self.instructions_label.setStyleSheet("color: #555; font-size: 14px; padding: 12px;")
 
-        self.done_button = QPushButton("Done")
-        self.cancel_button = QPushButton("Cancel")
+        self.done_button = QPushButton("Gotowe")
+        self.cancel_button = QPushButton("Anuluj")
 
         self.done_button.clicked.connect(self.exit_done)
         self.cancel_button.clicked.connect(self.exit_cancel)
@@ -611,7 +611,7 @@ class StatusDisplay(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         self.led = LEDIndicator()
-        self.status_label = QLabel("Idle")
+        self.status_label = QLabel("Bezczynny")
         font = QFont()
         font.setPointSize(18)  # Larger font size for big screens
         font.setBold(True)
@@ -627,11 +627,11 @@ class StatusDisplay(QWidget):
     def set_status(self, status: str):
         self.status_label.setText(status)
         
-        if status in ["Idle", "At base", "At destination"]:
+        if status in ["Bezczynny", "W bazie", "Na miejscu docelowym"]:
             self.led.setFlashing(False)
             self.led.setColor(Qt.green)
-        elif status in ["Nav to base", "Nav to dest", "Manual move"]:
+        elif status in ["Nawigacja do bazy", "Nawigacja do celu", "Ruch ręczny"]:
             self.led.setFlashing(True, QColor(255, 165, 0))  # Orange color
-        elif status == "Failed":
+        elif status == "Błąd":
             self.led.setFlashing(True)
             self.led.setColor(Qt.red)

@@ -73,7 +73,7 @@ class MapView(QGraphicsView):
         # Create control buttons
         self.zoom_in_btn = QPushButton("+", self)
         self.zoom_out_btn = QPushButton("-", self)
-        self.pan_btn = QPushButton("pan", self)
+        self.pan_btn = QPushButton("przeciąg", self)
         self.pan_btn.setCheckable(True)
         
         # Style the buttons

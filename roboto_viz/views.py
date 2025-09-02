@@ -66,7 +66,7 @@ class ActiveView(QWidget):
         robot_layout.setContentsMargins(5, 3, 5, 3)
         robot_layout.setSpacing(2)
         
-        robot_title = QLabel("Robot Status")
+        robot_title = QLabel("Status Robota")
         robot_title.setStyleSheet("""
             QLabel {
                 font-size: 9px;
@@ -97,7 +97,7 @@ class ActiveView(QWidget):
         plan_layout.setContentsMargins(5, 3, 5, 3)
         plan_layout.setSpacing(2)
         
-        plan_title = QLabel("Plan Status")
+        plan_title = QLabel("Status Planu")
         plan_title.setStyleSheet("""
             QLabel {
                 font-size: 9px;
@@ -109,7 +109,7 @@ class ActiveView(QWidget):
         """)
         plan_layout.addWidget(plan_title)
         
-        self.plan_status_display = QLabel("No active plan")
+        self.plan_status_display = QLabel("Brak aktywnego planu")
         self.plan_status_display.setStyleSheet("""
             QLabel {
                 font-size: 8px;
@@ -135,7 +135,7 @@ class ActiveView(QWidget):
         nav_layout.setContentsMargins(5, 3, 5, 3)
         nav_layout.setSpacing(2)
         
-        nav_title = QLabel("Navigation")
+        nav_title = QLabel("Nawigacja")
         nav_title.setStyleSheet("""
             QLabel {
                 font-size: 9px;
@@ -147,7 +147,7 @@ class ActiveView(QWidget):
         """)
         nav_layout.addWidget(nav_title)
         
-        self.nav_status_display = QLabel("Idle")
+        self.nav_status_display = QLabel("Bezczynny")
         self.nav_status_display.setStyleSheet("""
             QLabel {
                 font-size: 8px;
@@ -173,7 +173,7 @@ class ActiveView(QWidget):
         battery_layout.setContentsMargins(5, 3, 5, 3)
         battery_layout.setSpacing(2)
         
-        battery_title = QLabel("Battery")
+        battery_title = QLabel("Bateria")
         battery_title.setStyleSheet("""
             QLabel {
                 font-size: 9px;
@@ -185,7 +185,7 @@ class ActiveView(QWidget):
         """)
         battery_layout.addWidget(battery_title)
         
-        self.battery_status_display = QLabel("Unknown")
+        self.battery_status_display = QLabel("Nieznany")
         self.battery_status_display.setStyleSheet("""
             QLabel {
                 font-size: 8px;
@@ -342,12 +342,12 @@ class ActiveView(QWidget):
         # Update the robot status frame background color
         if hasattr(self, 'robot_status_frame'):
             # Define background colors based on status
-            if status in ['Idle', 'At base', 'At destination']:
+            if status in ['Bezczynny', 'W bazie', 'Na miejscu docelowym']:
                 # Light green for normal operational states
                 bg_color = '#d5f4e6'
                 border_color = '#27ae60'
             elif status in ['Nav to base', 'Nav to dest', 'Navigating', 'Manual move',
-                            'Docking', 'Undocking', 'Waiting for signal'] or status.startswith('Executing'):
+                            'Docking', 'Undocking', 'Oczekiwanie na sygnał'] or status.startswith('Wykonywanie'):
                 # Light blue for active operations
                 bg_color = '#d6eaf8'
                 border_color = '#3498db'
@@ -427,12 +427,12 @@ class DisconnectedView(QWidget):
         layout.setContentsMargins(40, 40, 40, 40)  # Larger margins
 
         # Create and style the service state label
-        self.service_state = QLabel('Service: Not Available')
+        self.service_state = QLabel('Usługa: Niedostępna')
         self.service_state.setStyleSheet(label_style)
         self.service_state.setAlignment(Qt.AlignCenter)
         
         # Create and style the connect button
-        self.connect_button = QPushButton('Connect')
+        self.connect_button = QPushButton('Połącz')
         self.connect_button.setStyleSheet(button_style)
         self.connect_button.clicked.connect(self.on_connect)
         self.connect_button.setEnabled(False)
@@ -454,12 +454,12 @@ class DisconnectedView(QWidget):
 
     def set_availability(self, available):
         if not self.wait_for_connection:
-            status = 'Available' if available else 'Not Available'
+            status = 'Dostępna' if available else 'Niedostępna'
             self.service_state.setText(f'Service: {status}')
             self.connect_button.setEnabled(available)
 
     def waiting_for_connection(self, state: bool):
         if state:
             self.connect_button.setEnabled(False)
-            self.service_state.setText('Service: connecting')
+            self.service_state.setText('Usługa: łączenie')
             self.wait_for_connection = state

@@ -74,25 +74,25 @@ class SpeedZoneEditor(QWidget):
         """)
         
         # Title
-        title = QLabel('Speed Zone Editor')
+        title = QLabel('Edytor Stref Prędkości')
         title.setStyleSheet('font-weight: bold; font-size: 18px;')
         layout.addWidget(title)
         
         # Tool selection
-        tools_group = QGroupBox("Tools")
+        tools_group = QGroupBox("Narzędzia")
         tools_layout = QVBoxLayout(tools_group)
         
         # Tool buttons
         tool_buttons_layout = QHBoxLayout()
         self.tool_group = QButtonGroup()
         
-        self.paint_btn = QPushButton("Paint Zone")
+        self.paint_btn = QPushButton("Maluj Strefę")
         self.paint_btn.setCheckable(True)
         self.paint_btn.setChecked(True)
         self.tool_group.addButton(self.paint_btn, 0)
         tool_buttons_layout.addWidget(self.paint_btn)
         
-        self.erase_btn = QPushButton("Erase Zone")
+        self.erase_btn = QPushButton("Wymaż Strefę")
         self.erase_btn.setCheckable(True)
         self.tool_group.addButton(self.erase_btn, 1)
         tool_buttons_layout.addWidget(self.erase_btn)
@@ -101,7 +101,7 @@ class SpeedZoneEditor(QWidget):
         
         # Speed setting
         speed_layout = QVBoxLayout()
-        speed_layout.addWidget(QLabel("Speed Limit (m/s):"))
+        speed_layout.addWidget(QLabel("Limit Prędkości (m/s):"))
         
         self.speed_combo = QComboBox()
         self.speed_combo.addItems([
@@ -120,13 +120,13 @@ class SpeedZoneEditor(QWidget):
         layout.addWidget(tools_group)
         
         # Map operations
-        map_ops_group = QGroupBox("Map Operations")
+        map_ops_group = QGroupBox("Operacje Mapy")
         map_ops_layout = QVBoxLayout(map_ops_group)
         
         # Clear button
         ops_layout = QHBoxLayout()
         
-        self.clear_zones_btn = QPushButton("Clear All Zones")
+        self.clear_zones_btn = QPushButton("Wyczyść Wszystkie Strefy")
         
         ops_layout.addWidget(self.clear_zones_btn)
         map_ops_layout.addLayout(ops_layout)
@@ -134,7 +134,7 @@ class SpeedZoneEditor(QWidget):
         # Save/Cancel buttons
         save_layout = QHBoxLayout()
         
-        self.save_speed_mask_btn = QPushButton("Save Speed Mask")
+        self.save_speed_mask_btn = QPushButton("Zapisz Maskę Prędkości")
         self.save_speed_mask_btn.setStyleSheet("""
             QPushButton {
                 background-color: #27ae60;
@@ -150,7 +150,7 @@ class SpeedZoneEditor(QWidget):
             }
         """)
         
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = QPushButton("Anuluj")
         self.cancel_btn.setStyleSheet("""
             QPushButton {
                 background-color: #e74c3c;
@@ -211,7 +211,7 @@ class SpeedZoneEditor(QWidget):
         
         if not speed_map_path.exists() or not speed_yaml_path.exists():
             print(f"DEBUG: Speed map files not found for '{map_name}'")
-            QMessageBox.warning(self, "Error", f"Speed map files not found for '{map_name}'!")
+            QMessageBox.warning(self, "Błąd", f"Pliki mapy prędkości dla '{map_name}' nie zostały znalezione!")
             return False
             
         # Store paths
@@ -232,8 +232,8 @@ class SpeedZoneEditor(QWidget):
         
     def clear_all_zones(self):
         """Clear all speed zones by loading the original map"""
-        reply = QMessageBox.question(self, 'Clear Zones', 
-                                   'Are you sure you want to clear all speed zones?',
+        reply = QMessageBox.question(self, 'Wyczyść Strefy', 
+                                   'Czy na pewno chcesz wyczyścić wszystkie strefy prędkości?',
                                    QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             if self.original_map_path and self.current_map_path:
@@ -241,10 +241,10 @@ class SpeedZoneEditor(QWidget):
                     # Copy original to speed_ prefixed map
                     shutil.copy2(self.original_map_path, self.current_map_path)
                     self.speed_mask_pixmap = QPixmap(self.current_map_path)
-                    QMessageBox.information(self, "Success", "All speed zones cleared!")
+                    QMessageBox.information(self, "Sukces", "Wszystkie strefy prędkości zostały wyczyszczone!")
                     self.speed_zone_updated.emit()
                 except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to clear speed zones: {str(e)}")
+                    QMessageBox.critical(self, "Błąd", f"Nie udało się wyczyścić stref prędkości: {str(e)}")
             
     def get_gray_value_for_speed(self, speed_ms: float) -> int:
         """Convert speed in m/s to gray value for speed mask
@@ -330,7 +330,7 @@ class SpeedZoneEditor(QWidget):
     def save_speed_mask(self):
         """Save the current speed zones with proper speed_ prefix and nav2-compatible YAML"""
         if not self.current_map_path or not self.current_yaml_path or not self.map_name:
-            QMessageBox.warning(self, "Error", "No map loaded!")
+            QMessageBox.warning(self, "Błąd", "Nie załadowano mapy!")
             return
             
         try:
@@ -371,16 +371,16 @@ class SpeedZoneEditor(QWidget):
             with open(speed_map_yaml, 'w') as f:
                 yaml.dump(yaml_data, f, default_flow_style=False)
                 
-            QMessageBox.information(self, "Success", 
-                                  f"Speed map saved as:\n{speed_map_pgm}\n{speed_map_yaml}")
+            QMessageBox.information(self, "Sukces", 
+                                  f"Mapa prędkości zapisana jako:\n{speed_map_pgm}\n{speed_map_yaml}")
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save speed map: {str(e)}")
+            QMessageBox.critical(self, "Błąd", f"Nie udało się zapisać mapy prędkości: {str(e)}")
             
     def cancel_editing(self):
         """Cancel speed zone editing and return to original map"""
-        reply = QMessageBox.question(self, 'Cancel Editing', 
-                                   'Cancel speed zone editing? Any unsaved changes will be lost.',
+        reply = QMessageBox.question(self, 'Anuluj Edycję', 
+                                   'Anulować edycję stref prędkości? Wszelkie niezapisane zmiany zostaną utracone.',
                                    QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.cleanup_editing()

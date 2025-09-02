@@ -18,7 +18,7 @@ class WaitActionDialog(QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Add Wait Action")
+        self.setWindowTitle("Dodaj Akcję Oczekiwania")
         self.setModal(True)
         self.resize(400, 200)  # Smaller since we removed options
         
@@ -28,20 +28,20 @@ class WaitActionDialog(QDialog):
         layout = QVBoxLayout()
         
         # Signal name input
-        signal_label = QLabel("Signal name:")
+        signal_label = QLabel("Nazwa sygnału:")
         self.signal_input = QLineEdit("default")
         layout.addWidget(signal_label)
         layout.addWidget(self.signal_input)
         
         # Info label explaining the behavior
-        info_label = QLabel("Wait action will activate on blue button press or CAN signal (ID 0x69).")
+        info_label = QLabel("Akcja oczekiwania zostanie aktywowana przez naciśnięcie niebieskiego przycisku lub sygnał CAN (ID 0x69).")
         info_label.setStyleSheet("color: #666; font-style: italic; margin: 10px 0;")
         layout.addWidget(info_label)
         
         # Buttons
         buttons_layout = QHBoxLayout()
         self.ok_button = QPushButton("OK")
-        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button = QPushButton("Anuluj")
         
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
@@ -62,7 +62,7 @@ class RouteSelectionDialog(QDialog):
     
     def __init__(self, route_names, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Add Route Action")
+        self.setWindowTitle("Dodaj Akcję Trasy")
         self.setModal(True)
         self.resize(400, 180)  # Larger for 1920x1080 screens
         
@@ -72,7 +72,7 @@ class RouteSelectionDialog(QDialog):
         layout = QVBoxLayout()
         
         # Route selection
-        route_label = QLabel("Select route:")
+        route_label = QLabel("Wybierz trasę:")
         layout.addWidget(route_label)
         
         self.route_combo = QComboBox()
@@ -80,7 +80,7 @@ class RouteSelectionDialog(QDialog):
         layout.addWidget(self.route_combo)
         
         # Reverse checkbox
-        self.reverse_checkbox = QCheckBox("Run route in reverse")
+        self.reverse_checkbox = QCheckBox("Uruchom trasę w odwrotnym kierunku")
         layout.addWidget(self.reverse_checkbox)
         
         # Buttons
@@ -90,7 +90,7 @@ class RouteSelectionDialog(QDialog):
         ok_button.clicked.connect(self.accept)
         button_layout.addWidget(ok_button)
         
-        cancel_button = QPushButton("Cancel")
+        cancel_button = QPushButton("Anuluj")
         cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(cancel_button)
         
@@ -107,14 +107,14 @@ class DockSelectionDialog(QDialog):
     
     def __init__(self, dock_names, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Add Dock Action")
+        self.setWindowTitle("Dodaj Akcję Dokowania")
         self.setModal(True)
         self.resize(400, 150)  # Larger for 1920x1080 screens
         
         layout = QVBoxLayout()
         
         # Dock selection
-        dock_label = QLabel("Select dock:")
+        dock_label = QLabel("Wybierz dokowanie:")
         layout.addWidget(dock_label)
         
         self.dock_combo = QComboBox()
@@ -128,7 +128,7 @@ class DockSelectionDialog(QDialog):
         ok_button.clicked.connect(self.accept)
         button_layout.addWidget(ok_button)
         
-        cancel_button = QPushButton("Cancel")
+        cancel_button = QPushButton("Anuluj")
         cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(cancel_button)
         
@@ -160,7 +160,7 @@ class PlanEditor(QMainWindow):
         self.speed_zone_editor = None
         self.speed_zone_window = None
         
-        self.setWindowTitle("Plan Editor")
+        self.setWindowTitle("Edytor Planów")
         self.setGeometry(100, 100, 1600, 900)  # Much larger for 1920x1080 screens
         
         # Apply global font scaling for large screens (1920x1080)
@@ -260,7 +260,7 @@ class PlanEditor(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         
         # Plan List Section
-        plan_group = QGroupBox("Plans")
+        plan_group = QGroupBox("Plany")
         plan_layout = QVBoxLayout(plan_group)
         
         # Plan list
@@ -269,9 +269,9 @@ class PlanEditor(QMainWindow):
         
         # Plan control buttons
         plan_buttons_layout = QHBoxLayout()
-        self.new_plan_btn = QPushButton("New Plan")
-        self.delete_plan_btn = QPushButton("Delete Plan")
-        self.duplicate_plan_btn = QPushButton("Duplicate")
+        self.new_plan_btn = QPushButton("Nowy Plan")
+        self.delete_plan_btn = QPushButton("Usuń Plan")
+        self.duplicate_plan_btn = QPushButton("Duplikuj")
         
         plan_buttons_layout.addWidget(self.new_plan_btn)
         plan_buttons_layout.addWidget(self.delete_plan_btn)
@@ -281,28 +281,28 @@ class PlanEditor(QMainWindow):
         left_layout.addWidget(plan_group)
         
         # Plan Details Section
-        details_group = QGroupBox("Plan Details")
+        details_group = QGroupBox("Szczegóły Planu")
         details_layout = QVBoxLayout(details_group)
         
         # Plan name
-        details_layout.addWidget(QLabel("Plan Name:"))
+        details_layout.addWidget(QLabel("Nazwa Planu:"))
         self.plan_name_edit = QLineEdit()
         details_layout.addWidget(self.plan_name_edit)
         
         
         # Map selection
-        details_layout.addWidget(QLabel("Map:"))
+        details_layout.addWidget(QLabel("Mapa:"))
         self.map_combo = QComboBox()
         details_layout.addWidget(self.map_combo)
         
         # Load map button
-        self.load_map_btn = QPushButton("Load Map")
+        self.load_map_btn = QPushButton("Załaduj Mapę")
         details_layout.addWidget(self.load_map_btn)
         
         left_layout.addWidget(details_group)
         
         # Actions Section
-        actions_group = QGroupBox("Plan Actions")
+        actions_group = QGroupBox("Akcje Planu")
         actions_layout = QVBoxLayout(actions_group)
         
         # Actions list
@@ -312,14 +312,14 @@ class PlanEditor(QMainWindow):
         # Action control buttons
         action_buttons_layout = QGridLayout()
         
-        self.add_route_btn = QPushButton("Add Route")
-        self.add_dock_btn = QPushButton("Add Dock")
-        self.add_undock_btn = QPushButton("Add Undock")
-        self.add_wait_btn = QPushButton("Add Wait")
+        self.add_route_btn = QPushButton("Dodaj Trasę")
+        self.add_dock_btn = QPushButton("Dodaj Dokowanie")
+        self.add_undock_btn = QPushButton("Dodaj Oddokowanie")
+        self.add_wait_btn = QPushButton("Dodaj Oczekiwanie")
         # Note: Add Stop button removed
-        self.remove_action_btn = QPushButton("Remove Action")
-        self.move_up_btn = QPushButton("Move Up")
-        self.move_down_btn = QPushButton("Move Down")
+        self.remove_action_btn = QPushButton("Usuń Akcję")
+        self.move_up_btn = QPushButton("Przenieś Wyżej")
+        self.move_down_btn = QPushButton("Przenieś Niżej")
         
         action_buttons_layout.addWidget(self.add_route_btn, 0, 0)
         action_buttons_layout.addWidget(self.add_dock_btn, 0, 1)
@@ -346,7 +346,7 @@ class PlanEditor(QMainWindow):
         # Map controls
         map_controls_layout = QHBoxLayout()
         
-        map_label = QLabel("Map View & Route Editor")
+        map_label = QLabel("Widok Mapy i Edytor Tras")
         map_label.setFont(QFont("Arial", 12, QFont.Bold))
         map_controls_layout.addWidget(map_label)
         
@@ -357,9 +357,9 @@ class PlanEditor(QMainWindow):
         route_editing_layout = QHBoxLayout(self.route_editing_widget)
         route_editing_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.clear_route_btn = QPushButton("Clear Route")
-        self.save_route_btn = QPushButton("Save Route")
-        self.cancel_route_btn = QPushButton("Cancel")
+        self.clear_route_btn = QPushButton("Wyczyść Trasę")
+        self.save_route_btn = QPushButton("Zapisz Trasę")
+        self.cancel_route_btn = QPushButton("Anuluj")
         
         route_editing_layout.addWidget(self.clear_route_btn)
         route_editing_layout.addWidget(self.save_route_btn)
@@ -373,8 +373,8 @@ class PlanEditor(QMainWindow):
         dock_editing_layout = QHBoxLayout(self.dock_editing_widget)
         dock_editing_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.save_dock_btn = QPushButton("Save Dock")
-        self.cancel_dock_btn = QPushButton("Cancel")
+        self.save_dock_btn = QPushButton("Zapisz Dokowanie")
+        self.cancel_dock_btn = QPushButton("Anuluj")
         
         dock_editing_layout.addWidget(self.save_dock_btn)
         dock_editing_layout.addWidget(self.cancel_dock_btn)
@@ -409,7 +409,7 @@ class PlanEditor(QMainWindow):
         section_layout = QVBoxLayout(section_widget)
         
         # Routes Section
-        routes_group = QGroupBox("Routes")
+        routes_group = QGroupBox("Trasy")
         routes_layout = QVBoxLayout(routes_group)
         
         # Routes list
@@ -419,9 +419,9 @@ class PlanEditor(QMainWindow):
         
         # Route control buttons
         route_buttons_layout = QHBoxLayout()
-        self.add_route_editor_btn = QPushButton("Add Route")
-        self.edit_route_btn = QPushButton("Edit Route")
-        self.remove_route_btn = QPushButton("Remove Route")
+        self.add_route_editor_btn = QPushButton("Dodaj Trasę")
+        self.edit_route_btn = QPushButton("Edytuj Trasę")
+        self.remove_route_btn = QPushButton("Usuń Trasę")
         
         route_buttons_layout.addWidget(self.add_route_editor_btn)
         route_buttons_layout.addWidget(self.edit_route_btn)
@@ -431,7 +431,7 @@ class PlanEditor(QMainWindow):
         section_layout.addWidget(routes_group)
         
         # Docks Section
-        docks_group = QGroupBox("Docks")
+        docks_group = QGroupBox("Dokowania")
         docks_layout = QVBoxLayout(docks_group)
         
         # Docks list
@@ -441,9 +441,9 @@ class PlanEditor(QMainWindow):
         
         # Dock control buttons
         dock_buttons_layout = QHBoxLayout()
-        self.add_dock_editor_btn = QPushButton("Add Dock")
-        self.edit_dock_editor_btn = QPushButton("Edit Dock")
-        self.remove_dock_editor_btn = QPushButton("Remove Dock")
+        self.add_dock_editor_btn = QPushButton("Dodaj Dokowanie")
+        self.edit_dock_editor_btn = QPushButton("Edytuj Dokowanie")
+        self.remove_dock_editor_btn = QPushButton("Usuń Dokowanie")
         
         dock_buttons_layout.addWidget(self.add_dock_editor_btn)
         dock_buttons_layout.addWidget(self.edit_dock_editor_btn)
@@ -453,7 +453,7 @@ class PlanEditor(QMainWindow):
         section_layout.addWidget(docks_group)
         
         # Edit Speed Zones button
-        self.edit_speed_zones_btn = QPushButton("Edit Speed Zones")
+        self.edit_speed_zones_btn = QPushButton("Edytuj Strefy Prędkości")
         self.edit_speed_zones_btn.setStyleSheet("""
             QPushButton {
                 font-weight: bold;
@@ -475,7 +475,7 @@ class PlanEditor(QMainWindow):
         section_layout.addWidget(self.edit_speed_zones_btn)
         
         # Save plan and exit button
-        self.save_plan_btn = QPushButton("Save plan and exit")
+        self.save_plan_btn = QPushButton("Zapisz plan i wyjść")
         self.save_plan_btn.setStyleSheet("""
             QPushButton {
                 font-weight: bold;
@@ -640,7 +640,7 @@ class PlanEditor(QMainWindow):
         name, ok = QInputDialog.getText(self, 'New Plan', 'Enter plan name:')
         if ok and name:
             if name in self.plan_manager.plans:
-                QMessageBox.warning(self, "Error", f"Plan '{name}' already exists!")
+                QMessageBox.warning(self, "Błąd", f"Plan '{name}' już istnieje!")
                 return
             
             new_plan = ExecutionPlan(name=name)
@@ -656,8 +656,8 @@ class PlanEditor(QMainWindow):
         if not self.current_plan:
             return
         
-        reply = QMessageBox.question(self, 'Delete Plan', 
-                                   f'Are you sure you want to delete plan "{self.current_plan.name}"?',
+        reply = QMessageBox.question(self, 'Usuń Plan', 
+                                   f'Czy na pewno chcesz usunąć plan "{self.current_plan.name}"?',
                                    QMessageBox.Yes | QMessageBox.No, 
                                    QMessageBox.No)
         
@@ -676,7 +676,7 @@ class PlanEditor(QMainWindow):
                                       text=f"{self.current_plan.name}_copy")
         if ok and name:
             if name in self.plan_manager.plans:
-                QMessageBox.warning(self, "Error", f"Plan '{name}' already exists!")
+                QMessageBox.warning(self, "Błąd", f"Plan '{name}' już istnieje!")
                 return
             
             # Create a copy
@@ -705,7 +705,7 @@ class PlanEditor(QMainWindow):
         if self.plan_manager.update_plan(self.current_plan):
             self.refresh_plan_list()
             self.plan_updated.emit()
-            QMessageBox.information(self, "Success", "Plan saved successfully!")
+            QMessageBox.information(self, "Sukces", "Plan został pomyślnie zapisany!")
             self.close()  # Close the plan editor window after saving
     
     def clear_plan_details(self):
@@ -733,7 +733,7 @@ class PlanEditor(QMainWindow):
         print(f"DEBUG: load_selected_map called with map_name: '{map_name}', show_success_dialog: {show_success_dialog}")
         if not map_name:
             if show_success_dialog:
-                QMessageBox.warning(self, "Warning", "Please select a map first!")
+                QMessageBox.warning(self, "Ostrzeżenie", "Proszę najpierw wybrać mapę!")
             return
         
         # Set the current map in route and dock managers
@@ -752,7 +752,7 @@ class PlanEditor(QMainWindow):
         try:
             if not map_path.exists() or not yaml_path.exists():
                 if show_success_dialog:
-                    QMessageBox.warning(self, "Error", f"Map files not found for '{map_name}'!")
+                    QMessageBox.warning(self, "Błąd", f"Pliki mapy '{map_name}' nie zostały znalezione!")
                 return
             
             # Create speed_ prefixed copy if it doesn't exist
@@ -791,11 +791,11 @@ class PlanEditor(QMainWindow):
                     print(f"DEBUG: Map '{map_name}' already assigned to plan '{self.current_plan.name}'")
             
             if show_success_dialog:
-                QMessageBox.information(self, "Success", f"Map '{map_name}' loaded successfully!")
+                QMessageBox.information(self, "Sukces", f"Mapa '{map_name}' została załadowana pomyślnie!")
             
         except Exception as e:
             if show_success_dialog:
-                QMessageBox.critical(self, "Error", f"Failed to load map: {str(e)}")
+                QMessageBox.critical(self, "Błąd", f"Nie udało się załadować mapy: {str(e)}")
     
     # Action management methods
     def add_route_action(self):
@@ -804,7 +804,7 @@ class PlanEditor(QMainWindow):
         
         routes = self.route_manager.load_routes()
         if not routes:
-            QMessageBox.warning(self, "Warning", "No routes available for current map!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Brak dostępnych tras dla bieżącej mapy!")
             return
         
         route_names = list(routes.keys())
@@ -823,7 +823,7 @@ class PlanEditor(QMainWindow):
         # Get available docks
         docks = self.dock_manager.load_docks()
         if not docks:
-            QMessageBox.warning(self, "Warning", "No docks available for current map!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Brak dostępnych dokowań dla bieżącej mapy!")
             return
         
         dock_names = list(docks.keys())
@@ -903,14 +903,14 @@ class PlanEditor(QMainWindow):
     def save_current_route(self):
         current_route = self.map_view.get_current_route()
         if not current_route or len(current_route.nodes) == 0:
-            QMessageBox.warning(self, "Warning", "No route to save!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Brak trasy do zapisania!")
             return
         
         # Check if we're editing an existing route
         if self.editing_route_name:
             # Editing existing route - ask for confirmation
-            reply = QMessageBox.question(self, 'Update Route', 
-                                       f"Update existing route '{self.editing_route_name}'?",
+            reply = QMessageBox.question(self, 'Aktualizuj Trasę', 
+                                       f"Aktualizować istniejącą trasę '{self.editing_route_name}'?",
                                        QMessageBox.Yes | QMessageBox.No)
             if reply == QMessageBox.Yes:
                 name = self.editing_route_name
@@ -920,27 +920,27 @@ class PlanEditor(QMainWindow):
                     self.map_view.stop_route_editing()
                     self.route_editing_widget.setVisible(False)
                     self.editing_route_name = None
-                    QMessageBox.information(self, "Success", f"Route '{name}' updated successfully!")
+                    QMessageBox.information(self, "Sukces", f"Trasa '{name}' została pomyślnie zaktualizowana!")
                 else:
-                    QMessageBox.warning(self, "Error", f"Failed to update route '{name}'!")
+                    QMessageBox.warning(self, "Błąd", f"Nie udało się zaktualizować trasy '{name}'!")
         else:
             # Creating new route - ask for name
-            name, ok = QInputDialog.getText(self, 'Save Route', 'Enter route name:')
+            name, ok = QInputDialog.getText(self, 'Zapisz Trasę', 'Wprowadź nazwę trasy:')
             if ok and name:
                 if self.route_manager.add_route(name, current_route):
                     self.refresh_routes_list()  # Refresh the routes list
                     # Exit route editing mode
                     self.map_view.stop_route_editing()
                     self.route_editing_widget.setVisible(False)
-                    QMessageBox.information(self, "Success", f"Route '{name}' saved successfully!")
+                    QMessageBox.information(self, "Sukces", f"Trasa '{name}' została pomyślnie zapisana!")
                 else:
-                    QMessageBox.warning(self, "Error", f"Failed to save route '{name}'!")
+                    QMessageBox.warning(self, "Błąd", f"Nie udało się zapisać trasy '{name}'!")
     
     # Route management methods
     def start_route_creation(self):
         """Start creating a new route"""
         if not self.route_manager.current_map:
-            QMessageBox.warning(self, "Warning", "Please select and load a map first!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę najpierw wybrać i załadować mapę!")
             return
         
         # Clear editing state (we're creating a new route)
@@ -957,18 +957,18 @@ class PlanEditor(QMainWindow):
         """Start editing the selected route"""
         current_item = self.routes_list.currentItem()
         if not current_item:
-            QMessageBox.warning(self, "Warning", "Please select a route to edit!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę wybrać trasę do edycji!")
             return
         
         if not self.route_manager.current_map:
-            QMessageBox.warning(self, "Warning", "Please select and load a map first!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę najpierw wybrać i załadować mapę!")
             return
         
         route_name = current_item.text()
         routes = self.route_manager.load_routes()
         
         if route_name not in routes:
-            QMessageBox.warning(self, "Warning", "Selected route not found!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Wybrana trasa nie została znaleziona!")
             return
         
         # Store the route we're editing
@@ -997,7 +997,7 @@ class PlanEditor(QMainWindow):
         """Remove the selected route from the routes list"""
         current_item = self.routes_list.currentItem()
         if not current_item:
-            QMessageBox.warning(self, "Warning", "Please select a route to remove!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę wybrać trasę do usunięcia!")
             return
         
         route_name = current_item.text()
@@ -1014,9 +1014,9 @@ class PlanEditor(QMainWindow):
                 if self.route_manager.save_routes(routes):
                     self.refresh_routes_list()
                     self.map_view.clear_route()  # Clear route display
-                    QMessageBox.information(self, "Success", f"Route '{route_name}' removed successfully!")
+                    QMessageBox.information(self, "Sukces", f"Trasa '{route_name}' została pomyślnie usunięta!")
                 else:
-                    QMessageBox.warning(self, "Error", f"Failed to remove route '{route_name}'!")
+                    QMessageBox.warning(self, "Błąd", f"Nie udało się usunąć trasy '{route_name}'!")
     
     def on_route_selected(self, item: QListWidgetItem):
         """Handle route selection from list"""
@@ -1053,7 +1053,7 @@ class PlanEditor(QMainWindow):
     def start_dock_creation(self):
         """Start creating a new dock by clicking on the map"""
         if not self.dock_manager.current_map:
-            QMessageBox.warning(self, "Warning", "Please select and load a map first!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę najpierw wybrać i załadować mapę!")
             return
         
         # Clear editing state (we're creating a new dock)
@@ -1067,7 +1067,7 @@ class PlanEditor(QMainWindow):
         # Check if dock name already exists
         docks = self.dock_manager.load_docks()
         if name in docks:
-            QMessageBox.warning(self, "Warning", f"Dock '{name}' already exists!")
+            QMessageBox.warning(self, "Ostrzeżenie", f"Dokowanie '{name}' już istnieje!")
             return
         
         # Set up for new dock creation
@@ -1082,21 +1082,21 @@ class PlanEditor(QMainWindow):
         # Show dock editing controls for new dock
         self.dock_editing_widget.setVisible(True)
         
-        QMessageBox.information(self, "Place Dock", 
-                               f"Click on the map to place dock '{name}', then click Save or Cancel")
+        QMessageBox.information(self, "Umieść Dokowanie", 
+                               f"Kliknij na mapę, aby umieścić dokowanie '{name}', następnie kliknij Zapisz lub Anuluj")
     
     def edit_selected_dock(self):
         """Start editing the selected dock"""
         current_item = self.docks_list.currentItem()
         if not current_item:
-            QMessageBox.warning(self, "Warning", "Please select a dock to edit!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę wybrać dokowanie do edycji!")
             return
         
         dock_name = current_item.text()
         docks = self.dock_manager.load_docks()
         
         if dock_name not in docks:
-            QMessageBox.warning(self, "Warning", "Selected dock not found!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Wybrane dokowanie nie zostało znalezione!")
             return
         
         # Store the dock we're editing
@@ -1111,14 +1111,14 @@ class PlanEditor(QMainWindow):
         # Show dock editing controls
         self.dock_editing_widget.setVisible(True)
         
-        QMessageBox.information(self, "Edit Dock", 
-                               f"Drag dock '{dock_name}' to move it, then click Save or Cancel")
+        QMessageBox.information(self, "Edytuj Dokowanie", 
+                               f"Przeciągnij dokowanie '{dock_name}', aby je przesunąć, następnie kliknij Zapisz lub Anuluj")
     
     def remove_selected_dock(self):
         """Remove the selected dock from the docks list"""
         current_item = self.docks_list.currentItem()
         if not current_item:
-            QMessageBox.warning(self, "Warning", "Please select a dock to remove!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę wybrać dokowanie do usunięcia!")
             return
         
         dock_name = current_item.text()
@@ -1136,9 +1136,9 @@ class PlanEditor(QMainWindow):
                     self.map_view.dock_graphics_manager.force_remove_dock_graphics(dock_name)
                 # Update dock graphics display
                 self.map_view.update_dock_graphics()
-                QMessageBox.information(self, "Success", f"Dock '{dock_name}' removed successfully!")
+                QMessageBox.information(self, "Sukces", f"Dokowanie '{dock_name}' zostało pomyślnie usunięte!")
             else:
-                QMessageBox.warning(self, "Error", f"Failed to remove dock '{dock_name}'!")
+                QMessageBox.warning(self, "Błąd", f"Nie udało się usunąć dokowania '{dock_name}'!")
     
     def on_dock_selected(self, item: QListWidgetItem):
         """Handle dock selection from list"""
@@ -1167,7 +1167,7 @@ class PlanEditor(QMainWindow):
     def save_current_dock(self):
         """Save the current dock position"""
         if not self.editing_dock_name:
-            QMessageBox.warning(self, "Warning", "No dock being edited!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Nie edytuje się żadnego dokowania!")
             return
         
         if self.map_view.save_current_dock():
@@ -1178,9 +1178,9 @@ class PlanEditor(QMainWindow):
             
             # Refresh the dock list
             self.refresh_docks_list()
-            QMessageBox.information(self, "Success", "Dock position saved successfully!")
+            QMessageBox.information(self, "Sukces", "Pozycja dokowania została pomyślnie zapisana!")
         else:
-            QMessageBox.warning(self, "Error", "Failed to save dock position!")
+            QMessageBox.warning(self, "Błąd", "Nie udało się zapisać pozycji dokowania!")
     
     def cancel_dock_creation(self):
         """Cancel current dock editing"""
@@ -1189,7 +1189,7 @@ class PlanEditor(QMainWindow):
             self.map_view.cancel_dock_editing()
             self.dock_editing_widget.setVisible(False)
             self.editing_dock_name = None
-            QMessageBox.information(self, "Cancelled", "Dock editing cancelled.")
+            QMessageBox.information(self, "Anulowano", "Edycja dokowania została anulowana.")
     
     # Speed zone editing methods
     def start_speed_zone_editing(self):
@@ -1198,7 +1198,7 @@ class PlanEditor(QMainWindow):
         map_name = self.map_combo.currentText()
         print(f"DEBUG: Current map name: {map_name}")
         if not map_name:
-            QMessageBox.warning(self, "Warning", "Please select and load a map first!")
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę najpierw wybrać i załadować mapę!")
             return
             
         # Create speed zone editor if it doesn't exist
@@ -1236,7 +1236,7 @@ class PlanEditor(QMainWindow):
                 print(f"DEBUG: Creating new speed zone window")
                 from PyQt5.QtWidgets import QDialog, QVBoxLayout
                 self.speed_zone_window = QDialog(self)
-                self.speed_zone_window.setWindowTitle("Speed Zone Editor")
+                self.speed_zone_window.setWindowTitle("Edytor Stref Prędkości")
                 self.speed_zone_window.setModal(False)  # Non-modal so user can interact with map
                 self.speed_zone_window.resize(300, 400)
                 
@@ -1276,7 +1276,7 @@ class PlanEditor(QMainWindow):
             
         else:
             print(f"DEBUG: Failed to load map in speed zone editor")
-            QMessageBox.warning(self, "Error", "Failed to load map for speed zone editing!")
+            QMessageBox.warning(self, "Błąd", "Nie udało się załadować mapy dla edycji stref prędkości!")
     
     def stop_speed_zone_editing(self):
         """Stop speed zone editing mode"""

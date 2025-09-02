@@ -89,7 +89,7 @@ class PlanActiveView(QWidget):
         robot_layout.setContentsMargins(20, 15, 20, 15)
         robot_layout.setSpacing(12)
         
-        robot_title = QLabel("ROBOT STATUS")
+        robot_title = QLabel("STATUS ROBOTA")
         robot_title.setAlignment(Qt.AlignCenter)
         robot_title.setStyleSheet("""
             QLabel {
@@ -103,7 +103,7 @@ class PlanActiveView(QWidget):
         robot_layout.addWidget(robot_title)
         
         # Create a container for the status display - VERY LARGE AND VISIBLE
-        self.robot_status_text = QLabel("Idle")
+        self.robot_status_text = QLabel("Bezczynny")
         self.robot_status_text.setAlignment(Qt.AlignCenter)
         self.robot_status_text.setStyleSheet("""
             QLabel {
@@ -131,7 +131,7 @@ class PlanActiveView(QWidget):
         plan_layout.setContentsMargins(20, 15, 20, 15)
         plan_layout.setSpacing(12)
         
-        plan_title = QLabel("PLAN STATUS")
+        plan_title = QLabel("STATUS PLANU")
         plan_title.setAlignment(Qt.AlignCenter)
         plan_title.setStyleSheet("""
             QLabel {
@@ -144,7 +144,7 @@ class PlanActiveView(QWidget):
         """)
         plan_layout.addWidget(plan_title)
         
-        self.plan_status_display = QLabel("No active plan")
+        self.plan_status_display = QLabel("Brak aktywnego planu")
         self.plan_status_display.setAlignment(Qt.AlignCenter)
         self.plan_status_display.setStyleSheet("""
             QLabel {
@@ -173,7 +173,7 @@ class PlanActiveView(QWidget):
         battery_layout.setContentsMargins(20, 15, 20, 15)
         battery_layout.setSpacing(12)
         
-        battery_title = QLabel("BATTERY")
+        battery_title = QLabel("BATERIA")
         battery_title.setAlignment(Qt.AlignCenter)
         battery_title.setStyleSheet("""
             QLabel {
@@ -186,7 +186,7 @@ class PlanActiveView(QWidget):
         """)
         battery_layout.addWidget(battery_title)
         
-        self.battery_status_display = QLabel("Unknown")
+        self.battery_status_display = QLabel("Nieznany")
         self.battery_status_display.setAlignment(Qt.AlignCenter)
         self.battery_status_display.setStyleSheet("""
             QLabel {
@@ -324,23 +324,23 @@ class PlanActiveView(QWidget):
         
         if hasattr(self, 'robot_status_frame'):
             # Define background colors based on status
-            if status in ["At base", "At destination", "Docked", "Undocked", "Waiting for signal", 
-                          "Stopped", "Idle"]:
+            if status in ["At base", "At destination", "Docked", "Undocked", "Oczekiwanie na sygnał", 
+                          "Zatrzymany", "Bezczynny"]:
                 # Light green for completed/stable states
                 bg_color = "#d5f4e6"
                 text_color = "#27ae60"
             elif status in ["Nav to base", "Nav to dest", "Navigating", "Docking", "Undocking",
-                            "Manual move"] or status.startswith("Executing"):
+                            "Manual move"] or status.startswith("Wykonywanie"):
                 # No color (white/light gray) for moving/active states
                 bg_color = "#f8f9fa"
                 text_color = "#2c3e50"
-            elif status in ["Failed", "Error", "Connection lost", "Navigation Error", 
-                           "Dock Cancelled", "Undock Cancelled", "Dock cancelled", "Undock cancelled"] or \
-                 "failed" in status.lower() or "error" in status.lower() or "cancelled" in status.lower():
+            elif status in ["Błąd", "Error", "Utracono połączenie", "Błąd Nawigacji", 
+                           "Dokowanie Anulowane", "Oddokowanie Anulowane", "Dokowanie anulowane", "Oddokowanie anulowane"] or \
+                 "failed" in status.lower() or "error" in status.lower() or "cancelled" in status.lower() or "błąd" in status.lower() or "anulowane" in status.lower():
                 # Light red for errors and cancellations
                 bg_color = "#fadbd8"
                 text_color = "#e74c3c"
-            elif status in ["Warning", "Low battery", "Obstacle detected"]:
+            elif status in ["Ostrzeżenie", "Słaba bateria", "Wykryto przeszkodę"]:
                 # Light orange for warnings
                 bg_color = "#fdebd0"
                 text_color = "#f39c12"

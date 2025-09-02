@@ -334,20 +334,20 @@ class ActiveState(State):
     def handleDisconnection(self):
         self.gui.transition_to(DisconnectedState())
         self.gui.gui_manager.stop_nav()
-        self.gui.main_view.active_view.update_robot_status("Idle")
+        self.gui.main_view.active_view.update_robot_status("Bezczynny")
         self.gui.handleGui()
     
     def startPlanning(self):
         # self.gui.main_view.set_position_signal.disconnect()
         self.gui.transition_to(PlannerState())
         self.gui.gui_manager.stop_nav()
-        self.gui.main_view.active_view.update_robot_status("Idle")
+        self.gui.main_view.active_view.update_robot_status("Bezczynny")
         self.gui.handleGui()
 
     def handle_configuring(self):
         self.gui.transition_to(ConfiguringState())
         self.gui.gui_manager.stop_nav()
-        self.gui.main_view.active_view.update_robot_status("Idle")
+        self.gui.main_view.active_view.update_robot_status("Bezczynny")
         self.gui.handleGui()
 
 #TODO: handleDisconnection in the planner mode
@@ -560,5 +560,5 @@ class PlanActiveState(State):
     def handleDisconnection(self):
         self.gui.transition_to(DisconnectedState())
         self.gui.gui_manager.stop_nav()
-        self.gui.main_view.plan_active_view.update_robot_status("Idle")
+        self.gui.main_view.plan_active_view.update_robot_status("Bezczynny")
         self.gui.handleGui()

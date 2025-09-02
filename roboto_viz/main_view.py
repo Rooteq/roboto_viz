@@ -63,7 +63,7 @@ class MainView(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Robot Control")
+        self.setWindowTitle("Sterowanie Robotem")
         # Optimized for 1920x1080 displays
         self.setFixedSize(1800, 1000)  # Large window for 1920x1080 screens
         self.showFullScreen()
