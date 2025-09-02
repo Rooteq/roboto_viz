@@ -593,15 +593,10 @@ class Navigator(QThread):
         except Exception as e:
             print(f"Warning: Error canceling navigation task: {e}")
         
-        # Only emit "Stopped" if the last status wasn't a failure
-        # This preserves failure messages when stopping after a failure
-        if self._last_status and ("fail" in self._last_status.lower() or "error" in self._last_status.lower()):
-            print(f"Navigator: Preserving failure status '{self._last_status}' instead of emitting 'Stopped'")
-            # Don't emit Stopped - keep the failure status
-        else:
-            # Normal stop case - emit "Stopped" status
-            self._last_status = "Zatrzymany"
-            self.navStatus.emit("Zatrzymany")
+        # Always emit "Stopped" status when stop is called - do not preserve error status
+        # This ensures the STOP button always sends an OK CAN message
+        self._last_status = "Zatrzymany"
+        self.navStatus.emit("Zatrzymany")
 
 
     def set_goal(self, route: str, to_dest: bool, x:float, y:float):
