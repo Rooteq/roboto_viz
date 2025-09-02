@@ -8,3 +8,5 @@ Status CAN messages:
   - CAN ID 0x201: Turn on Green LED (robot OK)
   - CAN ID 0x202: Turn on Orange LED (robot warning)
   - CAN ID 0x203: Turn on Red LED (robot error)
+
+Change the OK can message to be sent only once
