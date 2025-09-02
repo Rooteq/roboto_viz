@@ -165,7 +165,7 @@ class ManagerNode(LifecycleNode):
         if self.collision_subscriber is None and CollisionDetectorState is not None:
             self.collision_subscriber = self.create_subscription(
                 CollisionDetectorState,
-                '/collision_detector/detector_state',
+                '/collision_detector_state',
                 self.collision_callback,
                 10
             )
