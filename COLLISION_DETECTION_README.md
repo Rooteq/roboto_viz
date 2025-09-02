@@ -41,7 +41,6 @@ def collision_callback(self, msg):
     if msg.detections:
         # Check if any detection is true
         collision_detected = any(msg.detections)
-        self.get_logger().info(f"Collision detection: {collision_detected}, Polygons: {msg.polygons}")
         
         # Call the callback if set
         if self.collision_detection_callback:
@@ -69,21 +68,36 @@ The logic uses `any(msg.detections)` to determine if any polygon has detected a 
 **Location**: `can_status_manager.py` - `CANStatusManager` class
 
 **Message IDs**:
-- `0x204` - Buzzer ON (collision detected)
-- `0x205` - Buzzer OFF (no collision)
+- `0x204` - Buzzer ON (collision detected during navigation)
+- `0x205` - Buzzer OFF (no collision or not navigating)
 
-**Methods Added**:
+**Navigation State Tracking**:
+The system now tracks navigation state and only sends buzzer ON when BOTH conditions are met:
+1. Collision is detected (`any(msg.detections) == True`)
+2. Robot is actively navigating (`is_navigating == True`)
+
+**Methods Added/Updated**:
 ```python
 @pyqtSlot(bool)
 def handle_collision_detection(self, collision_detected: bool):
     """Handle collision detection updates and control buzzer"""
-    print(f"CAN Status: Collision detection status: {collision_detected}")
     self.send_buzzer_status(collision_detected)
+
+def send_buzzer_status(self, collision_detected: bool):
+    """
+    Send buzzer control message based on collision detection status.
+    Only sends buzzer ON when both collision is detected AND robot is navigating.
+    Always sends buzzer OFF when not navigating or no collision.
+    """
+    should_buzz = collision_detected and self.is_navigating
+    buzzer_id = CANBuzzerType.BUZZER_ON if should_buzz else CANBuzzerType.BUZZER_OFF
+    return self._send_buzzer_can_message(buzzer_id)
 ```
 
-**Existing Methods Used**:
-- `send_buzzer_status(collision_detected: bool)` - determines which CAN ID to send
-- `_send_buzzer_can_message(buzzer_can_id: CANBuzzerType)` - sends the actual CAN frame
+**Navigation Status Tracking**:
+Navigation state is updated based on status messages:
+- **Active Navigation**: "nav to", "navigating", "nawigacja" 
+- **Inactive Navigation**: "zatrzymany", "stopped", "na miejscu", "w bazie", "bezczynny", "idle", "błąd", "failed", "error"
 
 ### 6. CAN Message Format
 
@@ -129,12 +143,20 @@ A test script (`test_collision_detection.py`) validates:
 
 ## Usage
 
-The system is fully automatic:
+The system is fully automatic with intelligent behavior:
 
 1. **Robot Operation**: Navigation system publishes to `/collision_detector/detector_state`
-2. **Detection**: Any polygon detection triggers buzzer ON (0x204)
-3. **Clear**: All polygons clear triggers buzzer OFF (0x205)
-4. **Hardware**: Buzzer hardware responds to CAN messages immediately
+2. **Navigation Tracking**: System monitors navigation status to determine if robot is actively navigating
+3. **Smart Buzzer Logic**: 
+   - **Buzzer ON (0x204)**: Only when collision detected AND robot is navigating
+   - **Buzzer OFF (0x205)**: When no collision OR robot is not navigating
+4. **Hardware Response**: Buzzer hardware responds to CAN messages immediately
+
+**Example Scenarios**:
+- Robot idle + collision detected → Buzzer OFF (not navigating)
+- Robot navigating + no collision → Buzzer OFF (no collision) 
+- Robot navigating + collision detected → Buzzer ON (both conditions met)
+- Robot stops navigation → Buzzer OFF (automatically sent when navigation ends)
 
 ## Dependencies
 
@@ -153,9 +175,15 @@ Use existing CAN troubleshooting from `CAN_STATUS_README.md` - check interface w
 
 ### Debug Output
 Both collision detection and CAN transmission provide console output for debugging:
-- `"Collision detection: True/False, Polygons: [...]"`
-- `"CAN Status: Collision detection status: True/False"`  
-- `"CAN Buzzer: Sent BUZZER_ON/BUZZER_OFF (ID: 0x204/0x205)"`
+- `"Created collision detector subscriber"` - Subscription established
+- `"CAN Status: Navigation failure detected: [status] - sending ERROR message"` - Navigation issues  
+- `"CAN Buzzer: Sent BUZZER_ON/BUZZER_OFF (ID: 0x204/0x205)"` - CAN transmission confirmation
+
+**Navigation State Changes**:
+When navigation status changes, the system automatically:
+- Sets `is_navigating = True` for active navigation states
+- Sets `is_navigating = False` for inactive states  
+- Sends `BUZZER_OFF (0x205)` immediately when navigation stops
 
 ## Architecture Integration
 

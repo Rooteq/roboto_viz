@@ -40,6 +40,7 @@ class CANStatusManager(QObject):
         self.last_status_cache: Dict[str, tuple] = {}
         self.battery_warning_active = False  # Track if battery is in warning state
         self.last_battery_warning_state = None  # Track battery warning state changes
+        self.is_navigating = False  # Track if robot is currently navigating
         
         # Status level mapping for different status strings
         self.status_level_map = {
@@ -179,12 +180,16 @@ class CANStatusManager(QObject):
 
     def send_buzzer_status(self, collision_detected: bool):
         """
-        Send buzzer control message based on collision detection status
+        Send buzzer control message based on collision detection status.
+        Only sends buzzer ON when both collision is detected AND robot is navigating.
+        Always sends buzzer OFF when not navigating or no collision.
         """
         if not self.socket_fd:
             return False
             
-        buzzer_id = CANBuzzerType.BUZZER_ON if collision_detected else CANBuzzerType.BUZZER_OFF
+        # Only turn buzzer ON if collision detected AND robot is navigating
+        should_buzz = collision_detected and self.is_navigating
+        buzzer_id = CANBuzzerType.BUZZER_ON if should_buzz else CANBuzzerType.BUZZER_OFF
         return self._send_buzzer_can_message(buzzer_id)
 
     def _should_send_led(self, status_level: StatusLevel) -> bool:
@@ -244,6 +249,20 @@ class CANStatusManager(QObject):
         """Handle navigation status updates"""
         if "fail" in status.lower() or "error" in status.lower():
             print(f"CAN Status: Navigation failure detected: {status} - sending ERROR message")
+        
+        # Update navigation state based on status
+        nav_active_keywords = ["nav to", "navigating", "nawigacja"]
+        nav_inactive_keywords = ["zatrzymany", "stopped", "na miejscu", "w bazie", "bezczynny", "idle", "błąd", "failed", "error"]
+        
+        status_lower = status.lower()
+        if any(keyword in status_lower for keyword in nav_active_keywords):
+            self.is_navigating = True
+        elif any(keyword in status_lower for keyword in nav_inactive_keywords):
+            self.is_navigating = False
+            # When navigation stops, always send buzzer OFF
+            if self.socket_fd:
+                self._send_buzzer_can_message(CANBuzzerType.BUZZER_OFF)
+        
         self.send_led_status_if_changed(status)
         
     @pyqtSlot(str)
@@ -389,5 +408,4 @@ class CANStatusManager(QObject):
     @pyqtSlot(bool)
     def handle_collision_detection(self, collision_detected: bool):
         """Handle collision detection updates and control buzzer"""
-        print(f"CAN Status: Collision detection status: {collision_detected}")
         self.send_buzzer_status(collision_detected)

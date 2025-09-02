@@ -165,7 +165,7 @@ class ManagerNode(LifecycleNode):
         if self.collision_subscriber is None and CollisionDetectorState is not None:
             self.collision_subscriber = self.create_subscription(
                 CollisionDetectorState,
-                '/collision_detector_state',
+                '/collision_detector/detector_state',
                 self.collision_callback,
                 10
             )
@@ -529,7 +529,6 @@ class ManagerNode(LifecycleNode):
         if msg.detections:
             # Check if any detection is true
             collision_detected = any(msg.detections)
-            self.get_logger().info(f"Collision detection: {collision_detected}, Polygons: {msg.polygons}")
             
             # Call the callback if set
             if self.collision_detection_callback:
