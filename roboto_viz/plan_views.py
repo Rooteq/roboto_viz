@@ -94,7 +94,7 @@ class PlanActiveView(QWidget):
         robot_title.setAlignment(Qt.AlignCenter)
         robot_title.setStyleSheet("""
             QLabel {
-                font-size: 24px;
+                font-size: 48px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -136,7 +136,7 @@ class PlanActiveView(QWidget):
         plan_title.setAlignment(Qt.AlignCenter)
         plan_title.setStyleSheet("""
             QLabel {
-                font-size: 22px;
+                font-size: 40px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -149,7 +149,7 @@ class PlanActiveView(QWidget):
         self.plan_status_display.setAlignment(Qt.AlignCenter)
         self.plan_status_display.setStyleSheet("""
             QLabel {
-                font-size: 24px;
+                font-size: 30px;
                 color: #7f8c8d;
                 background: none;
                 border: none;
@@ -178,7 +178,7 @@ class PlanActiveView(QWidget):
         battery_title.setAlignment(Qt.AlignCenter)
         battery_title.setStyleSheet("""
             QLabel {
-                font-size: 22px;
+                font-size: 40px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -191,7 +191,7 @@ class PlanActiveView(QWidget):
         self.battery_status_display.setAlignment(Qt.AlignCenter)
         self.battery_status_display.setStyleSheet("""
             QLabel {
-                font-size: 24px;
+                font-size: 40px;
                 color: #7f8c8d;
                 background: none;
                 border: none;
@@ -377,6 +377,16 @@ class PlanActiveView(QWidget):
         """Update the battery status display"""
         if hasattr(self, 'battery_status_display'):
             self.battery_status_display.setText(status)
+            # Make the battery percentage font bigger
+            self.battery_status_display.setStyleSheet("""
+                QLabel {
+                    font-size: 40px;
+                    color: #2c3e50;
+                    background: none;
+                    border: none;
+                    font-weight: bold;
+                }
+            """)
     
     def update_battery_status(self, percentage: int, status_string: str):
         """Update battery status display with color coding based on percentage."""

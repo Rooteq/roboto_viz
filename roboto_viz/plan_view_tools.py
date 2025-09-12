@@ -93,11 +93,47 @@ class PlanTools(QWidget):
         # Create tab widget
         self.tab_widget = QTabWidget()
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
+        
+        # Set stylesheet to make tabs wider
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::tab-bar {
+                alignment: center;
+            }
+            QTabWidget::pane {
+                border: 1px solid #bdc3c7;
+                border-radius: 5px;
+                background-color: white;
+            }
+            QTabBar::tab {
+                background-color: #ecf0f1;
+                border: 2px solid #bdc3c7;
+                border-bottom: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                min-width: 120px;
+                min-height: 35px;
+                padding: 8px 25px;
+                margin-right: 2px;
+                font-size: 14px;
+                font-weight: bold;
+                color: #2c3e50;
+            }
+            QTabBar::tab:selected {
+                background-color: white;
+                border-color: #3498db;
+                color: #2c3e50;
+            }
+            QTabBar::tab:hover {
+                background-color: #d5dbdb;
+                border-color: #85929e;
+            }
+        """)
+        
         main_layout.addWidget(self.tab_widget)
         
         # Active tab
         self.active_tab = self.create_active_tab()
-        self.tab_widget.addTab(self.active_tab, "Aktywny")
+        self.tab_widget.addTab(self.active_tab, "Tryb automatyczny")
         
         # Configure tab
         self.configure_tab = self.create_configure_tab()
@@ -128,8 +164,26 @@ class PlanTools(QWidget):
         action_layout.addWidget(QLabel("Przejdź do Akcji:"))
         self.action_combo = QComboBox()
         action_layout.addWidget(self.action_combo)
-        self.execute_action_btn = QPushButton("Wykonaj")
-        self.execute_action_btn.setStyleSheet(self.button_style)
+        self.execute_action_btn = QPushButton("START")
+        self.execute_action_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 22px;
+                font-weight: bold;
+                border: 3px solid #27ae60;
+                border-radius: 12px;
+                background-color: #2ecc71;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #27ae60;
+                border-color: #229954;
+            }
+            QPushButton:pressed {
+                background-color: #229954;
+                border-color: #1e8449;
+            } 
+        """)
+        # self.execute_action_btn.setStyleSheet(self.button_style)
         action_layout.addWidget(self.execute_action_btn)
         control_layout.addLayout(action_layout)
         
@@ -168,7 +222,7 @@ class PlanTools(QWidget):
         control_buttons_layout.addWidget(self.signal_btn)
         
         # Start button (middle) - made taller
-        self.start_btn = QPushButton("START")
+        self.start_btn = QPushButton("WZNÓW")
         self.start_btn.setStyleSheet("""
             QPushButton {
                 min-height: 65px;

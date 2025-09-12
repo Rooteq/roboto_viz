@@ -455,7 +455,7 @@ class DisconnectedView(QWidget):
     def set_availability(self, available):
         if not self.wait_for_connection:
             status = 'Dostępna' if available else 'Niedostępna'
-            self.service_state.setText(f'Service: {status}')
+            self.service_state.setText(f'Usługa: {status}')
             self.connect_button.setEnabled(available)
 
     def waiting_for_connection(self, state: bool):
