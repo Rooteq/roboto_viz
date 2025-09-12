@@ -302,8 +302,8 @@ class MainView(QMainWindow):
     def on_uart_signal_received(self):
         """Handle when UART signal is received - immediately hide signal button"""
         if self.use_plan_system:
-            # Hide the signal button immediately when UART signal is received
-            self.plan_active_view.plan_tools.hide_signal_button()
+            # Force hide the signal button immediately when signal is received (bypassing protective conditions)
+            self.plan_active_view.plan_tools.signal_btn.setVisible(False)
     
     def update_robot_status_from_plan_executor(self, status: str):
         """Update robot status display for error messages from plan executor"""

@@ -73,10 +73,6 @@ class PlanExecutor(QObject):
         self._preparation_timer = None
         self._preparation_countdown = 0
         
-        # Signal preparation state
-        self._pending_signal_type = None
-        self._signal_timer = None
-        self._signal_countdown = 0
         
         # Plan preparation state
         self._pending_plan_name = None
@@ -359,17 +355,16 @@ class PlanExecutor(QObject):
         if (self.is_executing and self.waiting_for_completion and 
             self.current_action_type == ActionType.WAIT_FOR_SIGNAL):
             
-            # Start 5-second preparation phase after receiving signal
-            self.status_update.emit(f"OBSTACLE DETECTED - Signal '{self.waiting_for_signal_name}' received, przygotowanie (5 sek)")
+            print(f"Signal received via button for '{self.waiting_for_signal_name}' - completing immediately")
+            
+            # Complete signal action immediately (no 5s delay for signals)
+            self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (button)")
             
             # Emit wait completion status for CAN message
             self.wait_status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (button)")
             
-            # Start preparation phase before completing the action
-            self._start_signal_preparation('button')
-            
-            # Complete the action after 5 seconds
-            QTimer.singleShot(5000, self._complete_signal_action)
+            # Complete the action immediately
+            self._complete_signal_action()
             
         elif (self.is_executing and self.waiting_for_completion and 
               self.current_action_type == ActionType.ROUTE):
@@ -379,29 +374,8 @@ class PlanExecutor(QObject):
     
     @pyqtSlot()
     def on_can_signal_received(self):
-        """Called when a CAN signal is received on ID 0x69"""
-        if (self.is_executing and self.waiting_for_completion and 
-            self.current_action_type == ActionType.WAIT_FOR_SIGNAL and
-            self.waiting_for_can_signal):
-            
-            print(f"CAN Signal: Received signal on ID 0x69 for '{self.waiting_for_signal_name}'")
-            
-            # Start 5-second preparation phase after receiving CAN signal
-            self.status_update.emit(f"OBSTACLE DETECTED - Signal '{self.waiting_for_signal_name}' received (CAN), przygotowanie (5 sek)")
-            
-            # Emit wait completion status for CAN message
-            self.wait_status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (CAN)")
-            
-            self.waiting_for_can_signal = False
-            self.uart_signal_received.emit()  # Hide signal button (keeping same signal name for UI compatibility)
-            
-            # Start preparation phase before completing the action
-            self._start_signal_preparation('CAN')
-            
-            # Complete the action after 5 seconds
-            QTimer.singleShot(5000, self._complete_signal_action)
-        else:
-            print(f"CAN Signal: Received signal on ID 0x69 but not waiting for signal - ignoring")
+        """Called when a CAN signal is received on ID 0x69 - let button logic handle everything"""
+        print(f"CAN Signal: Received signal on ID 0x69 - button logic will handle the action")
     
     @pyqtSlot(str)
     def on_navigation_failed(self, status: str):
@@ -510,36 +484,11 @@ class PlanExecutor(QObject):
             direction_text = "in reverse" if not nav_info['to_dest'] else "forward"
             self.status_update.emit(f"Navigating route {nav_info['route_name']} {direction_text}")
     
-    def _start_signal_preparation(self, signal_type: str):
-        """Start 5-second preparation phase after signal reception"""
-        # Store signal info for countdown
-        self._pending_signal_type = signal_type
-        
-        # Start a timer to update the countdown
-        self._signal_countdown = 5
-        self._signal_timer = QTimer()
-        self._signal_timer.timeout.connect(self._update_signal_countdown)
-        self._signal_timer.start(1000)  # Update every second
-    
-    def _update_signal_countdown(self):
-        """Update the signal preparation countdown display"""
-        if self._signal_countdown > 1:
-            self._signal_countdown -= 1
-            self.status_update.emit(f"OBSTACLE DETECTED - Signal '{self.waiting_for_signal_name}' received ({self._pending_signal_type}), start za {self._signal_countdown} sek")
-        else:
-            # Stop the countdown timer
-            if self._signal_timer:
-                self._signal_timer.stop()
-                self._signal_timer = None
-    
     def _complete_signal_action(self):
-        """Complete the signal action after 5-second delay"""
+        """Complete the signal action immediately"""
         if self.is_executing and self.waiting_for_completion:
-            # Send OK signal to stop buzzer and warning
+            # Send OK signal to continue plan
             self.status_update.emit(f"OK - Signal '{self.waiting_for_signal_name}' processed, continuing plan")
-            
-            # Clear pending signal info
-            self._pending_signal_type = None
             
             # Complete the action
             self.on_action_completed()
@@ -610,4 +559,19 @@ class PlanExecutor(QObject):
             # Execute the wait_for_signal action directly
             wait_action = self.current_plan.actions[wait_action_index]
             self.status_update.emit(f"Skipped to wait_for_signal action: {wait_action.name}")
+            
+            # Actually perform the wait_for_signal action to set up proper state
             self.perform_action(wait_action)
+    
+    def _has_wait_signal_action_ahead(self) -> bool:
+        """Check if there's a wait_for_signal action coming up in the plan"""
+        if not self.current_plan or not self.is_executing:
+            return False
+            
+        # Check remaining actions in the plan
+        current_index = self.current_action_index
+        for i in range(current_index + 1, len(self.current_plan.actions)):
+            action = self.current_plan.actions[i]
+            if hasattr(action, 'action_type') and action.action_type.value == "wait_for_signal":
+                return True
+        return False

@@ -541,6 +541,12 @@ class PlanActiveState(State):
             self.gui.main_view.plan_executor.can_signal_forwarder.forward_signal
         )
         
+        # Connect CAN signal to button click logic (for UI consistency)
+        self.connect_and_store_connections(
+            self.gui.gui_manager.can_signal_received,
+            self.gui.main_view.plan_active_view.plan_tools.on_signal_button_clicked
+        )
+        
         # Connect plan executor wait status to GUI manager for CAN messages
         self.connect_and_store_connections(
             self.gui.main_view.plan_executor.wait_status_update,
