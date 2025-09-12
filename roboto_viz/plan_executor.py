@@ -39,6 +39,7 @@ class PlanExecutor(QObject):
     uart_signal_received = pyqtSignal()  # emitted when UART signal is received to hide button
     wait_status_update = pyqtSignal(str)  # Wait action status for CAN messages
     single_action_completed = pyqtSignal(str, int)  # plan_name, action_index - for single action execution
+    navigation_preparation_started = pyqtSignal()  # emitted when 5s preparation phase starts
 
     def __init__(self, plan_manager: PlanManager):
         super().__init__()
@@ -462,12 +463,11 @@ class PlanExecutor(QObject):
     
     def _start_navigation_preparation(self):
         """Start 5-second preparation phase with buzzer and warning signals"""
+        # Emit navigation preparation signal for CAN manager
+        self.navigation_preparation_started.emit()
+        
         # Emit obstacle detected status (same as detecting an obstacle)
         self.status_update.emit("OBSTACLE DETECTED - Przygotowanie do nawigacji")
-        
-        # The buzzer and warning signals will be handled by the CAN status manager
-        # through the collision detection system in GUI manager
-        # We emit this status to trigger the same behavior as obstacle detection
         
         # Start a timer to update the countdown
         self._preparation_countdown = 5

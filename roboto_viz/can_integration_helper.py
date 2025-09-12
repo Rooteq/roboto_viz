@@ -47,6 +47,10 @@ def connect_status_forwarding_to_can(gui_manager, active_view=None, plan_active_
     if plan_executor and hasattr(plan_executor, 'status_update'):
         plan_executor.status_update.connect(forward_plan_status)
     
+    # 6. Connect navigation preparation signal for buzzer control
+    if plan_executor and hasattr(plan_executor, 'navigation_preparation_started'):
+        plan_executor.navigation_preparation_started.connect(gui_manager.can_manager.send_navigation_preparation_message)
+    
     print("CAN status forwarding connections established")
 
 
@@ -122,6 +126,12 @@ def add_can_forwarding_to_state_connections(state_instance, gui_manager):
                 state_instance.connect_and_store_connections(
                     plan_executor.status_update,
                     forwarders['plan_status']
+                )
+            # Connect navigation preparation signal for buzzer control
+            if hasattr(plan_executor, 'navigation_preparation_started') and hasattr(state_instance.gui, 'gui_manager') and state_instance.gui.gui_manager.can_manager:
+                state_instance.connect_and_store_connections(
+                    plan_executor.navigation_preparation_started,
+                    state_instance.gui.gui_manager.can_manager.send_navigation_preparation_message
                 )
     
     print("CAN forwarding added to state connections")
