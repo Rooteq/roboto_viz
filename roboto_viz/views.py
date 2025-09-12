@@ -69,7 +69,7 @@ class ActiveView(QWidget):
         robot_title = QLabel("Status Robota")
         robot_title.setStyleSheet("""
             QLabel {
-                font-size: 9px;
+                font-size: 18px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -100,7 +100,7 @@ class ActiveView(QWidget):
         plan_title = QLabel("Status Planu")
         plan_title.setStyleSheet("""
             QLabel {
-                font-size: 9px;
+                font-size: 18px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -112,7 +112,7 @@ class ActiveView(QWidget):
         self.plan_status_display = QLabel("Brak aktywnego planu")
         self.plan_status_display.setStyleSheet("""
             QLabel {
-                font-size: 8px;
+                font-size: 16px;
                 color: #7f8c8d;
                 background: none;
                 border: none;
@@ -138,7 +138,7 @@ class ActiveView(QWidget):
         nav_title = QLabel("Nawigacja")
         nav_title.setStyleSheet("""
             QLabel {
-                font-size: 9px;
+                font-size: 18px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -150,7 +150,7 @@ class ActiveView(QWidget):
         self.nav_status_display = QLabel("Bezczynny")
         self.nav_status_display.setStyleSheet("""
             QLabel {
-                font-size: 8px;
+                font-size: 16px;
                 color: #7f8c8d;
                 background: none;
                 border: none;
@@ -176,7 +176,7 @@ class ActiveView(QWidget):
         battery_title = QLabel("Bateria")
         battery_title.setStyleSheet("""
             QLabel {
-                font-size: 9px;
+                font-size: 18px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -188,7 +188,7 @@ class ActiveView(QWidget):
         self.battery_status_display = QLabel("Nieznany")
         self.battery_status_display.setStyleSheet("""
             QLabel {
-                font-size: 8px;
+                font-size: 16px;
                 color: #7f8c8d;
                 background: none;
                 border: none;

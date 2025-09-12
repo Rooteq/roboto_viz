@@ -1,6 +1,6 @@
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer
 from typing import Optional
-import time
+
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QTimer
 
 from roboto_viz.plan_manager import PlanManager, ExecutionPlan, ActionType
 
@@ -66,6 +66,27 @@ class PlanExecutor(QObject):
         
         # CAN wait parameters (simplified from UART)
         self.waiting_for_can_signal = False  # Wait for CAN signal on ID 0x69
+        
+        # Navigation preparation state
+        self._pending_navigation = None
+        self._preparation_timer = None
+        self._preparation_countdown = 0
+        
+        # Signal preparation state
+        self._pending_signal_type = None
+        self._signal_timer = None
+        self._signal_countdown = 0
+        
+        # Plan preparation state
+        self._pending_plan_name = None
+        self._plan_timer = None
+        self._plan_countdown = 0
+        
+        # Signals for buzzer and warning during preparation
+        self.buzzer_on = pyqtSignal()
+        self.buzzer_off = pyqtSignal() 
+        self.warning_on = pyqtSignal()
+        self.warning_off = pyqtSignal()
     
     def __del__(self):
         """Destructor to clean up CAN signal forwarder"""
@@ -93,8 +114,14 @@ class PlanExecutor(QObject):
         # Start from where the plan left off (current_action_index)
         self.current_action_index = plan.current_action_index
         
-        self.status_update.emit(f"Starting execution of plan '{plan_name}' from action {self.current_action_index + 1}")
-        self.execute_current_action()
+        # Start 5-second preparation phase before plan execution
+        self.status_update.emit(f"OBSTACLE DETECTED - Przygotowanie do wykonania planu '{plan_name}' (5 sek)")
+        
+        # Start preparation countdown
+        self._start_plan_preparation(plan_name)
+        
+        # Execute the plan after 5 seconds
+        QTimer.singleShot(5000, self._execute_plan_after_delay)
     
     @pyqtSlot()
     def stop_plan_execution(self):
@@ -178,14 +205,27 @@ class PlanExecutor(QObject):
         to_dest = not reverse  # If reverse is True, to_dest should be False
         
         direction_text = "in reverse" if reverse else "forward"
-        self.status_update.emit(f"Navigating route {route_name} {direction_text}")
         
-        # Set waiting state
+        # Start 5-second preparation phase with buzzer and warning
+        self.status_update.emit(f"Przygotowanie do nawigacji: {route_name} {direction_text} (5 sek)")
+        
+        # Set waiting state for preparation
         self.waiting_for_completion = True
         self.current_action_type = ActionType.ROUTE
         
-        # Emit navigation signal with proper direction
-        self.start_nav.emit(route_name, to_dest, self.robot_x, self.robot_y)
+        # Store the navigation parameters for later execution
+        self._pending_navigation = {
+            'route_name': route_name,
+            'to_dest': to_dest,
+            'robot_x': self.robot_x,
+            'robot_y': self.robot_y
+        }
+        
+        # Emit buzzer and warning signals for 5 seconds
+        self._start_navigation_preparation()
+        
+        # Schedule actual navigation start after 5 seconds
+        QTimer.singleShot(5000, self._execute_navigation_after_delay)
     
     def execute_dock_action(self, action):
         """Execute a dock action"""
@@ -273,15 +313,16 @@ class PlanExecutor(QObject):
                 self.current_plan.set_current_action(self.current_action_index)
                 
                 if self.current_action_index >= len(self.current_plan.actions):
-                    # All actions completed
-                    self.status_update.emit(f"All actions in plan '{plan_name}' completed")
-                    self.is_executing = False
-                    self.continuous_execution = False
-                    self.single_action_completed.emit(plan_name, action_index)
-                else:
-                    # Continue with next action automatically
-                    self.status_update.emit(f"Action '{self.current_plan.actions[action_index].name}' completed, continuing with next action...")
-                    QTimer.singleShot(1000, self.execute_current_action)
+                    # All actions completed, loop back to start for continuous execution
+                    self.status_update.emit(f"Plan '{plan_name}' completed. Restarting...")
+                    self.current_action_index = 0
+                    self.current_plan.set_current_action(0)
+                    self.plan_completed.emit(plan_name)
+                    
+                # Continue with next action automatically (or restart from beginning)
+                action_name = self.current_plan.actions[action_index].name if action_index < len(self.current_plan.actions) else "Plan restarting"
+                self.status_update.emit(f"Action '{action_name}' completed, continuing...")
+                QTimer.singleShot(1000, self.execute_current_action)
     
     @pyqtSlot(float, float, float)
     def update_robot_pose(self, x: float, y: float, theta: float):
@@ -316,12 +357,18 @@ class PlanExecutor(QObject):
         """Called when signal button is pressed"""
         if (self.is_executing and self.waiting_for_completion and 
             self.current_action_type == ActionType.WAIT_FOR_SIGNAL):
-            self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (button)")
+            
+            # Start 5-second preparation phase after receiving signal
+            self.status_update.emit(f"OBSTACLE DETECTED - Signal '{self.waiting_for_signal_name}' received, przygotowanie (5 sek)")
             
             # Emit wait completion status for CAN message
             self.wait_status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (button)")
             
-            self.on_action_completed()
+            # Start preparation phase before completing the action
+            self._start_signal_preparation('button')
+            
+            # Complete the action after 5 seconds
+            QTimer.singleShot(5000, self._complete_signal_action)
     
     @pyqtSlot()
     def on_can_signal_received(self):
@@ -331,14 +378,21 @@ class PlanExecutor(QObject):
             self.waiting_for_can_signal):
             
             print(f"CAN Signal: Received signal on ID 0x69 for '{self.waiting_for_signal_name}'")
-            self.status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (CAN)")
+            
+            # Start 5-second preparation phase after receiving CAN signal
+            self.status_update.emit(f"OBSTACLE DETECTED - Signal '{self.waiting_for_signal_name}' received (CAN), przygotowanie (5 sek)")
             
             # Emit wait completion status for CAN message
             self.wait_status_update.emit(f"Signal '{self.waiting_for_signal_name}' received (CAN)")
             
             self.waiting_for_can_signal = False
             self.uart_signal_received.emit()  # Hide signal button (keeping same signal name for UI compatibility)
-            self.on_action_completed()
+            
+            # Start preparation phase before completing the action
+            self._start_signal_preparation('CAN')
+            
+            # Complete the action after 5 seconds
+            QTimer.singleShot(5000, self._complete_signal_action)
         else:
             print(f"CAN Signal: Received signal on ID 0x69 but not waiting for signal - ignoring")
     
@@ -399,3 +453,123 @@ class PlanExecutor(QObject):
                 return f"Wykonywanie: {action.name}"
         
         return "Wykonywanie..."
+    
+    def _start_navigation_preparation(self):
+        """Start 5-second preparation phase with buzzer and warning signals"""
+        # Emit obstacle detected status (same as detecting an obstacle)
+        self.status_update.emit("OBSTACLE DETECTED - Przygotowanie do nawigacji")
+        
+        # The buzzer and warning signals will be handled by the CAN status manager
+        # through the collision detection system in GUI manager
+        # We emit this status to trigger the same behavior as obstacle detection
+        
+        # Start a timer to update the countdown
+        self._preparation_countdown = 5
+        self._preparation_timer = QTimer()
+        self._preparation_timer.timeout.connect(self._update_preparation_countdown)
+        self._preparation_timer.start(1000)  # Update every second
+    
+    def _update_preparation_countdown(self):
+        """Update the preparation countdown display"""
+        if self._preparation_countdown > 1:
+            self._preparation_countdown -= 1
+            nav_info = self._pending_navigation
+            if nav_info:
+                direction_text = "in reverse" if not nav_info['to_dest'] else "forward"
+                self.status_update.emit(f"OBSTACLE DETECTED - Start nawigacji za {self._preparation_countdown} sek: {nav_info['route_name']} {direction_text}")
+        else:
+            # Stop the countdown timer
+            if self._preparation_timer:
+                self._preparation_timer.stop()
+                self._preparation_timer = None
+    
+    def _execute_navigation_after_delay(self):
+        """Execute the navigation after 5-second delay"""
+        if self._pending_navigation and self.is_executing and self.waiting_for_completion:
+            nav_info = self._pending_navigation
+            
+            # Send OK signal to stop buzzer and warning
+            self.status_update.emit("OK - Starting navigation")
+            
+            # Clear obstacle detected status and send OK
+            # This will be handled by CAN status manager to stop buzzer and send OK signal
+            
+            # Clear pending navigation
+            self._pending_navigation = None
+            
+            # Now emit the actual navigation signal
+            self.start_nav.emit(nav_info['route_name'], nav_info['to_dest'], nav_info['robot_x'], nav_info['robot_y'])
+            
+            # Update status to show actual navigation
+            direction_text = "in reverse" if not nav_info['to_dest'] else "forward"
+            self.status_update.emit(f"Navigating route {nav_info['route_name']} {direction_text}")
+    
+    def _start_signal_preparation(self, signal_type: str):
+        """Start 5-second preparation phase after signal reception"""
+        # Store signal info for countdown
+        self._pending_signal_type = signal_type
+        
+        # Start a timer to update the countdown
+        self._signal_countdown = 5
+        self._signal_timer = QTimer()
+        self._signal_timer.timeout.connect(self._update_signal_countdown)
+        self._signal_timer.start(1000)  # Update every second
+    
+    def _update_signal_countdown(self):
+        """Update the signal preparation countdown display"""
+        if self._signal_countdown > 1:
+            self._signal_countdown -= 1
+            self.status_update.emit(f"OBSTACLE DETECTED - Signal '{self.waiting_for_signal_name}' received ({self._pending_signal_type}), start za {self._signal_countdown} sek")
+        else:
+            # Stop the countdown timer
+            if self._signal_timer:
+                self._signal_timer.stop()
+                self._signal_timer = None
+    
+    def _complete_signal_action(self):
+        """Complete the signal action after 5-second delay"""
+        if self.is_executing and self.waiting_for_completion:
+            # Send OK signal to stop buzzer and warning
+            self.status_update.emit(f"OK - Signal '{self.waiting_for_signal_name}' processed, continuing plan")
+            
+            # Clear pending signal info
+            self._pending_signal_type = None
+            
+            # Complete the action
+            self.on_action_completed()
+    
+    def _start_plan_preparation(self, plan_name: str):
+        """Start 5-second preparation phase before plan execution"""
+        # Store plan info for countdown
+        self._pending_plan_name = plan_name
+        
+        # Start a timer to update the countdown
+        self._plan_countdown = 5
+        self._plan_timer = QTimer()
+        self._plan_timer.timeout.connect(self._update_plan_countdown)
+        self._plan_timer.start(1000)  # Update every second
+    
+    def _update_plan_countdown(self):
+        """Update the plan preparation countdown display"""
+        if self._plan_countdown > 1:
+            self._plan_countdown -= 1
+            action_index = self.current_action_index + 1 if self.current_plan else 1
+            self.status_update.emit(f"OBSTACLE DETECTED - Start planu '{self._pending_plan_name}' za {self._plan_countdown} sek (od akcji {action_index})")
+        else:
+            # Stop the countdown timer
+            if self._plan_timer:
+                self._plan_timer.stop()
+                self._plan_timer = None
+    
+    def _execute_plan_after_delay(self):
+        """Execute the plan after 5-second delay"""
+        if self.is_executing and self.current_plan:
+            # Send OK signal to stop buzzer and warning
+            action_index = self.current_action_index + 1
+            self.status_update.emit(f"OK - Starting execution of plan '{self._pending_plan_name}' from action {action_index}")
+            
+            # Clear pending plan info
+            self._pending_plan_name = None
+            
+            # Now execute the first action
+            self.execute_current_action()

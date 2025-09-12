@@ -98,7 +98,7 @@ class PlanTools(QWidget):
         
         # Configure tab
         self.configure_tab = self.create_configure_tab()
-        self.tab_widget.addTab(self.configure_tab, "Konfiguracja")
+        self.tab_widget.addTab(self.configure_tab, "Tryb manualny")
     
     def create_active_tab(self) -> QWidget:
         widget = QWidget()
@@ -438,6 +438,9 @@ class PlanTools(QWidget):
     def on_tab_changed(self, index: int):
         """Handle tab change - emit signal for external handling"""
         self.tab_changed.emit(index)
+        if index == 1:
+            # Manual mode tab - stop navigation
+            self.stop_navigation.emit()
     
     def on_tab_changed_external(self, index: int):
         """Handle tab change from external signal"""

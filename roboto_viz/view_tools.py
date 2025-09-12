@@ -92,9 +92,9 @@ class ActiveTools(QWidget):
                 border-bottom: none;
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
-                min-width: 120px;
+                min-width: 160px;
                 min-height: 35px;
-                padding: 8px 16px;
+                padding: 8px 20px;
                 margin-right: 2px;
                 font-size: 16px;
                 font-weight: bold;
@@ -203,7 +203,7 @@ class ActiveTools(QWidget):
 
         config_layout.addLayout(spaced_keys_layout)
         
-        self.tab_widget.addTab(config_tab, "Konfiguracja")
+        self.tab_widget.addTab(config_tab, "Tryb manualny")
         
         main_layout.addWidget(self.tab_widget)
         self.setLayout(main_layout)
@@ -335,8 +335,9 @@ class ActiveTools(QWidget):
             # Operation tab - show grid
             self.switch_to_active.emit()
         if index == 1:
-            # Configuration tab - show map
+            # Manual mode tab - show map and stop navigation
             self.switch_to_configure.emit()
+            self.stop_nav.emit()
 
     def update_maps(self, maps: list):
         """Update the map combo box with new maps"""
@@ -613,7 +614,7 @@ class StatusDisplay(QWidget):
         self.led = LEDIndicator()
         self.status_label = QLabel("Bezczynny")
         font = QFont()
-        font.setPointSize(18)  # Larger font size for big screens
+        font.setPointSize(48)  # Much larger font size (2-3x bigger than 18)
         font.setBold(True)
         self.status_label.setFont(font)
         # self.status_label.setStyleSheet("font-weight: bold;")
