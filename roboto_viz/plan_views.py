@@ -30,6 +30,7 @@ class PlanActiveView(QWidget):
     
     # Signal handling
     signal_button_pressed = pyqtSignal()
+    skip_to_wait_signal = pyqtSignal()  # Skip directly to wait_for_signal action
     
     # Map signals
     map_load_requested = pyqtSignal(str)  # map_name
@@ -107,7 +108,7 @@ class PlanActiveView(QWidget):
         self.robot_status_text.setAlignment(Qt.AlignCenter)
         self.robot_status_text.setStyleSheet("""
             QLabel {
-                font-size: 28px;
+                font-size: 42px;
                 color: #2c3e50;
                 background: none;
                 border: none;
@@ -229,6 +230,7 @@ class PlanActiveView(QWidget):
         
         # Signal button connection
         self.plan_tools.signal_button_pressed.connect(self.signal_button_pressed.emit)
+        self.plan_tools.skip_to_wait_signal.connect(self.skip_to_wait_signal.emit)
         
         # Navigation stop signal
         self.plan_tools.stop_navigation.connect(self.stop_navigation.emit)
@@ -363,7 +365,7 @@ class PlanActiveView(QWidget):
             if hasattr(self, 'robot_status_text'):
                 self.robot_status_text.setStyleSheet(f"""
                     QLabel {{
-                        font-size: 28px;
+                        font-size: 42px;
                         color: {text_color};
                         background: none;
                         border: none;
@@ -462,6 +464,9 @@ class PlanActiveView(QWidget):
         """Update robot status display"""
         # Call the same logic as set_current_status to update grid cell
         self.set_current_status(status)
+        
+        # Forward navigation status to plan tools for signal button logic
+        self.plan_tools.update_navigation_status(status)
     
     def close_plan_editor(self):
         """Close the plan editor if open"""

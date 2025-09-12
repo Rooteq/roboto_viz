@@ -262,6 +262,7 @@ class MainView(QMainWindow):
         self.plan_active_view.on_disconnection.connect(self.on_disconnection)
         self.plan_active_view.stop_navigation.connect(self.stop_navigation.emit)
         self.plan_active_view.signal_button_pressed.connect(self.signal_button_pressed.emit)
+        self.plan_active_view.skip_to_wait_signal.connect(self.plan_executor.skip_to_wait_signal_action)
         
         # Connect signal button to plan executor
         self.signal_button_pressed.connect(self.plan_executor.on_signal_received)
@@ -420,7 +421,8 @@ class MainView(QMainWindow):
                         theta = float(line.split('=')[1])
                 
                 print(f"Loading saved position for map '{map_name}': x={x}, y={y}, theta={theta}")
-                self.set_position_signal.emit(x, y, theta)
+                # Apply same negation as on_set_position to maintain consistency
+                self.set_position_signal.emit(x, y, -theta)
                 return True
         except Exception as e:
             print(f"Error loading robot position for map '{map_name}': {e}")

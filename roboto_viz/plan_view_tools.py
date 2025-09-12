@@ -30,6 +30,7 @@ class PlanTools(QWidget):
     
     # Signal handling
     signal_button_pressed = pyqtSignal()
+    skip_to_wait_signal = pyqtSignal()  # Signal to skip directly to wait_for_signal action
     
     # Tab change signal
     tab_changed = pyqtSignal(int)  # tab_index
@@ -42,6 +43,8 @@ class PlanTools(QWidget):
         self.plan_manager = plan_manager
         self.current_plan: Optional[ExecutionPlan] = None
         self.is_executing = False
+        self.is_navigating = False  # Track if robot is currently navigating
+        self.next_action_is_wait_signal = False  # Track if next action is wait_for_signal
         
         # Styles
         self.button_style = """
@@ -160,6 +163,8 @@ class PlanTools(QWidget):
             }
         """)
         self.signal_btn.setVisible(False)
+        
+        
         control_buttons_layout.addWidget(self.signal_btn)
         
         # Start button (middle) - made taller
@@ -349,6 +354,9 @@ class PlanTools(QWidget):
         self.start_btn.setEnabled(False)
         # Stop button always stays enabled as precaution
         
+        # Check if next action is wait_for_signal
+        self._check_next_action_is_wait_signal()
+        
         self.start_plan_execution.emit(self.current_plan.name)
     
     def stop_execution(self):
@@ -378,6 +386,9 @@ class PlanTools(QWidget):
         self.start_btn.setEnabled(False)
         # Stop button always stays enabled as precaution
         
+        # Check if next action is wait_for_signal
+        self._check_next_action_is_wait_signal()
+        
         self.current_plan.set_current_action(action_index)
         self.execute_action.emit(self.current_plan.name, action_index)
     
@@ -385,6 +396,9 @@ class PlanTools(QWidget):
         """Called when an action is completed during execution"""
         if not self.is_executing or not self.current_plan:
             return
+        
+        # Check if next action is wait_for_signal for continuous execution
+        self._check_next_action_is_wait_signal()
         
         # This is called for continuous plan execution
         # Move to next action
@@ -404,8 +418,17 @@ class PlanTools(QWidget):
     
     def on_signal_button_clicked(self):
         """Called when signal button is clicked"""
-        self.signal_btn.setVisible(False)  # Hide immediately after clicking
-        self.signal_button_pressed.emit()  # Emit the signal
+        if self.is_navigating and self.is_executing and self._plan_has_wait_signal_action():
+            # Cancel navigation and skip directly to wait_for_signal action
+            self.stop_navigation.emit()  # Stop current navigation
+            self.skip_to_wait_signal.emit()  # Signal to skip to wait_for_signal action
+            # Don't hide button - it will be re-shown when we reach the wait_for_signal action
+            # Don't emit signal_button_pressed when navigating - we want to wait at the wait_for_signal action
+        else:
+            # Regular signal button press for wait_for_signal actions
+            self.signal_button_pressed.emit()  # Emit the signal for regular wait_for_signal handling
+            # Hide button after regular signal press
+            self.signal_btn.setVisible(False)
     
     def on_single_action_completed(self):
         """Called when a single action execution is completed"""
@@ -433,6 +456,14 @@ class PlanTools(QWidget):
     
     def hide_signal_button(self):
         """Hide the signal button"""
+        # Don't hide if we're navigating and next action is wait_for_signal
+        if self.is_navigating and self.next_action_is_wait_signal and self.is_executing:
+            return
+        
+        # Don't hide if button was just shown for wait_for_signal action
+        if self.signal_btn.isVisible() and self.signal_btn.text().startswith('SIGNAL ('):
+            return
+            
         self.signal_btn.setVisible(False)
     
     def on_tab_changed(self, index: int):
@@ -446,3 +477,86 @@ class PlanTools(QWidget):
         """Handle tab change from external signal"""
         # This will be connected from plan_views to handle enable_drawing
         pass
+    
+    def update_navigation_status(self, status: str):
+        """Update navigation status and show/hide signal button accordingly"""
+        # Check if robot is currently navigating
+        was_navigating = self.is_navigating
+        # Check for both English and Polish navigation statuses
+        self.is_navigating = status in ["Nav to dest", "Nav to base", "Navigating", 
+                                       "Nawigacja do celu", "Nawigacja do bazy", "Nawiguje"]
+        
+        # Update signal button visibility based on navigation state and next action
+        self._update_signal_button_visibility()
+    
+    def _update_signal_button_visibility(self):
+        """Update signal button visibility based on current state"""
+        # Show button if:
+        # 1. Waiting for signal (already handled by show_signal_button), OR
+        # 2. Currently navigating AND there's a wait_for_signal action somewhere in the plan
+        if self.is_navigating and self.is_executing and self._plan_has_wait_signal_action():
+            # Show button for navigation cancellation to proceed to wait signal
+            self._show_navigation_signal_button()
+    
+    def _show_navigation_signal_button(self):
+        """Show signal button during navigation when there's a wait_for_signal action in the plan"""
+        if not self.current_plan or len(self.current_plan.actions) == 0:
+            return
+        
+        # Find the next wait_for_signal action in the plan    
+        wait_action = self._find_next_wait_signal_action()
+        
+        if wait_action:
+            signal_name = wait_action.parameters.get('signal_name', 'default')
+            self.signal_btn.setText(f'CONTINUE TO SIGNAL ({signal_name})')
+            self.signal_btn.setVisible(True)
+    
+    def _plan_has_wait_signal_action(self):
+        """Check if the current plan has any wait_for_signal actions"""
+        if not self.current_plan or len(self.current_plan.actions) == 0:
+            return False
+            
+        for action in self.current_plan.actions:
+            if hasattr(action, 'action_type') and action.action_type.value == "wait_for_signal":
+                return True
+        return False
+    
+    def _find_next_wait_signal_action(self):
+        """Find the next wait_for_signal action in the plan (may not be immediate next)"""
+        if not self.current_plan or len(self.current_plan.actions) == 0:
+            return None
+            
+        current_index = self.current_plan.current_action_index
+        
+        # Look for wait_for_signal actions starting from current position + 1
+        for i in range(len(self.current_plan.actions)):
+            check_index = (current_index + 1 + i) % len(self.current_plan.actions)
+            action = self.current_plan.actions[check_index]
+            if hasattr(action, 'action_type') and action.action_type.value == "wait_for_signal":
+                return action
+        return None
+    
+    def _check_next_action_is_wait_signal(self):
+        """Check if the next action in the current plan is wait_for_signal"""
+        if not self.current_plan or not self.is_executing:
+            self.next_action_is_wait_signal = False
+            return
+            
+        current_index = self.current_plan.current_action_index
+        next_index = current_index + 1
+        
+        if next_index < len(self.current_plan.actions):
+            next_action = self.current_plan.actions[next_index]
+            self.next_action_is_wait_signal = (hasattr(next_action, 'action_type') and 
+                                             next_action.action_type.value == "wait_for_signal")
+        else:
+            # Next action would be first action (plan loops)
+            if len(self.current_plan.actions) > 0:
+                first_action = self.current_plan.actions[0]
+                self.next_action_is_wait_signal = (hasattr(first_action, 'action_type') and 
+                                                 first_action.action_type.value == "wait_for_signal")
+            else:
+                self.next_action_is_wait_signal = False
+        
+        # Update button visibility after checking next action
+        self._update_signal_button_visibility()

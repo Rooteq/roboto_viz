@@ -369,6 +369,12 @@ class PlanExecutor(QObject):
             
             # Complete the action after 5 seconds
             QTimer.singleShot(5000, self._complete_signal_action)
+            
+        elif (self.is_executing and self.waiting_for_completion and 
+              self.current_action_type == ActionType.ROUTE):
+            # Navigation cancellation - treat as if navigation completed and proceed to next action
+            self.status_update.emit("Navigation cancelled - proceeding to next action")
+            self.on_action_completed()
     
     @pyqtSlot()
     def on_can_signal_received(self):
@@ -573,3 +579,35 @@ class PlanExecutor(QObject):
             
             # Now execute the first action
             self.execute_current_action()
+    
+    @pyqtSlot()
+    def skip_to_wait_signal_action(self):
+        """Skip current action and jump to next wait_for_signal action"""
+        if not self.is_executing or not self.current_plan:
+            return
+            
+        # Find the next wait_for_signal action
+        current_index = self.current_plan.current_action_index
+        wait_action_index = None
+        
+        # Look for wait_for_signal actions starting from current position + 1
+        for i in range(len(self.current_plan.actions)):
+            check_index = (current_index + 1 + i) % len(self.current_plan.actions)
+            action = self.current_plan.actions[check_index]
+            if hasattr(action, 'action_type') and action.action_type.value == "wait_for_signal":
+                wait_action_index = check_index
+                break
+        
+        if wait_action_index is not None:
+            # Cancel current action
+            self.waiting_for_completion = False
+            self.current_action_type = None
+            
+            # Jump to the wait_for_signal action
+            self.current_plan.set_current_action(wait_action_index)
+            self.current_action_index = wait_action_index
+            
+            # Execute the wait_for_signal action directly
+            wait_action = self.current_plan.actions[wait_action_index]
+            self.status_update.emit(f"Skipped to wait_for_signal action: {wait_action.name}")
+            self.perform_action(wait_action)
