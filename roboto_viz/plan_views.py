@@ -255,6 +255,7 @@ class PlanActiveView(QWidget):
         # Plan selection signal
         self.plan_tools.plan_selected.connect(self.on_plan_selected)
         
+        
         # Disconnection signal
         self.plan_tools.on_disconnect.connect(lambda: self.on_disconnection.emit("Disconnect from PlanActiveView"))
     
@@ -294,6 +295,7 @@ class PlanActiveView(QWidget):
     def on_plan_selected(self, plan_name: str):
         """Handle plan selection and update status"""
         self.set_plan_status(f"Plan '{plan_name}' selected")
+    
     
     def open_plan_editor(self):
         """Open the plan editor window"""

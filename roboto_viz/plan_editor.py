@@ -559,9 +559,19 @@ class PlanEditor(QMainWindow):
             self.plan_list.addItem(plan_name)
     
     def refresh_map_list(self):
+        # Temporarily disconnect signal to prevent unwanted map assignment
+        try:
+            self.map_combo.currentTextChanged.disconnect(self.on_map_changed)
+        except TypeError:
+            # Signal might not be connected yet
+            pass
+        
         self.map_combo.clear()
         maps = self.route_manager.get_map_names()
         self.map_combo.addItems(maps)
+        
+        # Reconnect signal
+        self.map_combo.currentTextChanged.connect(self.on_map_changed)
     
     def refresh_routes_list(self):
         """Refresh the routes list for the current map"""
@@ -620,7 +630,23 @@ class PlanEditor(QMainWindow):
             else:
                 print(f"DEBUG: Map '{self.current_plan.map_name}' not found in combo box")
         else:
-            print(f"DEBUG: Plan '{self.current_plan.name}' has no assigned map")
+            print(f"DEBUG: Plan '{self.current_plan.name}' has no assigned map - clearing map view")
+            # Clear the map view when plan has no assigned map
+            self.map_view.clear_route(force=True)
+            self.map_view.clear_grid()
+            # Clear current map from managers
+            self.route_manager.set_current_map(None)
+            self.dock_manager.set_current_map(None)
+            # Clear lists
+            self.refresh_routes_list()
+            self.refresh_docks_list()
+            # Set combo box to no selection
+            try:
+                self.map_combo.currentTextChanged.disconnect(self.on_map_changed)
+            except TypeError:
+                pass
+            self.map_combo.setCurrentIndex(-1)  # No selection
+            self.map_combo.currentTextChanged.connect(self.on_map_changed)
     
     def refresh_actions_list(self):
         self.actions_list.clear()

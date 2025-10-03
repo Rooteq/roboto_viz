@@ -235,6 +235,7 @@ class MainView(QMainWindow):
             self.map_loaded_signal.emit(False, error_msg)
             return (False, error_msg)
     
+    
     def setup_plan_connections(self):
         """Setup connections for the new plan system"""
         # Plan active view connections - forward to main view signals for GUI state machine
