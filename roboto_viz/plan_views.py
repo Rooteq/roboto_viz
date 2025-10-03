@@ -174,11 +174,11 @@ class PlanActiveView(QWidget):
         battery_layout.setContentsMargins(20, 15, 20, 15)
         battery_layout.setSpacing(12)
         
-        battery_title = QLabel("BATERIA")
+        battery_title = QLabel("BAT")
         battery_title.setAlignment(Qt.AlignCenter)
         battery_title.setStyleSheet("""
             QLabel {
-                font-size: 40px;
+                font-size: 160px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -191,7 +191,7 @@ class PlanActiveView(QWidget):
         self.battery_status_display.setAlignment(Qt.AlignCenter)
         self.battery_status_display.setStyleSheet("""
             QLabel {
-                font-size: 40px;
+                font-size: 100px;
                 color: #7f8c8d;
                 background: none;
                 border: none;
@@ -380,7 +380,7 @@ class PlanActiveView(QWidget):
             # Make the battery percentage font bigger
             self.battery_status_display.setStyleSheet("""
                 QLabel {
-                    font-size: 40px;
+                    font-size: 160px;
                     color: #2c3e50;
                     background: none;
                     border: none;
