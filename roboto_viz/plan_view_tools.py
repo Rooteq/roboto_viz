@@ -383,7 +383,7 @@ class PlanTools(QWidget):
             self.current_plan = self.plan_manager.get_current_plan()
             self.refresh_action_combo()
             
-            # Load the plan's map if specified - this will trigger position loading
+            # Load the plan's map to robot if specified
             if self.current_plan.map_name:
                 self.map_selected.emit(self.current_plan.map_name)
             
@@ -614,3 +614,4 @@ class PlanTools(QWidget):
         
         # Update button visibility after checking next action
         self._update_signal_button_visibility()
+    
