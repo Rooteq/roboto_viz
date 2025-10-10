@@ -430,7 +430,7 @@ class DisconnectedView(QWidget):
         self.service_state = QLabel('Usługa: Niedostępna')
         self.service_state.setStyleSheet(label_style)
         self.service_state.setAlignment(Qt.AlignCenter)
-        
+
         # Create and style the connect button
         self.connect_button = QPushButton('Połącz')
         self.connect_button.setStyleSheet(button_style)
@@ -443,10 +443,51 @@ class DisconnectedView(QWidget):
         self.service_state.setFont(font)
         self.connect_button.setFont(font)
 
+        # Battery Status Cell
+        self.battery_status_frame = QWidget()
+        self.battery_status_frame.setMinimumSize(200, 100)
+        self.battery_status_frame.setStyleSheet("""
+            QWidget {
+                border: 3px solid #f39c12;
+                border-radius: 10px;
+                background-color: white;
+                padding: 10px;
+            }
+        """)
+        battery_layout = QVBoxLayout(self.battery_status_frame)
+        battery_layout.setContentsMargins(10, 5, 10, 5)
+        battery_layout.setSpacing(5)
+
+        battery_title = QLabel("Bateria")
+        battery_title.setAlignment(Qt.AlignCenter)
+        battery_title.setStyleSheet("""
+            QLabel {
+                font-size: 20px;
+                font-weight: bold;
+                color: #2c3e50;
+                background: none;
+                border: none;
+            }
+        """)
+        battery_layout.addWidget(battery_title)
+
+        self.battery_status_display = QLabel("Nieznany")
+        self.battery_status_display.setAlignment(Qt.AlignCenter)
+        self.battery_status_display.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                color: #7f8c8d;
+                background: none;
+                border: none;
+            }
+        """)
+        battery_layout.addWidget(self.battery_status_display)
+
         # Add widgets to layout with some spacing
         layout.addStretch()
         layout.addWidget(self.service_state)
         layout.addWidget(self.connect_button)
+        layout.addWidget(self.battery_status_frame, 0, Qt.AlignCenter)
         layout.addStretch()
 
     def on_connect(self):
@@ -463,3 +504,34 @@ class DisconnectedView(QWidget):
             self.connect_button.setEnabled(False)
             self.service_state.setText('Usługa: łączenie')
             self.wait_for_connection = state
+
+    def update_battery_status(self, percentage: int, status_string: str):
+        """Update battery status display with color coding based on percentage."""
+        # Update the text
+        if hasattr(self, 'battery_status_display'):
+            self.battery_status_display.setText(status_string)
+
+        # Update the battery status frame background color based on percentage
+        if hasattr(self, 'battery_status_frame'):
+            if percentage <= 10:
+                # Orange for warning (low battery)
+                bg_color = '#fdebd0'
+                border_color = '#f39c12'
+            elif percentage <= 25:
+                # Light yellow for caution
+                bg_color = '#fef9e7'
+                border_color = '#f1c40f'
+            else:
+                # Normal white background
+                bg_color = 'white'
+                border_color = '#f39c12'
+
+            # Update the frame style with new background color
+            self.battery_status_frame.setStyleSheet(f'''
+                QWidget {{
+                    border: 3px solid {border_color};
+                    border-radius: 10px;
+                    background-color: {bg_color};
+                    padding: 10px;
+                }}
+            ''')

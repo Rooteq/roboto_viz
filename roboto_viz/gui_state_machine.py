@@ -99,6 +99,16 @@ class DisconnectedState(State):
             self.handleDisconnection
         )
 
+        # Battery percentage updates in disconnected state
+        self.connect_and_store_connections(
+            self.gui.gui_manager.battery_percentage_update,
+            lambda percentage, status_string: (
+                self.gui.main_view.plan_active_view.update_battery_status(percentage, status_string)
+                if hasattr(self.gui.main_view, 'use_plan_system') and self.gui.main_view.use_plan_system
+                else self.gui.main_view.active_view.update_battery_status(percentage, status_string)
+            )
+        )
+
     def handleDisconnection(self):
         self.gui.main_view.disconnected_view.waiting_for_connection(False)
         self.gui.handleGui()

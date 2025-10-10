@@ -863,6 +863,10 @@ class GuiManager(QThread):
             self.can_signal_receiver = CANSignalReceiver(can_interface)
             self._connect_can_signals()
 
+            # Start battery receiver immediately so battery status is available from app start
+            if self.can_battery_receiver:
+                self.can_battery_receiver.start_receiving()
+
         # self.nav_data.send_routes.connect(lambda: self.send_route_names)
 
         self.navigator.start()
@@ -999,17 +1003,15 @@ class GuiManager(QThread):
 
     @pyqtSlot()
     def trigger_deactivate(self):
-        # Stop CAN receivers when deactivating
-        if self.can_battery_receiver:
-            self.can_battery_receiver.stop_receiving()
-            
+        # Stop signal receiver when deactivating
+        # Note: Battery receiver keeps running to show battery status even when disconnected
         if self.can_signal_receiver:
             self.can_signal_receiver.stop_receiving()
-            
+
         # Disconnect CAN interface when deactivating
         if self.can_manager:
             self.can_manager.disconnect_can()
-            
+
         self.node.trigger_deactivate()
         self.node.trigger_shutdown()
     
