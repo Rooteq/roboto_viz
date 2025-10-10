@@ -970,11 +970,14 @@ class GuiManager(QThread):
     @pyqtSlot(str)
     def handle_map_selected(self, map_name: str):
         """Handle map selection from GUI"""
+        print(f"DEBUG: GuiManager.handle_map_selected called with map: {map_name}")
         self.nav_data.set_current_map(map_name)
-        
+        print(f"DEBUG: nav_data.current_map set to: {self.nav_data.current_map}")
+        print(f"DEBUG: nav_data routes loaded: {list(self.nav_data.routes.keys())}")
+
         # Emit status update to inform user that map loading is starting
         self.manualStatus.emit(f"Ładowanie mapy '{map_name}'...")
-        
+
         # Load the map into nav2 navigation stack
         success, error_msg = self.nav_data.route_manager.load_map_onto_robot(map_name)
         if success:
@@ -983,7 +986,7 @@ class GuiManager(QThread):
         else:
             print(f"Failed to load map '{map_name}' into nav2: {error_msg}")
             self.manualStatus.emit(f"Nie udało się załadować mapy '{map_name}': {error_msg}")
-        
+
         self.send_routes()  # Send updated routes for new map
         
     @pyqtSlot()

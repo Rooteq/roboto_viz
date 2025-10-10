@@ -205,12 +205,29 @@ class MainView(QMainWindow):
             
             # Load the map into the view
             self.map_view.load_image(str(map_path), yaml_data['origin'], yaml_data.get('resolution'))
-            
+            print(f"DEBUG: Map loaded into map_view for map: {map_name}")
+
+            # Update route manager's current map so routes can be loaded (must happen before any route loading)
+            if self.use_plan_system:
+                self.route_manager.set_current_map(map_name)
+                print(f"DEBUG: Set route manager current map to: {map_name}")
+
+                # Also load into mini map view
+                try:
+                    if hasattr(self.plan_active_view, 'mini_map_view'):
+                        self.plan_active_view.mini_map_view.load_image(str(map_path), yaml_data['origin'], yaml_data.get('resolution'))
+                        print(f"DEBUG: Mini map loaded successfully")
+                except Exception as e:
+                    print(f"ERROR: Failed to load mini map: {e}")
+                    import traceback
+                    traceback.print_exc()
+
             # Notify navigation system about map change
+            print(f"DEBUG: Emitting map_changed_signal for map: {map_name}")
             self.map_changed_signal.emit(map_name)
-            
+
             self.map_loaded_signal.emit(True, "")
-        
+
             print(f"map name is {map_name}")
 
             # Track current map for position saving
@@ -223,9 +240,9 @@ class MainView(QMainWindow):
                     self.set_position_signal.emit(3.0,3.0,0.0)
                 elif map_name == 'sypialnia':
                     self.set_position_signal.emit(1.0,1.0,0.0)
+
             return True, ""
-        
-            
+
         except yaml.YAMLError as e:
             error_msg = f"Error parsing YAML file: {str(e)}"
             self.map_loaded_signal.emit(False, error_msg)
@@ -251,8 +268,12 @@ class MainView(QMainWindow):
         self.plan_executor.undock_robot.connect(self.undock_robot.emit)
         self.plan_executor.action_completed.connect(self.plan_active_view.on_action_completed)
         self.plan_executor.execution_stopped.connect(self.plan_active_view.on_plan_execution_stopped)
+        self.plan_executor.execution_stopped.connect(self.plan_active_view.clear_mini_map_route)  # Clear route when plan stops
         self.plan_executor.execution_stopped_due_to_failure.connect(self.plan_active_view.on_plan_execution_stopped_due_to_failure)
         self.plan_executor.single_action_completed.connect(self.plan_active_view.on_single_action_completed)
+
+        # Connect to action_started signal to display route on mini map when route action starts
+        self.plan_executor.action_started.connect(self.on_plan_action_started)
         
         # Connect navigation completion signal - this will be connected in GUI state machine
         # to the actual navigator.finished signal
@@ -405,11 +426,11 @@ class MainView(QMainWindow):
         """Load saved robot position for specific map"""
         try:
             position_file = self.positions_dir / f"{map_name}_position.txt"
-            
+
             if position_file.exists():
                 with open(position_file, 'r') as f:
                     lines = f.readlines()
-                
+
                 # Parse the text file
                 x, y, theta = 0.0, 0.0, 0.0
                 for line in lines:
@@ -420,12 +441,35 @@ class MainView(QMainWindow):
                         y = float(line.split('=')[1])
                     elif line.startswith('theta='):
                         theta = float(line.split('=')[1])
-                
+
                 print(f"Loading saved position for map '{map_name}': x={x}, y={y}, theta={theta}")
                 # Apply same negation as on_set_position to maintain consistency
                 self.set_position_signal.emit(x, y, -theta)
                 return True
         except Exception as e:
             print(f"Error loading robot position for map '{map_name}': {e}")
-        
+
         return False
+
+    def on_plan_action_started(self, plan_name: str, action_index: int):
+        """Handle when a plan action starts - display route if it's a route action"""
+        if not self.use_plan_system:
+            return
+
+        # Get the plan and action
+        plan = self.plan_manager.get_plan(plan_name)
+        if not plan or action_index >= len(plan.actions):
+            return
+
+        action = plan.actions[action_index]
+        print(f"DEBUG: Plan action started - type: {action.action_type.value}, name: {action.name}")
+
+        # If it's a route action, display the route on mini map
+        if action.action_type.value == "route":
+            route_name = action.parameters.get('route_name', action.name)
+            print(f"DEBUG: Route action detected, displaying route: {route_name}")
+            self.plan_active_view.display_route_on_mini_map(route_name)
+        else:
+            # Clear route for non-route actions
+            print(f"DEBUG: Non-route action, clearing mini map route")
+            self.plan_active_view.clear_mini_map_route()

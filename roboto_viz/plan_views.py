@@ -3,6 +3,7 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
 from typing import Optional
 
 from roboto_viz.map_view import MapView
+from roboto_viz.mini_map_view import MiniMapView
 from roboto_viz.plan_view_tools import PlanTools
 from roboto_viz.plan_manager import PlanManager, ExecutionPlan
 from roboto_viz.route_manager import RouteManager
@@ -37,22 +38,23 @@ class PlanActiveView(QWidget):
 
     def __init__(self, map_view: MapView, plan_manager: PlanManager, route_manager: RouteManager, dock_manager: DockManager):
         super().__init__()
-        
-        self.map_view = map_view
+
+        self.map_view = map_view  # Full-size map for Configure mode
+        self.mini_map_view = MiniMapView()  # Small map for grid cell in Active mode
         self.plan_manager = plan_manager
         self.route_manager = route_manager
         self.dock_manager = dock_manager
-        
+
         # Current robot position
         self.curr_x: float = 0
         self.curr_y: float = 0
-        
+
         # Plan editor window (created on demand)
         self.plan_editor: Optional[PlanEditor] = None
-        
+
         # Create plan tools
         self.plan_tools = PlanTools(self.plan_manager)
-        
+
         self.setup_ui()
         self.setup_connections()
     
@@ -61,11 +63,11 @@ class PlanActiveView(QWidget):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins
         main_layout.setSpacing(2)  # Reduced spacing
-        
-        # Create stacked widget for left side (grid or map)
+
+        # Create stacked widget for left side (grid or full map for configure)
         from PyQt5.QtWidgets import QStackedWidget, QGridLayout, QVBoxLayout, QLabel
         self.left_stacked_widget = QStackedWidget()
-        
+
         # Create grid widget with status cells (optimized for 1920x1080)
         self.grid_widget = QWidget()
         self.grid_widget.setStyleSheet("QWidget { background-color: #f8f9fa; }")
@@ -73,7 +75,7 @@ class PlanActiveView(QWidget):
         grid_layout = QGridLayout(self.grid_widget)
         grid_layout.setContentsMargins(20, 20, 20, 20)  # Larger margins
         grid_layout.setSpacing(20)  # More spacing between cells
-        
+
         # Create status cells in a grid format
         # Robot Status Cell (full width top row, background color changes) - LARGE for 1920x1080
         self.robot_status_frame = QWidget()
@@ -89,7 +91,7 @@ class PlanActiveView(QWidget):
         robot_layout = QVBoxLayout(self.robot_status_frame)
         robot_layout.setContentsMargins(20, 15, 20, 15)
         robot_layout.setSpacing(12)
-        
+
         robot_title = QLabel("STATUS ROBOTA")
         robot_title.setAlignment(Qt.AlignCenter)
         robot_title.setStyleSheet("""
@@ -102,7 +104,7 @@ class PlanActiveView(QWidget):
             }
         """)
         robot_layout.addWidget(robot_title)
-        
+
         # Create a container for the status display - VERY LARGE AND VISIBLE
         self.robot_status_text = QLabel("Bezczynny")
         self.robot_status_text.setAlignment(Qt.AlignCenter)
@@ -117,47 +119,37 @@ class PlanActiveView(QWidget):
         """)
         robot_layout.addWidget(self.robot_status_text)
 
-        # Plan Status Cell (bottom left, wider) - LARGE for 1920x1080
-        plan_status_frame = QWidget()
-        plan_status_frame.setMinimumSize(400, 180)  # Even larger to prevent clipping
-        plan_status_frame.setStyleSheet("""
+        # Plan Status Cell replaced with Map - LARGE for 1920x1080
+        plan_map_frame = QWidget()
+        plan_map_frame.setMinimumSize(400, 180)
+        plan_map_frame.setStyleSheet("""
             QWidget {
                 border: 4px solid #bdc3c7;
                 border-radius: 12px;
                 background-color: white;
-                padding: 20px;
+                padding: 5px;
             }
         """)
-        plan_layout = QVBoxLayout(plan_status_frame)
-        plan_layout.setContentsMargins(20, 15, 20, 15)
-        plan_layout.setSpacing(12)
-        
-        plan_title = QLabel("STATUS PLANU")
-        plan_title.setAlignment(Qt.AlignCenter)
-        plan_title.setStyleSheet("""
+        plan_map_layout = QVBoxLayout(plan_map_frame)
+        plan_map_layout.setContentsMargins(5, 5, 5, 5)
+        plan_map_layout.setSpacing(0)
+
+        # Add a small label above the map
+        map_title = QLabel("MAPA")
+        map_title.setAlignment(Qt.AlignCenter)
+        map_title.setStyleSheet("""
             QLabel {
-                font-size: 40px;
+                font-size: 24px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
                 border: none;
             }
         """)
-        plan_layout.addWidget(plan_title)
-        
-        self.plan_status_display = QLabel("Brak aktywnego planu")
-        self.plan_status_display.setAlignment(Qt.AlignCenter)
-        self.plan_status_display.setStyleSheet("""
-            QLabel {
-                font-size: 30px;
-                color: #7f8c8d;
-                background: none;
-                border: none;
-                word-wrap: true;
-                font-weight: bold;
-            }
-        """)
-        plan_layout.addWidget(self.plan_status_display)
+        plan_map_layout.addWidget(map_title)
+
+        # Add the mini map view directly
+        plan_map_layout.addWidget(self.mini_map_view)
 
         # Battery Status Cell (bottom right, narrower) - LARGE for 1920x1080
         self.battery_status_frame = QWidget()
@@ -173,7 +165,7 @@ class PlanActiveView(QWidget):
         battery_layout = QVBoxLayout(self.battery_status_frame)
         battery_layout.setContentsMargins(20, 15, 20, 15)
         battery_layout.setSpacing(12)
-        
+
         battery_title = QLabel("BAT")
         battery_title.setAlignment(Qt.AlignCenter)
         battery_title.setStyleSheet("""
@@ -186,7 +178,7 @@ class PlanActiveView(QWidget):
             }
         """)
         battery_layout.addWidget(battery_title)
-        
+
         self.battery_status_display = QLabel("Nieznany")
         self.battery_status_display.setAlignment(Qt.AlignCenter)
         self.battery_status_display.setStyleSheet("""
@@ -199,25 +191,25 @@ class PlanActiveView(QWidget):
             }
         """)
         battery_layout.addWidget(self.battery_status_display)
-        
+
         # Add cells to grid with new layout:
         # Row 0: Robot status (full width)
-        # Row 1: Plan status (left, wider) and Battery status (right, narrower)
+        # Row 1: Map (left, wider) and Battery status (right, narrower)
         grid_layout.addWidget(self.robot_status_frame, 0, 0, 1, 3)  # Span 3 columns
-        grid_layout.addWidget(plan_status_frame, 1, 0, 1, 2)  # Span 2 columns (wider)
+        grid_layout.addWidget(plan_map_frame, 1, 0, 1, 2)  # Span 2 columns (wider)
         grid_layout.addWidget(self.battery_status_frame, 1, 2, 1, 1)  # 1 column (narrower)
-        
-        # Add both grid and map to stacked widget
-        self.left_stacked_widget.addWidget(self.grid_widget)  # Index 0
-        self.left_stacked_widget.addWidget(self.map_view)     # Index 1
-        
-        # Start with grid view
+
+        # Add both grid and full map directly to stacked widget
+        self.left_stacked_widget.addWidget(self.grid_widget)  # Index 0 - Active mode (grid with mini map)
+        self.left_stacked_widget.addWidget(self.map_view)  # Index 1 - Configure mode (full map)
+
+        # Start with grid view (Active mode)
         self.left_stacked_widget.setCurrentIndex(0)
         print(f"DEBUG: PlanActiveView - Grid widget created")
         print(f"DEBUG: PlanActiveView - Left stacked widget has {self.left_stacked_widget.count()} widgets")
         print(f"DEBUG: PlanActiveView - Current index: {self.left_stacked_widget.currentIndex()}")
         self.grid_widget.show()
-        
+
         # Add stacked widget (takes 3/4 of space) and plan tools (takes 1/4 of space)
         main_layout.addWidget(self.left_stacked_widget, 3)
         main_layout.addWidget(self.plan_tools, 1)
@@ -317,6 +309,7 @@ class PlanActiveView(QWidget):
     def update_robot_pose(self, x: float, y: float, theta: float):
         """Update robot position"""
         self.map_view.update_robot_pose(x, y, theta)
+        self.mini_map_view.update_robot_pose(x, y, theta)
         self.curr_x = x
         self.curr_y = y
     
@@ -430,11 +423,19 @@ class PlanActiveView(QWidget):
         """Switch to active tab in plan tools"""
         self.plan_tools.switch_to_active()
         self.map_view.enable_drawing = False  # Disable arrow drawing in active mode
-    
+        # Show grid with mini map
+        self.left_stacked_widget.setCurrentIndex(0)
+
     def switch_to_configure(self):
         """Switch to configure tab in plan tools"""
         self.plan_tools.switch_to_configure()
         self.map_view.enable_drawing = True   # Enable arrow drawing in configure mode
+        # Show full map
+        self.left_stacked_widget.setCurrentIndex(1)
+        # Ensure map view is visible
+        self.map_view.setVisible(True)
+        self.map_view.show()
+        print("DEBUG: Switched to configure mode - showing full map")
     
     def on_action_completed(self):
         """Called when a plan action is completed"""
@@ -459,17 +460,17 @@ class PlanActiveView(QWidget):
         """Handle tab change to control enable_drawing and switch grid/map"""
         if tab_index == 0:  # Active tab
             self.map_view.enable_drawing = False
-            # Show grid on left side
+            # Show grid with mini map
             if hasattr(self, 'left_stacked_widget'):
-                self.left_stacked_widget.setCurrentIndex(0)  # Grid
-                print("DEBUG: Active tab - showing grid")
+                self.left_stacked_widget.setCurrentIndex(0)  # Grid with mini map
+                print("DEBUG: Active tab - showing grid with mini map")
         elif tab_index == 1:  # Configure tab
             self.map_view.enable_drawing = True
             self.map_view.editing_mode = False  # Ensure we're not in route editing mode
-            # Show map on left side for pose setting
+            # Show full-size map for pose setting
             if hasattr(self, 'left_stacked_widget'):
-                self.left_stacked_widget.setCurrentIndex(1)  # Map
-                print("DEBUG: Configure tab - showing map")
+                self.left_stacked_widget.setCurrentIndex(1)  # Full map
+                print("DEBUG: Configure tab - showing full map")
             print(f"DEBUG: Configure tab activated - enable_drawing={self.map_view.enable_drawing}, editing_mode={self.map_view.editing_mode}")
     
     def update_robot_status(self, status: str):
@@ -485,3 +486,24 @@ class PlanActiveView(QWidget):
         if self.plan_editor:
             self.plan_editor.close()
             self.plan_editor = None
+
+    def display_route_on_mini_map(self, route_name: str):
+        """Display a route on the mini map"""
+        print(f"DEBUG: Attempting to display route '{route_name}' on mini map")
+        print(f"DEBUG: Route manager current map: {self.route_manager.current_map}")
+
+        # Load routes from route manager
+        routes = self.route_manager.load_routes()
+        print(f"DEBUG: Loaded {len(routes)} routes from route manager: {list(routes.keys())}")
+
+        if route_name in routes:
+            route = routes[route_name]
+            print(f"DEBUG: Found route '{route_name}', displaying on mini map")
+            self.mini_map_view.display_bezier_route(route)
+        else:
+            print(f"WARNING: Route '{route_name}' not found in route manager")
+            print(f"DEBUG: Available routes: {list(routes.keys())}")
+
+    def clear_mini_map_route(self):
+        """Clear route from mini map"""
+        self.mini_map_view.clear_route()

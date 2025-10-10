@@ -180,6 +180,12 @@ class ConfiguringState(State):
             self.gui.gui_manager.nav_data.route_manager.load_map_onto_robot # KEEP IT IN MAIN_VIEW!!
         )
 
+        # Also connect map_changed_signal for when maps are loaded programmatically
+        self.connect_and_store_connections(
+            self.gui.main_view.map_changed_signal,
+            self.gui.gui_manager.handle_map_selected
+        )
+
         self.connect_and_store_connections(
             self.gui.gui_manager.manualStatus,
             lambda status: (
