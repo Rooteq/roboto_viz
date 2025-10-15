@@ -139,38 +139,32 @@ class LauncherApp(QMainWindow):
         main_layout.addWidget(content_widget)
 
     def launch_robot_system(self):
-        """Launch both ROS2 packages"""
+        """Launch both ROS2 packages in visible terminals"""
         try:
-            print("Launching robot system...")
+            print("Launching robot system in terminals...")
 
             # Source ROS2 environment and workspace setup
             ros2_setup = "/opt/ros/jazzy/setup.bash"
             workspace_setup = "~/ros2_ws/install/setup.bash"
 
-            # Launch roboto_diffbot first
-            diffbot_cmd = f"source {ros2_setup} && source {workspace_setup} && ros2 launch roboto_diffbot launch_roboto.launch.py"
+            # Launch roboto_diffbot in a new terminal window
+            # Using gnome-terminal with --title and keeping it open
+            diffbot_cmd = f"gnome-terminal --title='RobotoDiffbot' --geometry=100x30+0+0 -- bash -c 'source {ros2_setup} && source {workspace_setup} && ros2 launch roboto_diffbot launch_roboto.launch.py; exec bash'"
+
             self.diffbot_process = QProcess(self)
-
-            # Enable output redirection for debugging
-            self.diffbot_process.setProcessChannelMode(QProcess.MergedChannels)
-            self.diffbot_process.readyReadStandardOutput.connect(
-                lambda: print("DIFFBOT:", self.diffbot_process.readAllStandardOutput().data().decode())
-            )
-
-            # Start diffbot process
             self.diffbot_process.start("/bin/bash", ["-c", diffbot_cmd])
 
             if not self.diffbot_process.waitForStarted(5000):
-                raise Exception("Failed to start diffbot process")
+                raise Exception("Failed to start diffbot terminal")
 
-            print("Diffbot process started, waiting 2 seconds before launching GUI...")
+            print("Diffbot terminal opened, waiting 2 seconds before launching GUI...")
 
             # Update UI to show we're waiting
             self.launch_btn.setEnabled(False)
             self.status_label.setText("Uruchamianie diffbot...")
             self.status_label.setStyleSheet("color: #ffff00; font-weight: bold;")
 
-            # Store GUI command for delayed launch
+            # Store command info for delayed launch
             self.ros2_setup = ros2_setup
             self.workspace_setup = workspace_setup
 
@@ -191,31 +185,27 @@ class LauncherApp(QMainWindow):
                 self.gui_process.kill()
 
     def launch_gui_process(self):
-        """Launch the GUI process after diffbot has started"""
+        """Launch the GUI process in a terminal after diffbot has started"""
         try:
-            print("Launching GUI process...")
+            print("Launching GUI process in terminal...")
 
-            # Launch GUI
-            gui_cmd = f"source {self.ros2_setup} && source {self.workspace_setup} && ros2 launch roboto_viz gui_launch.py"
+            # Launch GUI in a new terminal window positioned to the right
+            # The terminal will stay open after the GUI closes to show any errors
+            gui_cmd = f"gnome-terminal --title='RobotoViz GUI' --geometry=100x30+800+0 -- bash -c 'source {self.ros2_setup} && source {self.workspace_setup} && ros2 launch roboto_viz gui_launch.py; echo \"\\n\\nGUI closed. Press Enter to close terminal...\"; read'"
+
             self.gui_process = QProcess(self)
-
-            # Enable output redirection for debugging
-            self.gui_process.setProcessChannelMode(QProcess.MergedChannels)
-            self.gui_process.readyReadStandardOutput.connect(
-                lambda: print("GUI:", self.gui_process.readAllStandardOutput().data().decode())
-            )
 
             # Connect signals BEFORE starting
             self.gui_process.finished.connect(self.on_gui_closed)
             self.gui_process.errorOccurred.connect(self.on_process_error)
 
-            # Start GUI process
+            # Start GUI terminal
             self.gui_process.start("/bin/bash", ["-c", gui_cmd])
 
             if not self.gui_process.waitForStarted(5000):
-                raise Exception("Failed to start GUI process")
+                raise Exception("Failed to start GUI terminal")
 
-            print("GUI process started successfully")
+            print("GUI terminal opened successfully")
 
             # Update UI
             self.status_label.setText("System uruchomiony")
@@ -250,19 +240,30 @@ class LauncherApp(QMainWindow):
         self.status_label.setStyleSheet("color: #ff0000; font-weight: bold;")
 
     def on_gui_closed(self, exit_code, exit_status):
-        """Handle GUI process closure - terminate diffbot process too"""
-        print(f"GUI closed with exit code {exit_code}, status {exit_status}")
-        print("Terminating diffbot process...")
+        """Handle GUI terminal closure - terminate diffbot terminal too"""
+        print(f"GUI terminal closed with exit code {exit_code}, status {exit_status}")
+        print("Terminating all ROS2 processes and terminals...")
 
+        # Kill all ros2 launch processes (this will terminate both diffbot and any remaining GUI processes)
+        import subprocess
+        try:
+            # Find and kill all ros2 launch processes
+            subprocess.run(["pkill", "-f", "ros2 launch roboto_diffbot"], check=False)
+            subprocess.run(["pkill", "-f", "ros2 launch roboto_viz"], check=False)
+            print("ROS2 processes terminated")
+        except Exception as e:
+            print(f"Error terminating ROS2 processes: {e}")
+
+        # Terminate the terminal processes
         if self.diffbot_process and self.diffbot_process.state() == QProcess.Running:
             self.diffbot_process.terminate()
-            # Wait up to 5 seconds for graceful termination
-            if not self.diffbot_process.waitForFinished(5000):
-                # Force kill if it doesn't terminate
-                print("Diffbot didn't terminate gracefully, killing...")
-                self.diffbot_process.kill()
-            else:
-                print("Diffbot terminated successfully")
+            self.diffbot_process.waitForFinished(2000)
+
+        if self.gui_process and self.gui_process.state() == QProcess.Running:
+            self.gui_process.terminate()
+            self.gui_process.waitForFinished(2000)
+
+        print("All processes terminated")
 
         # Re-enable launch button
         self.launch_btn.setEnabled(True)
@@ -275,18 +276,28 @@ class LauncherApp(QMainWindow):
         self.close()
 
     def closeEvent(self, event):
-        """Handle application close - make sure all processes are terminated"""
-        print("Launcher closing, terminating all processes...")
+        """Handle application close - make sure all processes and terminals are terminated"""
+        print("Launcher closing, terminating all processes and terminals...")
 
+        # Kill all ros2 launch processes
+        import subprocess
+        try:
+            subprocess.run(["pkill", "-f", "ros2 launch roboto_diffbot"], check=False)
+            subprocess.run(["pkill", "-f", "ros2 launch roboto_viz"], check=False)
+            print("ROS2 processes terminated")
+        except Exception as e:
+            print(f"Error terminating ROS2 processes: {e}")
+
+        # Terminate terminal processes
         if self.gui_process and self.gui_process.state() == QProcess.Running:
-            print("Terminating GUI process...")
+            print("Terminating GUI terminal...")
             self.gui_process.terminate()
-            self.gui_process.waitForFinished(5000)
+            self.gui_process.waitForFinished(2000)
 
         if self.diffbot_process and self.diffbot_process.state() == QProcess.Running:
-            print("Terminating diffbot process...")
+            print("Terminating diffbot terminal...")
             self.diffbot_process.terminate()
-            self.diffbot_process.waitForFinished(5000)
+            self.diffbot_process.waitForFinished(2000)
 
         print("Launcher shutdown complete")
         event.accept()
