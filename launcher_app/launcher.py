@@ -148,11 +148,18 @@ class LauncherApp(QMainWindow):
             workspace_setup = "~/ros2_ws/install/setup.bash"
 
             # Launch roboto_diffbot in a new terminal window
-            # Using gnome-terminal with --title and keeping it open
-            diffbot_cmd = f"gnome-terminal --title='RobotoDiffbot' --geometry=100x30+0+0 -- bash -c 'source {ros2_setup} && source {workspace_setup} && ros2 launch roboto_diffbot launch_roboto.launch.py; exec bash'"
+            # The bash -c command runs the launch and keeps terminal open even on error
+            diffbot_terminal_cmd = f"source {ros2_setup} && source {workspace_setup} && echo 'Starting diffbot...' && ros2 launch roboto_diffbot launch_roboto.launch.py; echo '\\nProcess exited. Press Enter to close.'; read"
 
             self.diffbot_process = QProcess(self)
-            self.diffbot_process.start("/bin/bash", ["-c", diffbot_cmd])
+            # Use -- to separate gnome-terminal options from the command
+            self.diffbot_process.start("gnome-terminal", [
+                "--title=RobotoDiffbot",
+                "--geometry=100x30+0+0",
+                "--wait",
+                "--",
+                "bash", "-c", diffbot_terminal_cmd
+            ])
 
             if not self.diffbot_process.waitForStarted(5000):
                 raise Exception("Failed to start diffbot terminal")
@@ -191,7 +198,7 @@ class LauncherApp(QMainWindow):
 
             # Launch GUI in a new terminal window positioned to the right
             # The terminal will stay open after the GUI closes to show any errors
-            gui_cmd = f"gnome-terminal --title='RobotoViz GUI' --geometry=100x30+800+0 -- bash -c 'source {self.ros2_setup} && source {self.workspace_setup} && ros2 launch roboto_viz gui_launch.py; echo \"\\n\\nGUI closed. Press Enter to close terminal...\"; read'"
+            gui_terminal_cmd = f"source {self.ros2_setup} && source {self.workspace_setup} && echo 'Starting GUI...' && ros2 launch roboto_viz gui_launch.py; echo '\\nProcess exited. Press Enter to close.'; read"
 
             self.gui_process = QProcess(self)
 
@@ -199,8 +206,14 @@ class LauncherApp(QMainWindow):
             self.gui_process.finished.connect(self.on_gui_closed)
             self.gui_process.errorOccurred.connect(self.on_process_error)
 
-            # Start GUI terminal
-            self.gui_process.start("/bin/bash", ["-c", gui_cmd])
+            # Start GUI terminal with proper argument separation
+            self.gui_process.start("gnome-terminal", [
+                "--title=RobotoViz GUI",
+                "--geometry=100x30+800+0",
+                "--wait",
+                "--",
+                "bash", "-c", gui_terminal_cmd
+            ])
 
             if not self.gui_process.waitForStarted(5000):
                 raise Exception("Failed to start GUI terminal")
