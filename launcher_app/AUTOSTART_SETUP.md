@@ -2,7 +2,89 @@
 
 This document explains how to configure the Robot Control Launcher to start automatically at system boot on Ubuntu 24.04.
 
-## Method 1: Systemd Service (Recommended)
+## Method 1: User Systemd Service (Recommended for GUI Apps)
+
+This is the best method for GUI applications that need access to the user's display.
+
+### Step 1: Create user systemd directory
+
+```bash
+mkdir -p ~/.config/systemd/user
+```
+
+### Step 2: Create user service file
+
+```bash
+nano ~/.config/systemd/user/robot-launcher.service
+```
+
+Add the following content:
+
+```ini
+[Unit]
+Description=Robot Control Launcher
+After=graphical-session.target
+
+[Service]
+Type=simple
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/rooteq/.Xauthority"
+Environment="XDG_RUNTIME_DIR=/run/user/%U"
+Environment="QT_QPA_PLATFORM=xcb"
+WorkingDirectory=/home/rooteq/ros2_ws/src/roboto_viz/launcher_app
+ExecStart=/usr/bin/python3 /home/rooteq/ros2_ws/src/roboto_viz/launcher_app/launcher.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+### Step 3: Enable and start the user service
+
+```bash
+# Reload user systemd daemon
+systemctl --user daemon-reload
+
+# Enable the service to start at login
+systemctl --user enable robot-launcher.service
+
+# Start the service now (optional, for testing)
+systemctl --user start robot-launcher.service
+```
+
+### Step 4: Enable lingering (optional, to start before login)
+
+If you want the service to start even before user login:
+
+```bash
+sudo loginctl enable-linger rooteq
+```
+
+### Step 5: Check service status
+
+```bash
+# Check if the service is running
+systemctl --user status robot-launcher.service
+
+# View service logs
+journalctl --user -u robot-launcher.service -f
+```
+
+### Step 6: Manage the service
+
+```bash
+# Stop the service
+systemctl --user stop robot-launcher.service
+
+# Disable autostart
+systemctl --user disable robot-launcher.service
+
+# Restart the service
+systemctl --user restart robot-launcher.service
+```
+
+## Method 2: System Systemd Service (Alternative)
 
 ### Step 1: Create a systemd service file
 
@@ -23,9 +105,11 @@ Wants=graphical.target
 [Service]
 Type=simple
 User=rooteq
+Group=rooteq
 Environment="DISPLAY=:0"
 Environment="XAUTHORITY=/home/rooteq/.Xauthority"
 Environment="XDG_RUNTIME_DIR=/run/user/1000"
+PAMName=login
 WorkingDirectory=/home/rooteq/ros2_ws/src/roboto_viz/launcher_app
 ExecStart=/usr/bin/python3 /home/rooteq/ros2_ws/src/roboto_viz/launcher_app/launcher.py
 Restart=on-failure
@@ -136,11 +220,52 @@ chmod +x /home/rooteq/ros2_ws/src/roboto_viz/launcher_app/launcher.py
 
 If your ROS2 installation is in a different location, update the paths in `launcher.py`.
 
+### Issue: "Failed to determine user credentials: No such process"
+
+**Problem**: This error occurs when using a system service (Method 2) trying to start a GUI application.
+
+**Solution**: Use **Method 1 (User Systemd Service)** instead. If you already created a system service, remove it first:
+
+```bash
+# Stop and disable the system service
+sudo systemctl stop robot-launcher.service
+sudo systemctl disable robot-launcher.service
+
+# Remove the system service file
+sudo rm /etc/systemd/system/robot-launcher.service
+
+# Reload systemd
+sudo systemctl daemon-reload
+```
+
+Then follow **Method 1** to create a user service instead:
+
+```bash
+# Create user service directory
+mkdir -p ~/.config/systemd/user
+
+# Create user service file
+nano ~/.config/systemd/user/robot-launcher.service
+# (Add the configuration from Method 1)
+
+# Enable and start user service
+systemctl --user daemon-reload
+systemctl --user enable robot-launcher.service
+systemctl --user start robot-launcher.service
+```
+
 ### Issue: Service fails to start
 
 **Solution**: Check the service logs:
+
+For user service:
 ```bash
-journalctl -u robot-launcher.service -n 50
+journalctl --user -u robot-launcher.service -n 50
+```
+
+For system service:
+```bash
+sudo journalctl -u robot-launcher.service -n 50
 ```
 
 Look for error messages and fix the paths or permissions accordingly.
