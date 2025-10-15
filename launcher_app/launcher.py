@@ -28,10 +28,11 @@ class LauncherApp(QMainWindow):
 
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #2b2b2b;
+                background-color: #ffffff;
             }
             QWidget {
                 font-size: 24px;
+                background-color: #ffffff;
             }
             QPushButton {
                 font-size: 32px;
@@ -50,12 +51,12 @@ class LauncherApp(QMainWindow):
                 background-color: #3d8b40;
             }
             QPushButton:disabled {
-                background-color: #555555;
-                color: #999999;
+                background-color: #cccccc;
+                color: #666666;
             }
             QLabel {
                 font-size: 28px;
-                color: #ffffff;
+                color: #333333;
             }
         """)
 
@@ -72,7 +73,7 @@ class LauncherApp(QMainWindow):
 
         # Add close button at the top right
         top_bar = QWidget()
-        top_bar.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
+        top_bar.setStyleSheet("background-color: #ffffff;")
         top_bar_layout = QHBoxLayout(top_bar)
         top_bar_layout.setContentsMargins(20, 20, 20, 20)
         top_bar_layout.addStretch()
@@ -266,7 +267,7 @@ class LauncherApp(QMainWindow):
         # Re-enable launch button
         self.launch_btn.setEnabled(True)
         self.status_label.setText("Gotowy do uruchomienia")
-        self.status_label.setStyleSheet("color: #ffffff; font-weight: normal;")
+        self.status_label.setStyleSheet("color: #333333; font-weight: normal;")
 
     def close_application(self):
         """Close the launcher application (from close button)"""
