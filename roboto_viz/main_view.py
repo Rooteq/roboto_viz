@@ -39,27 +39,30 @@ class MainView(QMainWindow):
 
     start_planning = pyqtSignal()
     finish_planning = pyqtSignal()
-    
+
     # Plan execution signals
     start_plan_execution = pyqtSignal(str)  # plan_name
     stop_plan_execution = pyqtSignal()
     execute_plan_action = pyqtSignal(str, int)  # plan_name, action_index
-    
+
     # Robot control signals
     dock_robot = pyqtSignal()
     dock_robot_at = pyqtSignal(str)  # dock_name
     undock_robot = pyqtSignal()
     start_nav = pyqtSignal(str, bool, float, float)
-    
+
     # Manual control signals
     start_keys_vel = pyqtSignal(str, float)
     stop_keys_vel = pyqtSignal()
-    
+
     # Navigation control
     stop_navigation = pyqtSignal()
-    
+
     # Signal handling
     signal_button_pressed = pyqtSignal()
+
+    # Application control
+    request_shutdown = pyqtSignal()  # Signal to request application shutdown
 
     def __init__(self):
         super().__init__()
@@ -162,7 +165,35 @@ class MainView(QMainWindow):
         self.layout = QVBoxLayout(self.central_widget)
         self.layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
         self.layout.setSpacing(0)  # Remove spacing
-        
+
+        # Add close button at the top
+        close_button_container = QWidget()
+        close_button_layout = QHBoxLayout(close_button_container)
+        close_button_layout.setContentsMargins(10, 10, 10, 10)
+        close_button_layout.addStretch()
+
+        self.close_btn = QPushButton("✕ Zamknij")
+        self.close_btn.setFixedSize(120, 40)
+        self.close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border-radius: 5px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+            QPushButton:pressed {
+                background-color: #a31409;
+            }
+        """)
+        self.close_btn.clicked.connect(self.on_close_button_clicked)
+        close_button_layout.addWidget(self.close_btn)
+
+        self.layout.addWidget(close_button_container)
+
         self.stacked_widget = QStackedWidget()
         self.layout.addWidget(self.stacked_widget)
 
@@ -473,3 +504,8 @@ class MainView(QMainWindow):
             # Clear route for non-route actions
             print(f"DEBUG: Non-route action, clearing mini map route")
             self.plan_active_view.clear_mini_map_route()
+
+    def on_close_button_clicked(self):
+        """Handle close button click - emit shutdown signal"""
+        print("Close button clicked - requesting shutdown")
+        self.request_shutdown.emit()

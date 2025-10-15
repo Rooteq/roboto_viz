@@ -15,6 +15,9 @@ class Gui:
         self.gui_manager: GuiManager = GuiManager(self.main_view.dock_manager)
         self.transition_to(DisconnectedState())
 
+        # Connect shutdown signal
+        self.main_view.request_shutdown.connect(self.shutdown)
+
     def setup(self):
         self.handleGui()
         self.gui_manager.start()
@@ -28,6 +31,22 @@ class Gui:
 
     def handleGui(self):
         self._state.handleGui()
+
+    def shutdown(self):
+        """Shutdown the GUI application and ROS2"""
+        print("Shutting down GUI application...")
+        try:
+            # Stop the GUI manager
+            self.gui_manager.stop()
+            # Shutdown ROS2
+            rclpy.shutdown()
+            # Close the main view
+            self.main_view.close()
+            # Quit the application
+            from PyQt5.QtWidgets import QApplication
+            QApplication.quit()
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
 
 class State(ABC):
     def __init__(self):
