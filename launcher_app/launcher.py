@@ -503,45 +503,38 @@ class LauncherApp(QMainWindow):
     def save_map(self):
         """Save the current map using the better_map_saver.sh script"""
         try:
-            print("Saving map...")
+            print("Opening map saver terminal...")
             self.mapping_status_label.setText("Zapisywanie mapy...")
             self.mapping_status_label.setStyleSheet("color: #ffff00; font-weight: bold;")
 
-            # Run the map saver script
-            result = subprocess.run(
-                ["bash", os.path.expanduser("~/better_map_saver.sh")],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            # Open the map saver script in an interactive terminal
+            map_saver_cmd = f"bash {os.path.expanduser('~/better_map_saver.sh')}"
 
-            if result.returncode == 0:
-                print("Map saved successfully")
-                self.mapping_status_label.setText("Mapa zapisana!")
-                self.mapping_status_label.setStyleSheet("color: #00ff00; font-weight: bold;")
-                QMessageBox.information(self, "Sukces", "Mapa została zapisana pomyślnie")
-            else:
-                error_msg = f"Map save failed: {result.stderr}"
-                print(f"ERROR: {error_msg}")
-                self.mapping_status_label.setText("Błąd zapisu mapy")
-                self.mapping_status_label.setStyleSheet("color: #ff0000; font-weight: bold;")
-                QMessageBox.critical(self, "Błąd", f"Nie udało się zapisać mapy:\n{result.stderr}")
+            map_saver_process = QProcess(self)
+            map_saver_process.start("gnome-terminal", [
+                "--title=Zapisz mapę",
+                "--geometry=80x20+400+300",
+                "--wait",
+                "--",
+                "bash", "-c", map_saver_cmd
+            ])
+
+            if not map_saver_process.waitForStarted(5000):
+                raise Exception("Failed to open map saver terminal")
+
+            print("Map saver terminal opened successfully")
+            self.mapping_status_label.setText("Terminal zapisu mapy otwarty")
+            self.mapping_status_label.setStyleSheet("color: #00ff00; font-weight: bold;")
 
             # Reset status after a delay
             QTimer.singleShot(3000, lambda: self.mapping_status_label.setText("Mapowanie w toku..."))
 
-        except subprocess.TimeoutExpired:
-            error_msg = "Map save timed out after 30 seconds"
-            print(f"ERROR: {error_msg}")
-            self.mapping_status_label.setText("Przekroczono czas zapisu")
-            self.mapping_status_label.setStyleSheet("color: #ff0000; font-weight: bold;")
-            QMessageBox.critical(self, "Błąd", "Przekroczono czas zapisu mapy")
         except Exception as e:
-            error_msg = f"Failed to save map: {str(e)}"
+            error_msg = f"Failed to open map saver: {str(e)}"
             print(f"ERROR: {error_msg}")
             self.mapping_status_label.setText("Błąd zapisu mapy")
             self.mapping_status_label.setStyleSheet("color: #ff0000; font-weight: bold;")
-            QMessageBox.critical(self, "Błąd", f"Nie udało się zapisać mapy:\n{str(e)}")
+            QMessageBox.critical(self, "Błąd", f"Nie udało się otworzyć terminala zapisu mapy:\n{str(e)}")
 
     def close_application(self):
         """Close the launcher application (from close button)"""

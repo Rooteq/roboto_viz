@@ -733,13 +733,31 @@ class Navigator(QThread):
                 # Start path navigation with specific controller and goal checker
                 # Try with precise_goal_checker to maintain orientation
                 print(f"DEBUG: Starting navigation with followPath, {len(path_msg.poses)} poses")
-                self.nav_data.navigator.followPath(
-                    path_msg,
-                    controller_id='FollowPath',
-                    goal_checker_id='goal_checker'
-                )
-                print("DEBUG: followPath() call completed, navigation should now be active")
-                
+                try:
+                    self.nav_data.navigator.followPath(
+                        path_msg,
+                        controller_id='FollowPath',
+                        goal_checker_id='goal_checker'
+                    )
+                    print("DEBUG: followPath() call completed, navigation should now be active")
+                except Exception as e:
+                    print(f"DEBUG: followPath() failed with exception: {e}")
+                    self._last_status = "Błąd - Usługa nawigacji niedostępna"
+                    self.navStatus.emit("Błąd - Usługa nawigacji niedostępna")
+                    continue
+
+                # Check if task was accepted (wait a bit for action server response)
+                self.msleep(500)  # Give action server time to respond
+
+                # If task completed immediately, it likely means goal was rejected
+                if self.nav_data.navigator.isTaskComplete():
+                    result = self.nav_data.navigator.getResult()
+                    if result == TaskResult.FAILED:
+                        print("DEBUG: Navigation goal was rejected by server")
+                        self._last_status = "Błąd - Cel odrzucony przez serwer"
+                        self.navStatus.emit("Błąd - Cel odrzucony przez serwer")
+                        continue
+
                 while not self.nav_data.navigator.isTaskComplete() and self._running:
                     # Check if there's a new goal
                     if self._new_goal is not None:
