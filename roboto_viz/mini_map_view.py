@@ -114,8 +114,8 @@ class MiniMapView(QGraphicsView):
         self.centerOn(map_x, map_y)
 
         # Adjust zoom to show reasonable area around robot
-        # Fit approximately 3 meters around the robot for a more zoomed-in view
-        view_range = 3.0  # meters (much more zoomed in than before)
+        # Fit approximately 6 meters around the robot (2x zoomed out from before)
+        view_range = 6.0  # meters (zoomed out 2x from previous 3.0)
         scene_range = view_range * 20  # Convert to scene units (20 pixels per meter)
 
         # Calculate scale to fit the desired range

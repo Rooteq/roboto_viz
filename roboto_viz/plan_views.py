@@ -77,9 +77,9 @@ class PlanActiveView(QWidget):
         grid_layout.setSpacing(20)  # More spacing between cells
 
         # Create status cells in a grid format
-        # Robot Status Cell (full width top row, background color changes) - LARGE for 1920x1080
+        # Robot Status Cell (left side of top row) - LARGE for 1920x1080
         self.robot_status_frame = QWidget()
-        self.robot_status_frame.setMinimumSize(600, 200)  # Even larger to prevent clipping
+        self.robot_status_frame.setMinimumSize(300, 180)
         self.robot_status_frame.setStyleSheet("""
             QWidget {
                 border: 4px solid #bdc3c7;
@@ -119,41 +119,9 @@ class PlanActiveView(QWidget):
         """)
         robot_layout.addWidget(self.robot_status_text)
 
-        # Plan Status Cell replaced with Map - LARGE for 1920x1080
-        plan_map_frame = QWidget()
-        plan_map_frame.setMinimumSize(400, 180)
-        plan_map_frame.setStyleSheet("""
-            QWidget {
-                border: 4px solid #bdc3c7;
-                border-radius: 12px;
-                background-color: white;
-                padding: 5px;
-            }
-        """)
-        plan_map_layout = QVBoxLayout(plan_map_frame)
-        plan_map_layout.setContentsMargins(5, 5, 5, 5)
-        plan_map_layout.setSpacing(0)
-
-        # Add a small label above the map
-        map_title = QLabel("MAPA")
-        map_title.setAlignment(Qt.AlignCenter)
-        map_title.setStyleSheet("""
-            QLabel {
-                font-size: 24px;
-                font-weight: bold;
-                color: #2c3e50;
-                background: none;
-                border: none;
-            }
-        """)
-        plan_map_layout.addWidget(map_title)
-
-        # Add the mini map view directly
-        plan_map_layout.addWidget(self.mini_map_view)
-
-        # Battery Status Cell (bottom right, narrower) - LARGE for 1920x1080
+        # Battery Status Cell (right side of top row, same width as robot status) - LARGE for 1920x1080
         self.battery_status_frame = QWidget()
-        self.battery_status_frame.setMinimumSize(240, 180)  # Even larger to prevent clipping
+        self.battery_status_frame.setMinimumSize(300, 180)
         self.battery_status_frame.setStyleSheet("""
             QWidget {
                 border: 4px solid #bdc3c7;
@@ -192,12 +160,44 @@ class PlanActiveView(QWidget):
         """)
         battery_layout.addWidget(self.battery_status_display)
 
+        # Map Cell (bottom row, full width) - LARGE for 1920x1080
+        plan_map_frame = QWidget()
+        plan_map_frame.setMinimumSize(600, 200)
+        plan_map_frame.setStyleSheet("""
+            QWidget {
+                border: 4px solid #bdc3c7;
+                border-radius: 12px;
+                background-color: white;
+                padding: 5px;
+            }
+        """)
+        plan_map_layout = QVBoxLayout(plan_map_frame)
+        plan_map_layout.setContentsMargins(5, 5, 5, 5)
+        plan_map_layout.setSpacing(0)
+
+        # Add a small label above the map
+        map_title = QLabel("MAPA")
+        map_title.setAlignment(Qt.AlignCenter)
+        map_title.setStyleSheet("""
+            QLabel {
+                font-size: 24px;
+                font-weight: bold;
+                color: #2c3e50;
+                background: none;
+                border: none;
+            }
+        """)
+        plan_map_layout.addWidget(map_title)
+
+        # Add the mini map view directly
+        plan_map_layout.addWidget(self.mini_map_view)
+
         # Add cells to grid with new layout:
-        # Row 0: Robot status (full width)
-        # Row 1: Map (left, wider) and Battery status (right, narrower)
-        grid_layout.addWidget(self.robot_status_frame, 0, 0, 1, 3)  # Span 3 columns
-        grid_layout.addWidget(plan_map_frame, 1, 0, 1, 2)  # Span 2 columns (wider)
-        grid_layout.addWidget(self.battery_status_frame, 1, 2, 1, 1)  # 1 column (narrower)
+        # Row 0: Robot status (left) and Battery status (right) - equal width
+        # Row 1: Map (full width)
+        grid_layout.addWidget(self.robot_status_frame, 0, 0, 1, 1)  # Top left
+        grid_layout.addWidget(self.battery_status_frame, 0, 1, 1, 1)  # Top right
+        grid_layout.addWidget(plan_map_frame, 1, 0, 1, 2)  # Bottom, spanning 2 columns
 
         # Add both grid and full map directly to stacked widget
         self.left_stacked_widget.addWidget(self.grid_widget)  # Index 0 - Active mode (grid with mini map)
