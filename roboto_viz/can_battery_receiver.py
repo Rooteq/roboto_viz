@@ -47,22 +47,24 @@ class CANBatteryReceiver(QObject):
         return (adc_value / 1023.0) * self.MAX_VOLTAGE
     
     def voltage_to_percentage(self, voltage: float) -> int:
-        """Convert voltage to battery percentage (0-100)."""
+        """Convert voltage to battery percentage (0-100).
+        Scales so that 90% becomes 100%, 0% stays 0%."""
         if voltage >= self.MAX_VOLTAGE:
-            return 100
+            raw_percentage = 100
         elif voltage <= self.MIN_VOLTAGE:
             return 0
         else:
             # Linear interpolation between min and max voltage
-            percentage = ((voltage - self.MIN_VOLTAGE) / (self.MAX_VOLTAGE - self.MIN_VOLTAGE)) * 100
-            return max(0, min(100, int(round(percentage))))
+            raw_percentage = ((voltage - self.MIN_VOLTAGE) / (self.MAX_VOLTAGE - self.MIN_VOLTAGE)) * 100
+
+        # Scale so that 90% becomes 100%, 0% stays 0%
+        # Formula: scaled = (raw / 90) * 100
+        scaled_percentage = (raw_percentage / 90.0) * 100.0
+        return max(0, min(100, int(round(scaled_percentage))))
     
     def get_battery_status_string(self, percentage: int, voltage: float) -> str:
         """Get battery status string based on percentage."""
-        if percentage <= self.WARNING_PERCENTAGE:
-            return f"{percentage}% WARNING"
-        else:
-            return f"{percentage}%"
+        return f"{percentage}%"
 
     def connect_can(self) -> bool:
         """Connect to CAN interface for receiving messages."""

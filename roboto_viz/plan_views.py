@@ -138,7 +138,7 @@ class PlanActiveView(QWidget):
         battery_title.setAlignment(Qt.AlignCenter)
         battery_title.setStyleSheet("""
             QLabel {
-                font-size: 160px;
+                font-size: 32px;
                 font-weight: bold;
                 color: #2c3e50;
                 background: none;
@@ -151,8 +151,8 @@ class PlanActiveView(QWidget):
         self.battery_status_display.setAlignment(Qt.AlignCenter)
         self.battery_status_display.setStyleSheet("""
             QLabel {
-                font-size: 100px;
-                color: #7f8c8d;
+                font-size: 140px;
+                color: #000000;
                 background: none;
                 border: none;
                 font-weight: bold;

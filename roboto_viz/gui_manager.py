@@ -53,6 +53,7 @@ from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 from roboto_viz.can_status_manager import CANStatusManager
 from roboto_viz.can_battery_receiver import CANBatteryReceiver
 from roboto_viz.can_signal_receiver import CANSignalReceiver
+from roboto_viz.music_player import MusicPlayer
 
 class LState(Enum):
     UNCONFIGURED = 0
@@ -867,6 +868,13 @@ class GuiManager(QThread):
             if self.can_battery_receiver:
                 self.can_battery_receiver.start_receiving()
 
+        # Initialize music player
+        self.music_player = MusicPlayer()
+
+        # Connect navigation status to music player
+        if hasattr(self.navigator, 'navStatus'):
+            self.navigator.navStatus.connect(self.music_player.handle_navigation_status)
+
         # self.nav_data.send_routes.connect(lambda: self.send_route_names)
 
         self.navigator.start()
@@ -1093,6 +1101,8 @@ class GuiManager(QThread):
     def stop(self):
         if self.navigator:
             self.navigator.stop()
+        if self.music_player:
+            self.music_player.cleanup()
         if self.node:
             self.executor.remove_node(self.node)
             self.node.destroy_node()
