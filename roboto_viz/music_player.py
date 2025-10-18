@@ -20,6 +20,7 @@ class MusicPlayer(QObject):
         self.music_dir = Path.home() / ".robotroutes" / "music"
         self.current_process = None
         self.is_playing = False
+        self.should_continue_playing = False  # Flag to control continuous playback
         self._lock = threading.Lock()
 
         # Create music directory if it doesn't exist
@@ -34,11 +35,23 @@ class MusicPlayer(QObject):
         return mp3_files
 
     def start_music(self):
-        """Start playing a random music file from the music directory."""
+        """Start playing music continuously (enables continuous playback mode)."""
+        # Set the flag to enable continuous playback
+        self.should_continue_playing = True
+        # Start the first track
+        self._play_next_track()
+
+    def _play_next_track(self):
+        """Play a random music file from the music directory."""
         with self._lock:
-            # If already playing, don't start again
+            # If already playing, don't start another track
             if self.is_playing:
                 print("DEBUG: Music already playing, not starting new track")
+                return
+
+            # Check if we should continue playing
+            if not self.should_continue_playing:
+                print("DEBUG: Continuous playback disabled, not starting new track")
                 return
 
             # Get available music files
@@ -89,7 +102,10 @@ class MusicPlayer(QObject):
                 self.current_process = None
 
     def stop_music(self):
-        """Stop playing music."""
+        """Stop playing music and disable continuous playback."""
+        # Disable continuous playback first
+        self.should_continue_playing = False
+
         with self._lock:
             if not self.is_playing:
                 return
@@ -111,7 +127,7 @@ class MusicPlayer(QObject):
             self.is_playing = False
 
     def _monitor_playback(self):
-        """Monitor the playback process and update state when it finishes."""
+        """Monitor the playback process and start next track when it finishes."""
         if self.current_process:
             self.current_process.wait()
             with self._lock:
@@ -119,6 +135,11 @@ class MusicPlayer(QObject):
                     self.is_playing = False
                     self.current_process = None
                     print("DEBUG: Music playback finished naturally")
+
+            # If continuous playback is enabled, play the next track
+            if self.should_continue_playing:
+                print("DEBUG: Starting next track...")
+                self._play_next_track()
 
     @pyqtSlot(str)
     def handle_navigation_status(self, status: str):

@@ -35,6 +35,7 @@ class CANBatteryReceiver(QObject):
         self.initial_value_set = False
         self.start_time = None
         self.INITIAL_DELAY = 10.0  # 10 seconds delay
+        self.MIN_STARTUP_PERCENTAGE = 2.5  # Minimum percentage to accept during buffer fill-up
 
         # Battery voltage constants for 10S Li-ion pack
         self.MAX_VOLTAGE = 42.0  # 100% - 1023 ADC value
@@ -144,40 +145,52 @@ class CANBatteryReceiver(QObject):
 
                     # Ensure value is in expected range
                     if 0 <= battery_adc <= 1023:
-                        # Set initial value on first non-zero sample after delay
-                        if not self.initial_value_set and battery_adc > 0 and self.start_time is not None:
+                        # Check if buffer is still filling up (not yet operational)
+                        buffer_filling = len(self.sample_buffer) < self.BUFFER_SIZE
+
+                        # During buffer fill-up, ignore samples below minimum percentage threshold
+                        if buffer_filling:
+                            voltage = self.adc_to_voltage(battery_adc)
+                            percentage = self.voltage_to_percentage(voltage)
+
+                            # Skip samples that give less than minimum percentage during startup
+                            if percentage < self.MIN_STARTUP_PERCENTAGE:
+                                continue  # Ignore this sample
+
+                        # Set initial value on first valid sample after delay
+                        if not self.initial_value_set and self.start_time is not None:
                             current_time = time.time()
                             if current_time - self.start_time >= self.INITIAL_DELAY:
                                 voltage = self.adc_to_voltage(battery_adc)
                                 percentage = self.voltage_to_percentage(voltage)
                                 status_string = self.get_battery_status_string(percentage, voltage)
-                                
+
                                 # Emit initial values
                                 self.battery_status_update.emit(battery_adc)
                                 self.battery_percentage_update.emit(percentage, status_string)
                                 self.initial_value_set = True
-                        
+
                         # Add sample to buffer
                         self.sample_buffer.append(battery_adc)
-                        
+
                         # Keep buffer at specified size
                         if len(self.sample_buffer) > self.BUFFER_SIZE:
                             self.sample_buffer.pop(0)
-                        
-                        # Only emit signals when we have enough samples
+
+                        # Only emit signals when we have enough samples (median filter operational)
                         if len(self.sample_buffer) >= self.BUFFER_SIZE:
                             # Calculate median of buffer
                             median_adc = statistics.median(self.sample_buffer)
-                            
+
                             # Convert median ADC to voltage and percentage
                             voltage = self.adc_to_voltage(median_adc)
                             percentage = self.voltage_to_percentage(voltage)
                             status_string = self.get_battery_status_string(percentage, voltage)
-                            
+
                             # Emit both raw median ADC and processed percentage/status
                             self.battery_status_update.emit(int(median_adc))
                             self.battery_percentage_update.emit(percentage, status_string)
-                            
+
                             # Clear buffer to wait for next 50 samples
                             self.sample_buffer.clear()
                     else:

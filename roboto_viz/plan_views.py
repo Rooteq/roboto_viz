@@ -147,7 +147,7 @@ class PlanActiveView(QWidget):
         """)
         battery_layout.addWidget(battery_title)
 
-        self.battery_status_display = QLabel("Nieznany")
+        self.battery_status_display = QLabel("Obliczanie...")
         self.battery_status_display.setAlignment(Qt.AlignCenter)
         self.battery_status_display.setStyleSheet("""
             QLabel {
