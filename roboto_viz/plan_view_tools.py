@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QLabel, QListWidget, QListWidgetItem, QComboBox, 
-                             QTabWidget, QLineEdit, QGridLayout, QGroupBox,
-                             QMessageBox, QProgressBar)
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton,
+                             QLabel, QListWidget, QListWidgetItem,
+                             QTabWidget, QGridLayout, QGroupBox,
+                             QMessageBox)
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
 from PyQt5.QtGui import QFont
 from typing import Optional
@@ -146,89 +146,104 @@ class PlanTools(QWidget):
         # Plan Control Section
         control_group = QGroupBox("Sterowanie Planem")
         control_layout = QVBoxLayout(control_group)
-        
-        # Plan selection
-        plan_select_layout = QHBoxLayout()
-        plan_select_layout.addWidget(QLabel("Plan:"))
-        self.plan_combo = QComboBox()
-        plan_select_layout.addWidget(self.plan_combo)
+
+        # Plan selection - using QListWidget for better visibility
+        plan_label = QLabel("Plan:")
+        plan_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #2c3e50;")
+        control_layout.addWidget(plan_label)
+
+        self.plan_list = QListWidget()
+        self.plan_list.setMaximumHeight(140)  # Reduced height
+        self.plan_list.setStyleSheet("""
+            QListWidget {
+                border: 2px solid #bdc3c7;
+                border-radius: 6px;
+                background-color: white;
+                font-size: 14px;
+                padding: 4px;
+            }
+            QListWidget::item {
+                padding: 10px;
+                min-height: 30px;
+                border-bottom: 1px solid #ecf0f1;
+            }
+            QListWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+                border-radius: 5px;
+            }
+            QListWidget::item:hover {
+                background-color: #d5dbdb;
+            }
+        """)
+        control_layout.addWidget(self.plan_list)
+
         self.choose_plan_btn = QPushButton("Wybierz Plan")
-        self.choose_plan_btn.setStyleSheet(self.button_style)
-        plan_select_layout.addWidget(self.choose_plan_btn)
-        control_layout.addLayout(plan_select_layout)
-        
-        # Note: Main control buttons moved to below robot status
-        
-        # Action selection
-        action_layout = QHBoxLayout()
-        action_layout.addWidget(QLabel("Przejdź do Akcji:"))
-        self.action_combo = QComboBox()
-        action_layout.addWidget(self.action_combo)
+        self.choose_plan_btn.setStyleSheet("""
+            QPushButton {
+                min-height: 48px;
+                font-size: 16px;
+                padding: 12px 20px;
+                font-weight: bold;
+                border: 2px solid #2c3e50;
+                border-radius: 8px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+            QPushButton:disabled {
+                background-color: #f5f6f7;
+                border-color: #bdc3c7;
+                color: #95a5a6;
+            }
+        """)
+        control_layout.addWidget(self.choose_plan_btn)
+
+        # Action selection - using QListWidget for better visibility
+        action_label = QLabel("Przejdź do Akcji:")
+        action_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #2c3e50; margin-top: 8px;")
+        control_layout.addWidget(action_label)
+
+        self.action_list = QListWidget()
+        self.action_list.setMaximumHeight(160)  # Reduced height
+        self.action_list.setStyleSheet("""
+            QListWidget {
+                border: 2px solid #bdc3c7;
+                border-radius: 6px;
+                background-color: white;
+                font-size: 14px;
+                padding: 4px;
+            }
+            QListWidget::item {
+                padding: 10px;
+                min-height: 28px;
+                border-bottom: 1px solid #ecf0f1;
+            }
+            QListWidget::item:selected {
+                background-color: #27ae60;
+                color: white;
+                border-radius: 5px;
+            }
+            QListWidget::item:hover {
+                background-color: #d5dbdb;
+            }
+        """)
+        control_layout.addWidget(self.action_list)
+
         self.execute_action_btn = QPushButton("START")
         self.execute_action_btn.setStyleSheet("""
             QPushButton {
-                font-size: 22px;
-                font-weight: bold;
-                border: 3px solid #27ae60;
-                border-radius: 12px;
-                background-color: #2ecc71;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #27ae60;
-                border-color: #229954;
-            }
-            QPushButton:pressed {
-                background-color: #229954;
-                border-color: #1e8449;
-            } 
-        """)
-        # self.execute_action_btn.setStyleSheet(self.button_style)
-        action_layout.addWidget(self.execute_action_btn)
-        control_layout.addLayout(action_layout)
-        
-        
-        layout.addWidget(control_group)
-        
-        # Main Control Buttons Section
-        control_buttons_group = QGroupBox("Sterowanie")
-        control_buttons_layout = QVBoxLayout(control_buttons_group)
-        
-        # Signal button (top - initially hidden) - made taller
-        self.signal_btn = QPushButton("SYGNAŁ")
-        self.signal_btn.setStyleSheet("""
-            QPushButton {
                 min-height: 50px;
                 font-size: 18px;
+                font-weight: bold;
                 padding: 12px 25px;
-                font-weight: bold;
-                border: 2px solid #3498db;
-                border-radius: 10px;
-                background-color: #5dade2;
-                color: white;
-            }
-            QPushButton:hover {
-                background-color: #3498db;
-                border-color: #2980b9;
-            }
-            QPushButton:pressed {
-                background-color: #2980b9;
-                border-color: #1f618d;
-            }
-        """)
-        self.signal_btn.setVisible(False)
-        
-        
-        control_buttons_layout.addWidget(self.signal_btn)
-        
-        # Start button (middle) - made taller
-        self.start_btn = QPushButton("WZNÓW")
-        self.start_btn.setStyleSheet("""
-            QPushButton {
-                min-height: 65px;
-                font-size: 22px;
-                padding: 18px 35px;
-                font-weight: bold;
                 border: 3px solid #27ae60;
                 border-radius: 12px;
                 background-color: #2ecc71;
@@ -248,18 +263,81 @@ class PlanTools(QWidget):
                 color: #566573;
             }
         """)
-        control_buttons_layout.addWidget(self.start_btn)
+        control_layout.addWidget(self.execute_action_btn)
+
+
+        layout.addWidget(control_group)
         
-        # Stop button (bottom - always enabled) - made taller
+        # Main Control Buttons Section
+        control_buttons_group = QGroupBox("Sterowanie")
+        control_buttons_layout = QVBoxLayout(control_buttons_group)
+        
+        # Signal button (top - initially hidden) - LARGE for touch interaction
+        self.signal_btn = QPushButton("SYGNAŁ")
+        self.signal_btn.setStyleSheet("""
+            QPushButton {
+                min-height: 80px;
+                font-size: 24px;
+                padding: 20px 30px;
+                font-weight: bold;
+                border: 4px solid #3498db;
+                border-radius: 15px;
+                background-color: #5dade2;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #3498db;
+                border-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #2980b9;
+                border-color: #1f618d;
+            }
+        """)
+        self.signal_btn.setVisible(False)
+        
+        
+        control_buttons_layout.addWidget(self.signal_btn)
+        
+        # Start button (middle) - VERY LARGE for touch interaction
+        self.start_btn = QPushButton("WZNÓW")
+        self.start_btn.setStyleSheet("""
+            QPushButton {
+                min-height: 90px;
+                font-size: 28px;
+                padding: 25px 40px;
+                font-weight: bold;
+                border: 4px solid #27ae60;
+                border-radius: 15px;
+                background-color: #2ecc71;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: #27ae60;
+                border-color: #229954;
+            }
+            QPushButton:pressed {
+                background-color: #229954;
+                border-color: #1e8449;
+            }
+            QPushButton:disabled {
+                background-color: #a9dfbf;
+                border-color: #82c99a;
+                color: #566573;
+            }
+        """)
+        control_buttons_layout.addWidget(self.start_btn)
+
+        # Stop button (bottom - always enabled) - VERY LARGE for touch interaction
         self.stop_btn = QPushButton("STOP")
         self.stop_btn.setStyleSheet("""
             QPushButton {
-                min-height: 65px;
-                font-size: 22px;
-                padding: 18px 35px;
+                min-height: 90px;
+                font-size: 28px;
+                padding: 25px 40px;
                 font-weight: bold;
-                border: 3px solid #c0392b;
-                border-radius: 12px;
+                border: 4px solid #c0392b;
+                border-radius: 15px;
                 background-color: #e74c3c;
                 color: white;
             }
@@ -289,28 +367,77 @@ class PlanTools(QWidget):
         # Plan Management Section
         plan_group = QGroupBox("Zarządzanie Planami")
         plan_layout = QVBoxLayout(plan_group)
-        
+
         self.edit_plans_btn = QPushButton("Edytuj Plany")
-        self.edit_plans_btn.setStyleSheet(self.button_style)
+        self.edit_plans_btn.setStyleSheet("""
+            QPushButton {
+                min-height: 70px;
+                font-size: 20px;
+                padding: 20px 30px;
+                font-weight: bold;
+                border: 3px solid #2c3e50;
+                border-radius: 12px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+            QPushButton:disabled {
+                background-color: #f5f6f7;
+                border-color: #bdc3c7;
+                color: #95a5a6;
+            }
+        """)
         plan_layout.addWidget(self.edit_plans_btn)
-        
+
         layout.addWidget(plan_group)
-        
+
         # Manual Control Section
         manual_group = QGroupBox("Sterowanie Ręczne")
         manual_layout = QGridLayout(manual_group)
-        
+
         # Docking controls removed - not used
-        
-        # Movement controls
+
+        # Movement controls - LARGE for touch
+        arrow_button_style = """
+            QPushButton {
+                min-height: 80px;
+                min-width: 80px;
+                font-size: 32px;
+                font-weight: bold;
+                border: 3px solid #2c3e50;
+                border-radius: 12px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+            QPushButton:disabled {
+                background-color: #f5f6f7;
+                border-color: #bdc3c7;
+                color: #95a5a6;
+            }
+        """
+
         self.up_btn = QPushButton("↑")
         self.down_btn = QPushButton("↓")
         self.left_btn = QPushButton("←")
         self.right_btn = QPushButton("→")
-        
+
         for btn in [self.up_btn, self.down_btn, self.left_btn, self.right_btn]:
-            btn.setStyleSheet(self.button_style)
-            btn.setMinimumSize(40, 40)  # Smaller buttons
+            btn.setStyleSheet(arrow_button_style)
         
         manual_layout.addWidget(self.up_btn, 0, 1)
         manual_layout.addWidget(self.left_btn, 1, 0)
@@ -347,49 +474,50 @@ class PlanTools(QWidget):
         # Other connections - disconnect button removed
     
     def refresh_plans(self):
-        """Refresh the plan combo box with available plans"""
-        self.plan_combo.clear()
+        """Refresh the plan list widget with available plans"""
+        self.plan_list.clear()
         plan_names = self.plan_manager.get_plan_names()
-        self.plan_combo.addItems(plan_names)
-        
-        # Update action combo if current plan exists
+        self.plan_list.addItems(plan_names)
+
+        # Update action list if current plan exists
         if self.current_plan:
-            self.refresh_action_combo()
-    
-    def refresh_action_combo(self):
-        """Refresh the action combo box with current plan actions"""
-        self.action_combo.clear()
+            self.refresh_action_list()
+
+    def refresh_action_list(self):
+        """Refresh the action list widget with current plan actions"""
+        self.action_list.clear()
         if not self.current_plan:
             return
-        
+
         for i, action in enumerate(self.current_plan.actions):
             action_name = action.name
             # Add (rev) for reversed route actions
             if action.action_type == ActionType.ROUTE and action.parameters.get('reverse', False):
                 action_name = f"{action.name} (rev)"
-            
+
             action_text = f"{i+1}. {action.action_type.value.replace('_', ' ').title()}: {action_name}"
-            self.action_combo.addItem(action_text)
+            self.action_list.addItem(action_text)
     
     def choose_plan(self):
         """Choose the selected plan as current"""
-        plan_name = self.plan_combo.currentText()
-        if not plan_name:
+        current_item = self.plan_list.currentItem()
+        if not current_item:
             QMessageBox.warning(self, "Ostrzeżenie", "Proszę najpierw wybrać plan!")
             return
-        
+
+        plan_name = current_item.text()
         success = self.plan_manager.set_current_plan(plan_name)
         if success:
             self.current_plan = self.plan_manager.get_current_plan()
-            self.refresh_action_combo()
-            
+            self.refresh_action_list()
+
             # Load the plan's map to robot if specified
             if self.current_plan.map_name:
                 self.map_selected.emit(self.current_plan.map_name)
-            
+
             # Emit plan selected signal for status updates
             self.plan_selected.emit(plan_name)
-            
+
             QMessageBox.information(self, "Sukces", f"Plan '{plan_name}' został wybrany!")
         else:
             QMessageBox.warning(self, "Błąd", f"Nie udało się wybrać planu '{plan_name}'!")
@@ -429,20 +557,20 @@ class PlanTools(QWidget):
         if not self.current_plan:
             QMessageBox.warning(self, "Ostrzeżenie", "Nie wybrano planu!")
             return
-        
-        action_index = self.action_combo.currentIndex()
+
+        action_index = self.action_list.currentRow()
         if action_index < 0:
             QMessageBox.warning(self, "Ostrzeżenie", "Nie wybrano akcji!")
             return
-        
+
         # Set execution state like start button
         self.is_executing = True
         self.start_btn.setEnabled(False)
         # Stop button always stays enabled as precaution
-        
+
         # Check if next action is wait_for_signal
         self._check_next_action_is_wait_signal()
-        
+
         self.current_plan.set_current_action(action_index)
         self.execute_action.emit(self.current_plan.name, action_index)
     
