@@ -161,8 +161,11 @@ class PlanActiveView(QWidget):
         battery_layout.addWidget(self.battery_status_display)
 
         # Map Cell (bottom row, full width) - LARGE for 1920x1080
+        from PyQt5.QtWidgets import QSizePolicy
         plan_map_frame = QWidget()
-        plan_map_frame.setMinimumSize(600, 200)
+        plan_map_frame.setMinimumSize(400, 200)  # Reduced minimum to allow flexibility
+        # Set size policy to expand and fill available space
+        plan_map_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         plan_map_frame.setStyleSheet("""
             QWidget {
                 border: 4px solid #bdc3c7;
@@ -192,12 +195,75 @@ class PlanActiveView(QWidget):
         # Add the mini map view directly
         plan_map_layout.addWidget(self.mini_map_view)
 
-        # Add cells to grid with new layout:
-        # Row 0: Robot status (left) and Battery status (right) - equal width
-        # Row 1: Map (full width)
+        # Velocity Status Cell (compact, to the right of map)
+        self.velocity_status_frame = QWidget()
+        self.velocity_status_frame.setMinimumSize(120, 200)  # Very compact width
+        self.velocity_status_frame.setMaximumWidth(140)  # Cap the width tightly
+        self.velocity_status_frame.setStyleSheet("""
+            QWidget {
+                border: 4px solid #bdc3c7;
+                border-radius: 12px;
+                background-color: white;
+                padding: 10px;
+            }
+        """)
+        velocity_layout = QVBoxLayout(self.velocity_status_frame)
+        velocity_layout.setContentsMargins(10, 15, 10, 15)
+        velocity_layout.setSpacing(8)
+
+        velocity_title = QLabel("VEL")
+        velocity_title.setAlignment(Qt.AlignCenter)
+        velocity_title.setStyleSheet("""
+            QLabel {
+                font-size: 24px;
+                font-weight: bold;
+                color: #2c3e50;
+                background: none;
+                border: none;
+            }
+        """)
+        velocity_layout.addWidget(velocity_title)
+
+        self.velocity_status_display = QLabel("0.00")
+        self.velocity_status_display.setAlignment(Qt.AlignCenter)
+        self.velocity_status_display.setStyleSheet("""
+            QLabel {
+                font-size: 42px;
+                color: #2c3e50;
+                background: none;
+                border: none;
+                font-weight: bold;
+            }
+        """)
+        velocity_layout.addWidget(self.velocity_status_display)
+
+        # Unit label
+        velocity_unit = QLabel("m/s")
+        velocity_unit.setAlignment(Qt.AlignCenter)
+        velocity_unit.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                color: #7f8c8d;
+                background: none;
+                border: none;
+            }
+        """)
+        velocity_layout.addWidget(velocity_unit)
+
+        # Add cells to grid with new layout using 3 columns:
+        # Row 0: Robot status (col 0) and Battery status (col 1-2, spanning)
+        # Row 1: Map (col 0-1, spanning), Velocity (col 2, narrow)
         grid_layout.addWidget(self.robot_status_frame, 0, 0, 1, 1)  # Top left
-        grid_layout.addWidget(self.battery_status_frame, 0, 1, 1, 1)  # Top right
-        grid_layout.addWidget(plan_map_frame, 1, 0, 1, 2)  # Bottom, spanning 2 columns
+        grid_layout.addWidget(self.battery_status_frame, 0, 1, 1, 2)  # Top right, spanning 2 columns
+        grid_layout.addWidget(plan_map_frame, 1, 0, 1, 2)  # Bottom left, spanning 2 columns (map - wide)
+        grid_layout.addWidget(self.velocity_status_frame, 1, 2, 1, 1)  # Bottom right column 2 (velocity - narrow)
+
+        # Set column stretch:
+        # Columns 0 and 1 stretch equally (for robot status and map)
+        # Column 2 is just for velocity (minimum width only)
+        grid_layout.setColumnStretch(0, 1)  # Left column (robot status / left part of map)
+        grid_layout.setColumnStretch(1, 1)  # Middle column (right part of battery / right part of map)
+        grid_layout.setColumnStretch(2, 0)  # Right column (velocity only, no stretch)
 
         # Add both grid and full map directly to stacked widget
         self.left_stacked_widget.addWidget(self.grid_widget)  # Index 0 - Active mode (grid with mini map)
@@ -388,7 +454,7 @@ class PlanActiveView(QWidget):
         # Update the text
         if hasattr(self, 'battery_status_display'):
             self.battery_status_display.setText(status_string)
-        
+
         # Update the battery status frame background color based on percentage
         if hasattr(self, 'battery_status_frame'):
             if percentage <= 10:
@@ -403,7 +469,7 @@ class PlanActiveView(QWidget):
                 # Normal light gray background
                 bg_color = '#f7f9fc'
                 border_color = '#bdc3c7'
-            
+
             # Update the frame style with new background color
             self.battery_status_frame.setStyleSheet(f'''
                 QWidget {{
@@ -413,6 +479,11 @@ class PlanActiveView(QWidget):
                     padding: 20px;
                 }}
             ''')
+
+    def update_velocity(self, velocity: float):
+        """Update velocity display with current linear velocity in m/s"""
+        if hasattr(self, 'velocity_status_display'):
+            self.velocity_status_display.setText(f"{velocity:.2f}")
 
     def set_plan_status(self, status: str):
         """Update the plan status display"""

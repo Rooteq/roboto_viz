@@ -526,7 +526,13 @@ class PlanActiveState(State):
             self.gui.gui_manager.battery_percentage_update,
             lambda percentage, status_string: self.gui.main_view.plan_active_view.update_battery_status(percentage, status_string)
         )
-        
+
+        # Velocity updates
+        self.connect_and_store_connections(
+            self.gui.gui_manager.velocity_update,
+            lambda velocity: self.gui.main_view.plan_active_view.update_velocity(velocity)
+        )
+
         # CAN status forwarding connections
         self.setup_can_status_forwarding()
         

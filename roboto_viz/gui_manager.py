@@ -68,8 +68,13 @@ class ManagerNode(LifecycleNode):
 
         self.pose_subscriber = None
         self.collision_subscriber = None
+        self.cmd_vel_subscriber = None
         self.init_pose_pub = None
         self.cmd_vel_pub = None
+
+        # Velocity tracking for 3Hz updates
+        self.last_velocity = 0.0
+        self.velocity_update_timer = None
 
         # Docking action clients
         self.dock_action_client = None
@@ -77,13 +82,14 @@ class ManagerNode(LifecycleNode):
         self.current_dock_goal_handle = None
         self.current_undock_goal_handle = None
         
-        #CALLBACKS: 
+        #CALLBACKS:
         self.service_availability_callback = None
         self.listener_pose_callback = None
         self.disconnect_callback = None
         self.connect_callback = None
         self.docking_status_callback = None
         self.collision_detection_callback = None
+        self.velocity_update_callback = None
 
         #INTERNAL STATES:
         self.srv_available: bool = False
@@ -172,6 +178,20 @@ class ManagerNode(LifecycleNode):
             )
             self.get_logger().info("Created collision detector subscriber")
 
+        if self.cmd_vel_subscriber is None:
+            self.cmd_vel_subscriber = self.create_subscription(
+                Twist,
+                '/cmd_vel',
+                self.cmd_vel_callback,
+                10
+            )
+            self.get_logger().info("Created cmd_vel subscriber")
+
+        # Create 3Hz velocity update timer
+        if self.velocity_update_timer is None:
+            self.velocity_update_timer = self.create_timer(0.333, self.publish_velocity_update)
+            self.get_logger().info("Created velocity update timer (3Hz)")
+
         if self.init_pose_pub is None:
             self.init_pose_pub = self.create_lifecycle_publisher(
                 PoseWithCovarianceStamped,
@@ -212,6 +232,16 @@ class ManagerNode(LifecycleNode):
             self.destroy_subscription(self.collision_subscriber)
             self.collision_subscriber = None
             self.get_logger().info("Destroyed collision detector subscriber")
+
+        if self.cmd_vel_subscriber is not None:
+            self.destroy_subscription(self.cmd_vel_subscriber)
+            self.cmd_vel_subscriber = None
+            self.get_logger().info("Destroyed cmd_vel subscriber")
+
+        if self.velocity_update_timer is not None:
+            self.destroy_timer(self.velocity_update_timer)
+            self.velocity_update_timer = None
+            self.get_logger().info("Destroyed velocity update timer")
 
         if self.init_pose_pub is not None:
             self.destroy_lifecycle_publisher(self.init_pose_pub)
@@ -258,6 +288,15 @@ class ManagerNode(LifecycleNode):
 
     def pose_callback(self, msg: TwistStamped):
         self.listener_pose_callback(msg)
+
+    def cmd_vel_callback(self, msg: Twist):
+        """Callback for /cmd_vel topic - stores the current linear velocity"""
+        self.last_velocity = abs(msg.linear.x)  # Use absolute value for speed
+
+    def publish_velocity_update(self):
+        """Timer callback to publish velocity updates at 3Hz"""
+        if self.velocity_update_callback:
+            self.velocity_update_callback(self.last_velocity)
 
 
     def publish_cmd_vel(self):
@@ -816,14 +855,17 @@ class Navigator(QThread):
 class GuiManager(QThread):
     manualStatus = pyqtSignal(str)
     dockingStatus = pyqtSignal(str)
-    
+
     # Additional status signals for CAN forwarding
-    robotStatusCAN = pyqtSignal(str)  # For robot status updates 
+    robotStatusCAN = pyqtSignal(str)  # For robot status updates
     batteryStatusCAN = pyqtSignal(str)  # For battery status updates
     planStatusCAN = pyqtSignal(str)  # For plan status updates
 
     service_response = pyqtSignal(bool)
     update_pose = pyqtSignal(float, float, float)
+
+    # Velocity update signal
+    velocity_update = pyqtSignal(float)  # Linear velocity in m/s
     
     # Battery ADC value signal
     battery_adc_update = pyqtSignal(int)  # Raw ADC value (0-1023)
@@ -1108,11 +1150,12 @@ class GuiManager(QThread):
         self.executor.add_node(self.node)
 
         self.node.service_availability_callback = self.emit_service_availability
-        self.node.listener_pose_callback = self.emit_pose 
+        self.node.listener_pose_callback = self.emit_pose
         self.node.disconnect_callback = self.emit_disconnect_call
         self.node.connect_callback = self.emit_connect_call
         self.node.docking_status_callback = self.emit_docking_status
         self.node.collision_detection_callback = self.emit_collision_detection
+        self.node.velocity_update_callback = self.emit_velocity_update
 
         self.executor.spin()
 
@@ -1147,6 +1190,10 @@ class GuiManager(QThread):
     def emit_collision_detection(self, collision_detected: bool):
         """Emit collision detection status"""
         self.collision_detected.emit(collision_detected)
+
+    def emit_velocity_update(self, velocity: float):
+        """Emit velocity update signal"""
+        self.velocity_update.emit(velocity)
 
     @pyqtSlot(str, bool, float, float)
     def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):
