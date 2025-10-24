@@ -349,6 +349,16 @@ class PlanActiveView(QWidget):
     def handle_map_selected(self, map_name: str):
         """Handle map selection request"""
         self.map_load_requested.emit(map_name)
+
+        # Load collision zones on minimap when map is selected
+        from pathlib import Path
+        maps_dir = Path.home() / ".robotroutes" / "maps"
+        map_path = maps_dir / f"{map_name}.pgm"
+        if not map_path.exists():
+            map_path = maps_dir / f"{map_name}.png"
+
+        if map_path.exists():
+            self.mini_map_view.load_collision_zones(str(map_path))
     
     def on_plan_selected(self, plan_name: str):
         """Handle plan selection and update status"""
@@ -360,7 +370,8 @@ class PlanActiveView(QWidget):
         if self.plan_editor is None:
             self.plan_editor = PlanEditor(self.plan_manager, self.route_manager, self.dock_manager)
             self.plan_editor.plan_updated.connect(self.on_plan_updated)
-        
+            self.plan_editor.collision_zones_updated.connect(self.on_collision_zones_updated)
+
         self.plan_editor.show()
         self.plan_editor.raise_()
         self.plan_editor.activateWindow()
@@ -370,6 +381,21 @@ class PlanActiveView(QWidget):
         """Handle plan update from editor"""
         # Refresh the plan tools to show updated plans
         self.plan_tools.refresh_plans()
+
+    @pyqtSlot(str)
+    def on_collision_zones_updated(self, map_name: str):
+        """Handle collision zones update from plan editor - reload minimap collision zones"""
+        from pathlib import Path
+        maps_dir = Path.home() / ".robotroutes" / "maps"
+
+        # Find the original map file (non-collision prefixed)
+        map_path = maps_dir / f"{map_name}.pgm"
+        if not map_path.exists():
+            map_path = maps_dir / f"{map_name}.png"
+
+        if map_path.exists():
+            # Reload collision zones on minimap
+            self.mini_map_view.load_collision_zones(str(map_path))
     
     @pyqtSlot(float, float, float)
     def update_robot_pose(self, x: float, y: float, theta: float):
@@ -578,3 +604,26 @@ class PlanActiveView(QWidget):
     def clear_mini_map_route(self):
         """Clear route from mini map"""
         self.mini_map_view.clear_route()
+
+    def load_current_map_collision_zones(self):
+        """Load collision zones for the current map onto the minimap"""
+        if not self.route_manager.current_map:
+            return
+
+        from pathlib import Path
+        maps_dir = Path.home() / ".robotroutes" / "maps"
+        map_name = self.route_manager.current_map
+
+        # Find the original map file (non-collision prefixed)
+        map_path = maps_dir / f"{map_name}.pgm"
+        if not map_path.exists():
+            map_path = maps_dir / f"{map_name}.png"
+
+        if map_path.exists():
+            self.mini_map_view.load_collision_zones(str(map_path))
+
+    def showEvent(self, event):
+        """Called when the widget is shown"""
+        super().showEvent(event)
+        # Load collision zones whenever the view is shown
+        self.load_current_map_collision_zones()

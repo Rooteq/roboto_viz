@@ -144,6 +144,7 @@ class DockSelectionDialog(QDialog):
 class PlanEditor(QMainWindow):
     plan_selected = pyqtSignal(str)  # plan_name
     plan_updated = pyqtSignal()
+    collision_zones_updated = pyqtSignal(str)  # map_name - emit when collision zones are updated
     
     def __init__(self, plan_manager: PlanManager, route_manager: RouteManager, dock_manager: DockManager):
         super().__init__()
@@ -1510,7 +1511,6 @@ class PlanEditor(QMainWindow):
 
     def on_collision_zone_updated(self):
         """Handle collision zone updates during editing"""
-        print(f"DEBUG: on_collision_zone_updated called")
         # Reload collision_ prefixed map to show updated collision zones
         if self.collision_zone_editor and self.collision_zone_editor.map_name:
             from pathlib import Path
@@ -1522,15 +1522,14 @@ class PlanEditor(QMainWindow):
                 collision_map_path = maps_dir / f"collision_{map_name}.pgm"
             collision_yaml_path = maps_dir / f"collision_{map_name}.yaml"
 
-            print(f"DEBUG: Reloading collision map: {collision_map_path}")
             try:
                 import yaml
 
                 with open(collision_yaml_path, 'r') as file:
                     yaml_data = yaml.safe_load(file)
                 self.map_view.load_image(str(collision_map_path), yaml_data['origin'], yaml_data.get('resolution'))
-                print(f"DEBUG: Successfully reloaded collision map")
+
+                # Emit signal to update minimap
+                self.collision_zones_updated.emit(map_name)
             except Exception as e:
                 print(f"Error reloading collision map: {e}")
-        else:
-            print(f"DEBUG: No map name available for reload")

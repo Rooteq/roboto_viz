@@ -186,7 +186,6 @@ class MiniMapView(QGraphicsView):
             collision_map_path = map_path.parent / f"collision_{map_name}.pgm"
 
         if collision_map_path.exists():
-            print(f"DEBUG: MiniMapView loading collision zones from {collision_map_path}")
             # Load collision map
             collision_pixmap = QPixmap(str(collision_map_path))
 
@@ -203,9 +202,6 @@ class MiniMapView(QGraphicsView):
             self.collision_zones_item = self.scene.addPixmap(transparent_pixmap)
             self.collision_zones_item.setPos(0, 0)
             self.collision_zones_item.setZValue(0)  # Above map, below robot
-            print(f"DEBUG: MiniMapView displayed collision zones overlay")
-        else:
-            print(f"DEBUG: MiniMapView - no collision zones found at {collision_map_path}")
 
     def resizeEvent(self, event):
         """Handle resize events by re-centering on robot"""

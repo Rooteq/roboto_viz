@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QComboBox, QGroupBox,
-                             QMessageBox, QButtonGroup, QInputDialog, QListWidget)
+                             QMessageBox, QButtonGroup, QInputDialog, QListWidget,
+                             QCheckBox)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QBrush, QColor, QFont
 from pathlib import Path
@@ -13,16 +14,21 @@ import json
 class CollisionZone:
     """Represents a collision zone with its polygon points"""
 
-    def __init__(self, zone_id: int, polygon_points: str, color: QColor):
+    def __init__(self, zone_id: int, polygon_points: str, color: QColor,
+                 use_polygon_slow: bool = True, use_polygon_stop: bool = False):
         self.zone_id = zone_id
         self.polygon_points = polygon_points  # String like "[[0.4, 0.4], [0.4, -0.4], [-0.4, -0.4], [-0.4, 0.4]]"
         self.color = color
+        self.use_polygon_slow = use_polygon_slow
+        self.use_polygon_stop = use_polygon_stop
 
     def to_dict(self):
         return {
             'zone_id': self.zone_id,
             'polygon_points': self.polygon_points,
-            'color': [self.color.red(), self.color.green(), self.color.blue()]
+            'color': [self.color.red(), self.color.green(), self.color.blue()],
+            'use_polygon_slow': self.use_polygon_slow,
+            'use_polygon_stop': self.use_polygon_stop
         }
 
     @staticmethod
@@ -30,7 +36,9 @@ class CollisionZone:
         zone = CollisionZone(
             zone_id=data['zone_id'],
             polygon_points=data['polygon_points'],
-            color=QColor(data['color'][0], data['color'][1], data['color'][2])
+            color=QColor(data['color'][0], data['color'][1], data['color'][2]),
+            use_polygon_slow=data.get('use_polygon_slow', True),  # Default to True for backward compatibility
+            use_polygon_stop=data.get('use_polygon_stop', False)
         )
         return zone
 
@@ -249,15 +257,55 @@ class CollisionZoneEditor(QWidget):
 
     def add_new_zone(self):
         """Add a new collision zone"""
-        # Ask user for polygon points
-        text, ok = QInputDialog.getText(
-            self,
-            'Nowa Strefa Kolizji',
-            'Wprowadź punkty wielokąta (format: [[0.4, 0.4], [0.4, -0.4], [-0.4, -0.4], [-0.4, 0.4]]):',
-            text='[[0.4, 0.4], [0.4, -0.4], [-0.4, -0.4], [-0.4, 0.4]]'
-        )
+        # Create custom dialog with checkboxes
+        from PyQt5.QtWidgets import QDialog, QTextEdit
 
-        if not ok or not text:
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Nowa Strefa Kolizji')
+        dialog_layout = QVBoxLayout(dialog)
+
+        # Polygon points input
+        label = QLabel('Wprowadź punkty wielokąta:')
+        dialog_layout.addWidget(label)
+
+        text_edit = QTextEdit()
+        text_edit.setPlainText('[[0.4, 0.4], [0.4, -0.4], [-0.4, -0.4], [-0.4, 0.4]]')
+        text_edit.setMaximumHeight(80)
+        dialog_layout.addWidget(text_edit)
+
+        # Polygon type checkboxes
+        type_label = QLabel('Wybierz typ wielokąta (możesz zaznaczyć oba):')
+        dialog_layout.addWidget(type_label)
+
+        slow_checkbox = QCheckBox('PolygonSlow (spowolnienie)')
+        slow_checkbox.setChecked(True)  # Default checked
+        dialog_layout.addWidget(slow_checkbox)
+
+        stop_checkbox = QCheckBox('PolygonStop (zatrzymanie)')
+        stop_checkbox.setChecked(False)
+        dialog_layout.addWidget(stop_checkbox)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton('OK')
+        cancel_button = QPushButton('Anuluj')
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        dialog_layout.addLayout(button_layout)
+
+        ok_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        text = text_edit.toPlainText().strip()
+        use_polygon_slow = slow_checkbox.isChecked()
+        use_polygon_stop = stop_checkbox.isChecked()
+
+        # Validate at least one polygon type is selected
+        if not use_polygon_slow and not use_polygon_stop:
+            QMessageBox.warning(self, "Błąd", "Musisz wybrać co najmniej jeden typ wielokąta!")
             return
 
         # Validate the input
@@ -279,7 +327,7 @@ class CollisionZoneEditor(QWidget):
         # Get color for this zone (cycle through available colors)
         color = self.zone_colors[(zone_id - 1) % len(self.zone_colors)]
 
-        zone = CollisionZone(zone_id, text, color)
+        zone = CollisionZone(zone_id, text, color, use_polygon_slow, use_polygon_stop)
         self.zones[zone_id] = zone
 
         # Select this zone as current
@@ -288,7 +336,14 @@ class CollisionZoneEditor(QWidget):
         # Update the zones list
         self.refresh_zones_list()
 
-        QMessageBox.information(self, "Sukces", f"Dodano nową strefę kolizji (ID: {zone_id})")
+        polygon_types = []
+        if use_polygon_slow:
+            polygon_types.append("Slow")
+        if use_polygon_stop:
+            polygon_types.append("Stop")
+        types_str = " + ".join(polygon_types)
+
+        QMessageBox.information(self, "Sukces", f"Dodano nową strefę kolizji (ID: {zone_id}, Typ: {types_str})")
 
     def refresh_zones_list(self):
         """Refresh the zones list display"""

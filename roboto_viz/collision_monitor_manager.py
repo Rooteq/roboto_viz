@@ -10,15 +10,20 @@ from pathlib import Path
 import json
 from typing import Optional, Dict, List, Tuple
 from rclpy.node import Node
+import threading
 
 
 class CollisionZone:
     """Represents a collision zone with polygon points and painted regions"""
 
-    def __init__(self, zone_id: int, polygon_points: str, color: List[int], painted_pixels: set = None):
+    def __init__(self, zone_id: int, polygon_points: str, color: List[int],
+                 use_polygon_slow: bool = True, use_polygon_stop: bool = False,
+                 painted_pixels: set = None):
         self.zone_id = zone_id
         self.polygon_points = polygon_points
         self.color = tuple(color)  # RGB tuple
+        self.use_polygon_slow = use_polygon_slow
+        self.use_polygon_stop = use_polygon_stop
         self.painted_pixels = painted_pixels or set()  # Set of (x, y) pixel coordinates for O(1) lookup
 
     def contains_pixel(self, pixel_x: int, pixel_y: int) -> bool:
@@ -50,10 +55,11 @@ class CollisionMonitorManager(QObject):
     collision_zone_cleared = pyqtSignal()  # Emits when robot exits all zones
 
     # ========================================================================
-    # DEFAULT COLLISION POLYGON - CHANGE THIS VALUE AS NEEDED
-    # This is the default polygon that will be used when the robot exits all zones
+    # DEFAULT COLLISION POLYGONS - CHANGE THESE VALUES AS NEEDED
+    # These are the default polygons that will be used when the robot exits zones
     # ========================================================================
-    DEFAULT_POLYGON_POINTS = "[[0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5]]"
+    DEFAULT_POLYGON_SLOW_POINTS = "[[0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5]]"
+    DEFAULT_POLYGON_STOP_POINTS = "[[0.3, 0.3], [0.3, -0.3], [-0.3, -0.3], [-0.3, 0.3]]"
 
     def __init__(self, node: Node, parent=None):
         super().__init__(parent)
@@ -66,6 +72,10 @@ class CollisionMonitorManager(QObject):
         self.map_resolution = None
         self.enabled = False
         self.initial_check_done = False  # Track if we've done initial zone check
+
+        # Track which polygon types are currently modified (not at default)
+        self.slow_polygon_active = False  # True if PolygonSlow is set to non-default
+        self.stop_polygon_active = False  # True if PolygonStop is set to non-default
 
         # Timer to check robot position periodically
         self.check_timer = QTimer()
@@ -128,7 +138,9 @@ class CollisionMonitorManager(QObject):
                 zone = CollisionZone(
                     zone_id=zone_id,
                     polygon_points=zone_data['polygon_points'],
-                    color=zone_data['color']
+                    color=zone_data['color'],
+                    use_polygon_slow=zone_data.get('use_polygon_slow', True),
+                    use_polygon_stop=zone_data.get('use_polygon_stop', False)
                 )
                 # Load painted pixels for this zone
                 zone.load_painted_pixels_from_image(self.collision_mask_pixmap)
@@ -232,16 +244,45 @@ class CollisionMonitorManager(QObject):
         zone = self.zones[zone_id]
         polygon_points = zone.polygon_points
 
+        # Build list of polygon types to set
+        polygon_types = []
+        if zone.use_polygon_slow:
+            polygon_types.append("PolygonSlow")
+        if zone.use_polygon_stop:
+            polygon_types.append("PolygonStop")
+
         print(f"\n{'='*70}")
         print(f"ROBOT ENTERED COLLISION ZONE {zone_id}")
         print(f"{'='*70}")
         print(f"Robot world position: ({self.robot_x:.3f}, {self.robot_y:.3f})")
         print(f"Robot pixel position: ({pixel_x}, {pixel_y})")
+        print(f"Polygon types: {' + '.join(polygon_types)}")
         print(f"Setting polygon points: {polygon_points}")
         print(f"{'='*70}\n")
 
-        # Set the collision monitor parameter
-        self.set_collision_polygon(polygon_points)
+        # Handle PolygonSlow transition
+        if zone.use_polygon_slow:
+            # This zone modifies PolygonSlow - set it
+            self.set_collision_polygon(polygon_points, "PolygonSlow")
+            self.slow_polygon_active = True
+        else:
+            # This zone doesn't modify PolygonSlow
+            # If it was previously modified, restore to default
+            if self.slow_polygon_active:
+                self.set_collision_polygon(self.DEFAULT_POLYGON_SLOW_POINTS, "PolygonSlow")
+                self.slow_polygon_active = False
+
+        # Handle PolygonStop transition
+        if zone.use_polygon_stop:
+            # This zone modifies PolygonStop - set it
+            self.set_collision_polygon(polygon_points, "PolygonStop")
+            self.stop_polygon_active = True
+        else:
+            # This zone doesn't modify PolygonStop
+            # If it was previously modified, restore to default
+            if self.stop_polygon_active:
+                self.set_collision_polygon(self.DEFAULT_POLYGON_STOP_POINTS, "PolygonStop")
+                self.stop_polygon_active = False
 
         # Emit signal
         self.collision_zone_changed.emit(zone_id)
@@ -252,35 +293,53 @@ class CollisionMonitorManager(QObject):
         print(f"ROBOT EXITED ALL COLLISION ZONES")
         print(f"{'='*70}")
         print(f"Robot position: world=({self.robot_x:.3f}, {self.robot_y:.3f})")
-        print(f"Restoring default polygon points: {self.DEFAULT_POLYGON_POINTS}")
-        print(f"{'='*70}\n")
 
-        # Restore default polygon points
-        self.set_collision_polygon(self.DEFAULT_POLYGON_POINTS)
+        # Restore polygons that were modified
+        if self.slow_polygon_active:
+            print(f"Restoring PolygonSlow to default: {self.DEFAULT_POLYGON_SLOW_POINTS}")
+            self.set_collision_polygon(self.DEFAULT_POLYGON_SLOW_POINTS, "PolygonSlow")
+            self.slow_polygon_active = False
+
+        if self.stop_polygon_active:
+            print(f"Restoring PolygonStop to default: {self.DEFAULT_POLYGON_STOP_POINTS}")
+            self.set_collision_polygon(self.DEFAULT_POLYGON_STOP_POINTS, "PolygonStop")
+            self.stop_polygon_active = False
+
+        print(f"{'='*70}\n")
 
         # Emit signal
         self.collision_zone_cleared.emit()
 
-    def set_collision_polygon(self, polygon_points: str):
-        """Set the collision monitor polygon parameter via ROS2 CLI"""
+    def set_collision_polygon(self, polygon_points: str, polygon_type: str = "PolygonSlow"):
+        """Set the collision monitor polygon parameter via ROS2 CLI in background thread"""
+        # Run in background thread to prevent GUI freezing
+        thread = threading.Thread(
+            target=self._set_collision_polygon_thread,
+            args=(polygon_points, polygon_type),
+            daemon=True
+        )
+        thread.start()
+
+    def _set_collision_polygon_thread(self, polygon_points: str, polygon_type: str):
+        """Background thread function to set collision polygon parameter"""
         try:
             import subprocess
 
             cmd = [
                 'ros2', 'param', 'set',
                 '/collision_monitor',
-                'PolygonSlow.points',
+                f'{polygon_type}.points',
                 polygon_points
             ]
 
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
 
             if result.returncode == 0:
-                print(f"✓ Successfully set collision polygon parameter")
+                print(f"✓ Successfully set {polygon_type} polygon parameter")
                 if result.stdout and result.stdout.strip():
                     print(f"  ROS2 response: {result.stdout.strip()}")
             else:
-                print(f"✗ Failed to set collision polygon parameter!")
+                print(f"✗ Failed to set {polygon_type} polygon parameter!")
                 print(f"  Error: {result.stderr}")
 
         except subprocess.TimeoutExpired:
