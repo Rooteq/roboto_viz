@@ -130,7 +130,11 @@ class MapView(QGraphicsView):
         self.speed_zone_editing_mode = False
         self.speed_zone_editor = None
         self.last_draw_position = None
-        
+
+        # Collision zone editing variables
+        self.collision_zone_editing_mode = False
+        self.collision_zone_editor = None
+
         # Grid overlay variables
         self.grid_items = []
         self.map_resolution = None  # meters per pixel
@@ -272,13 +276,21 @@ class MapView(QGraphicsView):
             return
             
         # Handle speed zone editing mode first
-        if (event.button() == Qt.LeftButton and self.speed_zone_editing_mode and 
-            not self.left_pan_mode and self.speed_zone_editor and 
+        if (event.button() == Qt.LeftButton and self.speed_zone_editing_mode and
+            not self.left_pan_mode and self.speed_zone_editor and
             self.speed_zone_editor.drawing_enabled):
             scene_pos = self.mapToScene(event.pos())
             self.speed_zone_editor.start_box_drawing(scene_pos.x(), scene_pos.y())
             return
-        
+
+        # Handle collision zone editing mode
+        if (event.button() == Qt.LeftButton and self.collision_zone_editing_mode and
+            not self.left_pan_mode and self.collision_zone_editor and
+            self.collision_zone_editor.drawing_enabled):
+            scene_pos = self.mapToScene(event.pos())
+            self.collision_zone_editor.start_box_drawing(scene_pos.x(), scene_pos.y())
+            return
+
         # Handle dock placement mode first (independent of drawing mode)
         if event.button() == Qt.LeftButton and self.dock_placement_mode and not self.left_pan_mode:
             scene_pos = self.mapToScene(event.pos())
@@ -335,12 +347,19 @@ class MapView(QGraphicsView):
             return
             
         # Handle speed zone editing mode for box dragging
-        if (self.speed_zone_editing_mode and self.speed_zone_editor and 
+        if (self.speed_zone_editing_mode and self.speed_zone_editor and
             self.speed_zone_editor.drawing_enabled and self.speed_zone_editor.drawing_box):
             scene_pos = self.mapToScene(event.pos())
             self.speed_zone_editor.update_box_drawing(scene_pos.x(), scene_pos.y())
             return
-        
+
+        # Handle collision zone editing mode for box dragging
+        if (self.collision_zone_editing_mode and self.collision_zone_editor and
+            self.collision_zone_editor.drawing_enabled and self.collision_zone_editor.drawing_box):
+            scene_pos = self.mapToScene(event.pos())
+            self.collision_zone_editor.update_box_drawing(scene_pos.x(), scene_pos.y())
+            return
+
         # In editing mode, allow item dragging to work properly
         if self.editing_mode:
             super().mouseMoveEvent(event)
@@ -371,12 +390,19 @@ class MapView(QGraphicsView):
             return
             
         # Handle speed zone editing mode
-        if (event.button() == Qt.LeftButton and self.speed_zone_editing_mode and 
+        if (event.button() == Qt.LeftButton and self.speed_zone_editing_mode and
             self.speed_zone_editor and self.speed_zone_editor.drawing_enabled):
             scene_pos = self.mapToScene(event.pos())
             self.speed_zone_editor.finish_box_drawing(scene_pos.x(), scene_pos.y())
             return
-        
+
+        # Handle collision zone editing mode
+        if (event.button() == Qt.LeftButton and self.collision_zone_editing_mode and
+            self.collision_zone_editor and self.collision_zone_editor.drawing_enabled):
+            scene_pos = self.mapToScene(event.pos())
+            self.collision_zone_editor.finish_box_drawing(scene_pos.x(), scene_pos.y())
+            return
+
         # In editing mode, let items handle the release event
         if self.editing_mode:
             super().mouseReleaseEvent(event)
@@ -800,18 +826,41 @@ class MapView(QGraphicsView):
     def stop_speed_zone_editing(self):
         """Stop speed zone editing mode"""
         print(f"DEBUG: Stopping speed zone editing mode")
-        
+
         # Cancel any ongoing box drawing
         if self.speed_zone_editor and self.speed_zone_editor.drawing_box:
             self.speed_zone_editor.cancel_box_drawing()
-        
+
         # Clear all speed zone editing state
         self.speed_zone_editing_mode = False
         self.speed_zone_editor = None
         self.last_draw_position = None
         self.enable_drawing = False
-        
+
         print(f"DEBUG: Speed zone editing mode stopped")
+
+    # Collision zone editing methods
+    def start_collision_zone_editing(self, collision_zone_editor):
+        """Start collision zone editing mode"""
+        self.collision_zone_editing_mode = True
+        self.collision_zone_editor = collision_zone_editor
+        self.enable_drawing = True
+        print(f"DEBUG: Started collision zone editing mode")
+
+    def stop_collision_zone_editing(self):
+        """Stop collision zone editing mode"""
+        print(f"DEBUG: Stopping collision zone editing mode")
+
+        # Cancel any ongoing box drawing
+        if self.collision_zone_editor and self.collision_zone_editor.drawing_box:
+            self.collision_zone_editor.cancel_box_drawing()
+
+        # Clear all collision zone editing state
+        self.collision_zone_editing_mode = False
+        self.collision_zone_editor = None
+        self.enable_drawing = False
+
+        print(f"DEBUG: Collision zone editing mode stopped")
         
     def reload_current_map(self):
         """Reload the current map image (for when speed zones are updated)"""

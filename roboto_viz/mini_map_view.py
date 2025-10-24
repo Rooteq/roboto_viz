@@ -1,9 +1,10 @@
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QPainter
+from PyQt5.QtGui import QPixmap, QPainter, QColor, QImage
 from roboto_viz.robot_item import RobotItem
 from roboto_viz.bezier_graphics import BezierRouteGraphics
 import math
+from pathlib import Path
 
 
 class MiniMapView(QGraphicsView):
@@ -47,6 +48,9 @@ class MiniMapView(QGraphicsView):
         # Bezier route graphics
         self.current_route_graphics = None
 
+        # Collision zones overlay
+        self.collision_zones_item = None
+
         # Styling
         self.setStyleSheet("""
             QGraphicsView {
@@ -74,6 +78,9 @@ class MiniMapView(QGraphicsView):
 
         # Update scene rectangle to match image
         self.scene.setSceneRect(self.pixmap.rect())
+
+        # Load and display collision zones if they exist
+        self.load_collision_zones(image_path)
 
         # Center on robot if available, otherwise center on map origin
         if self.robot_item.isVisible():
@@ -157,6 +164,48 @@ class MiniMapView(QGraphicsView):
         if self.current_route_graphics:
             self.current_route_graphics.clear_graphics()  # Use correct method name
             self.current_route_graphics = None
+
+    def load_collision_zones(self, image_path: str):
+        """Load and display collision zones as a transparent overlay"""
+        # Remove existing collision zones overlay
+        if self.collision_zones_item:
+            self.scene.removeItem(self.collision_zones_item)
+            self.collision_zones_item = None
+
+        # Try to find collision map for this map
+        map_path = Path(image_path)
+        map_name = map_path.stem  # Get filename without extension
+
+        # Check if this is already a collision_ or speed_ prefixed map
+        if map_name.startswith("collision_") or map_name.startswith("speed_"):
+            map_name = map_name.replace("collision_", "").replace("speed_", "")
+
+        # Try PNG first (color format), fallback to PGM
+        collision_map_path = map_path.parent / f"collision_{map_name}.png"
+        if not collision_map_path.exists():
+            collision_map_path = map_path.parent / f"collision_{map_name}.pgm"
+
+        if collision_map_path.exists():
+            print(f"DEBUG: MiniMapView loading collision zones from {collision_map_path}")
+            # Load collision map
+            collision_pixmap = QPixmap(str(collision_map_path))
+
+            # Make it semi-transparent (30% opacity)
+            transparent_pixmap = QPixmap(collision_pixmap.size())
+            transparent_pixmap.fill(Qt.transparent)
+
+            painter = QPainter(transparent_pixmap)
+            painter.setOpacity(0.3)  # 30% opacity
+            painter.drawPixmap(0, 0, collision_pixmap)
+            painter.end()
+
+            # Add to scene
+            self.collision_zones_item = self.scene.addPixmap(transparent_pixmap)
+            self.collision_zones_item.setPos(0, 0)
+            self.collision_zones_item.setZValue(0)  # Above map, below robot
+            print(f"DEBUG: MiniMapView displayed collision zones overlay")
+        else:
+            print(f"DEBUG: MiniMapView - no collision zones found at {collision_map_path}")
 
     def resizeEvent(self, event):
         """Handle resize events by re-centering on robot"""

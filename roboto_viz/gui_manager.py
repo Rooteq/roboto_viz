@@ -54,6 +54,7 @@ from roboto_viz.can_status_manager import CANStatusManager
 from roboto_viz.can_battery_receiver import CANBatteryReceiver
 from roboto_viz.can_signal_receiver import CANSignalReceiver
 from roboto_viz.music_player import MusicPlayer
+from roboto_viz.collision_monitor_manager import CollisionMonitorManager
 
 class LState(Enum):
     UNCONFIGURED = 0
@@ -99,6 +100,9 @@ class ManagerNode(LifecycleNode):
 
         self._current_state: LState = LState.UNCONFIGURED
         self._current_state = LState.UNCONFIGURED
+
+        # Collision monitor manager (initialized but not started yet)
+        self.collision_monitor_manager = None
 
         self.check_service_timer = self.create_timer(1.0, self.check_service_availability)
         self.get_logger().info("Initialized Lifecycle node!")
@@ -1055,8 +1059,51 @@ class GuiManager(QThread):
             print(f"Failed to load map '{map_name}' into nav2: {error_msg}")
             self.manualStatus.emit(f"Nie udało się załadować mapy '{map_name}': {error_msg}")
 
+        # Initialize/update collision monitor manager for this map
+        self._setup_collision_monitor(map_name)
+
         self.send_routes()  # Send updated routes for new map
-        
+
+    def _setup_collision_monitor(self, map_name: str):
+        """Setup collision monitor manager for the current map"""
+        from pathlib import Path
+        import yaml
+
+        try:
+            maps_dir = Path.home() / ".robotroutes" / "maps"
+            yaml_path = maps_dir / f"{map_name}.yaml"
+
+            if not yaml_path.exists():
+                print(f"DEBUG: YAML file not found for collision monitor setup: {yaml_path}")
+                return
+
+            with open(yaml_path, 'r') as file:
+                yaml_data = yaml.safe_load(file)
+
+            origin = yaml_data.get('origin')
+            resolution = yaml_data.get('resolution')
+
+            if not origin or not resolution:
+                print(f"DEBUG: Missing origin or resolution in YAML for collision monitor")
+                return
+
+            # Create collision monitor manager if it doesn't exist
+            if not self.node.collision_monitor_manager:
+                self.node.collision_monitor_manager = CollisionMonitorManager(self.node)
+                print(f"DEBUG: Created CollisionMonitorManager")
+
+            # Set the current map
+            self.node.collision_monitor_manager.set_current_map(map_name, origin, resolution)
+
+            # Start monitoring
+            self.node.collision_monitor_manager.start_monitoring()
+            print(f"DEBUG: Collision monitor manager started for map: {map_name}")
+
+        except Exception as e:
+            print(f"ERROR: Failed to setup collision monitor: {e}")
+            import traceback
+            traceback.print_exc()
+
     @pyqtSlot()
     def trigger_configure(self):
         self.node.trigger_configure()
@@ -1183,6 +1230,10 @@ class GuiManager(QThread):
         y = msg.twist.linear.y
         theta = -msg.twist.angular.z
         self.update_pose.emit(x, y, theta)
+
+        # Update collision monitor manager with robot position
+        if self.node.collision_monitor_manager:
+            self.node.collision_monitor_manager.update_robot_pose(x, y)
         
     def emit_docking_status(self, status: str):
         self.dockingStatus.emit(status)

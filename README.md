@@ -12,3 +12,5 @@ Status CAN messages:
   0x205 Turn off Buzzer
 
 Change the OK can message to be sent only once
+
+Great! Actually, don't use the parameter get at the start to load default zone. Just let it be somewhere in the code (tell me where so I can change that). Make sure that if the robot starts at some zone, it loads its polygon points.

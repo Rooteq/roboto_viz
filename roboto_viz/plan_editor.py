@@ -11,6 +11,7 @@ from roboto_viz.route_manager import RouteManager, BezierRoute
 from roboto_viz.dock_manager import DockManager, Dock
 from roboto_viz.map_view import MapView
 from roboto_viz.speed_zone_editor import SpeedZoneEditor
+from roboto_viz.collision_zone_editor import CollisionZoneEditor
 
 
 class WaitActionDialog(QDialog):
@@ -155,10 +156,14 @@ class PlanEditor(QMainWindow):
         
         # Create a new map view for the editor
         self.map_view = MapView()
-        
+
         # Create speed zone editor (will be shown as popup)
         self.speed_zone_editor = None
         self.speed_zone_window = None
+
+        # Create collision zone editor (will be shown as popup)
+        self.collision_zone_editor = None
+        self.collision_zone_window = None
         
         self.setWindowTitle("Edytor Planów")
         self.setGeometry(100, 100, 1600, 900)  # Much larger for 1920x1080 screens
@@ -473,6 +478,28 @@ class PlanEditor(QMainWindow):
             }
         """)
         section_layout.addWidget(self.edit_speed_zones_btn)
+
+        # Edit Collision Zones button
+        self.edit_collision_zones_btn = QPushButton("Edytuj Strefy Kolizji")
+        self.edit_collision_zones_btn.setStyleSheet("""
+            QPushButton {
+                font-weight: bold;
+                font-size: 10px;
+                padding: 6px 12px;
+                background-color: #e67e22;
+                color: white;
+                border: 1px solid #d35400;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #d35400;
+            }
+            QPushButton:pressed {
+                background-color: #ba4a00;
+            }
+        """)
+        section_layout.addWidget(self.edit_collision_zones_btn)
         
         # Save plan and exit button
         self.save_plan_btn = QPushButton("Zapisz plan i wyjść")
@@ -552,6 +579,9 @@ class PlanEditor(QMainWindow):
         
         # Speed zone editor connections
         self.edit_speed_zones_btn.clicked.connect(self.start_speed_zone_editing)
+
+        # Collision zone editor connections
+        self.edit_collision_zones_btn.clicked.connect(self.start_collision_zone_editing)
     
     def refresh_plan_list(self):
         self.plan_list.clear()
@@ -1338,16 +1368,169 @@ class PlanEditor(QMainWindow):
             maps_dir = Path.home() / ".robotroutes" / "maps"
             speed_map_path = maps_dir / f"speed_{map_name}.pgm"
             speed_yaml_path = maps_dir / f"speed_{map_name}.yaml"
-            
+
             print(f"DEBUG: Reloading speed map: {speed_map_path}")
             try:
                 import yaml
-                
+
                 with open(speed_yaml_path, 'r') as file:
                     yaml_data = yaml.safe_load(file)
                 self.map_view.load_image(str(speed_map_path), yaml_data['origin'], yaml_data.get('resolution'))
                 print(f"DEBUG: Successfully reloaded speed map")
             except Exception as e:
                 print(f"Error reloading speed map: {e}")
+        else:
+            print(f"DEBUG: No map name available for reload")
+
+    # Collision zone editing methods
+    def start_collision_zone_editing(self):
+        """Start collision zone editing mode with popup window"""
+        print(f"DEBUG: start_collision_zone_editing called")
+        map_name = self.map_combo.currentText()
+        print(f"DEBUG: Current map name: {map_name}")
+        if not map_name:
+            QMessageBox.warning(self, "Ostrzeżenie", "Proszę najpierw wybrać i załadować mapę!")
+            return
+
+        # Create collision zone editor if it doesn't exist
+        if not self.collision_zone_editor:
+            self.collision_zone_editor = CollisionZoneEditor()
+            # Connect signals
+            self.collision_zone_editor.collision_zone_updated.connect(self.on_collision_zone_updated)
+            self.collision_zone_editor.editing_finished.connect(self.stop_collision_zone_editing)
+            print(f"DEBUG: Connected collision zone editor signals")
+
+        # Ensure collision_ prefixed maps exist before loading in editor
+        from pathlib import Path
+        import shutil
+        maps_dir = Path.home() / ".robotroutes" / "maps"
+        map_path = maps_dir / f"{map_name}.pgm"
+        yaml_path = maps_dir / f"{map_name}.yaml"
+        collision_map_path = maps_dir / f"collision_{map_name}.png"  # Use PNG to preserve colors
+        collision_yaml_path = maps_dir / f"collision_{map_name}.yaml"
+
+        # Create collision_ prefixed copies if they don't exist
+        if not collision_map_path.exists() and map_path.exists():
+            # Load as pixmap and save as PNG
+            from PyQt5.QtGui import QPixmap
+            pixmap = QPixmap(str(map_path))
+            pixmap.save(str(collision_map_path), "PNG")
+            print(f"DEBUG: Created collision map copy as PNG: {collision_map_path}")
+
+        if not collision_yaml_path.exists() and yaml_path.exists():
+            shutil.copy2(yaml_path, collision_yaml_path)
+            # Update YAML to point to PNG file
+            import yaml
+            with open(collision_yaml_path, 'r') as f:
+                yaml_data = yaml.safe_load(f)
+            yaml_data['image'] = f'collision_{map_name}.png'
+            with open(collision_yaml_path, 'w') as f:
+                yaml.dump(yaml_data, f, default_flow_style=False)
+            print(f"DEBUG: Created collision yaml copy: {collision_yaml_path}")
+
+        # Load the map in the collision zone editor
+        print(f"DEBUG: Loading map in collision zone editor")
+        if self.collision_zone_editor.load_map(map_name):
+            print(f"DEBUG: Map loaded successfully, creating popup window")
+            # Create popup window for collision zone editor
+            if not self.collision_zone_window:
+                print(f"DEBUG: Creating new collision zone window")
+                from PyQt5.QtWidgets import QDialog, QVBoxLayout
+                self.collision_zone_window = QDialog(self)
+                self.collision_zone_window.setWindowTitle("Edytor Stref Kolizji")
+                self.collision_zone_window.setModal(False)  # Non-modal so user can interact with map
+                self.collision_zone_window.resize(350, 500)
+
+                layout = QVBoxLayout(self.collision_zone_window)
+                layout.addWidget(self.collision_zone_editor)
+
+                # Handle window close event
+                self.collision_zone_window.closeEvent = self.on_collision_zone_window_close
+
+            # Load collision_ prefixed map in map view for editing
+            import yaml
+            # Try PNG first, fallback to PGM
+            collision_map_path = maps_dir / f"collision_{map_name}.png"
+            if not collision_map_path.exists():
+                collision_map_path = maps_dir / f"collision_{map_name}.pgm"
+            collision_yaml_path = maps_dir / f"collision_{map_name}.yaml"
+
+            try:
+                with open(collision_yaml_path, 'r') as file:
+                    yaml_data = yaml.safe_load(file)
+                self.map_view.load_image(str(collision_map_path), yaml_data['origin'], yaml_data.get('resolution'))
+                print(f"DEBUG: Loaded collision_ prefixed map for editing: {collision_map_path}")
+            except Exception as e:
+                print(f"Error loading collision map: {e}")
+
+            # Start collision zone editing mode in map view
+            self.map_view.start_collision_zone_editing(self.collision_zone_editor)
+
+            # Hide other editing controls
+            self.route_editing_widget.setVisible(False)
+            self.dock_editing_widget.setVisible(False)
+
+            # Update button state
+            self.edit_collision_zones_btn.setEnabled(False)
+            self.edit_speed_zones_btn.setEnabled(False)  # Disable speed zones while editing collision zones
+
+            # Show the collision zone editor window
+            print(f"DEBUG: Showing collision zone window")
+            self.collision_zone_window.show()
+            print(f"DEBUG: Collision zone window shown")
+
+        else:
+            print(f"DEBUG: Failed to load map in collision zone editor")
+            QMessageBox.warning(self, "Błąd", "Nie udało się załadować mapy dla edycji stref kolizji!")
+
+    def stop_collision_zone_editing(self):
+        """Stop collision zone editing mode"""
+        # Stop collision zone editing mode in map view first
+        self.map_view.stop_collision_zone_editing()
+
+        # Clean up collision zone editor state
+        if self.collision_zone_editor:
+            self.collision_zone_editor.cleanup_editing()
+
+        # Hide the collision zone editor window
+        if self.collision_zone_window:
+            self.collision_zone_window.hide()
+
+        # Update button state
+        self.edit_collision_zones_btn.setEnabled(True)
+        self.edit_speed_zones_btn.setEnabled(True)
+
+        # Reload original map to show clean version without collision zones
+        self.load_selected_map(show_success_dialog=False)
+
+    def on_collision_zone_window_close(self, event):
+        """Handle collision zone window close event"""
+        self.stop_collision_zone_editing()
+        event.accept()
+
+    def on_collision_zone_updated(self):
+        """Handle collision zone updates during editing"""
+        print(f"DEBUG: on_collision_zone_updated called")
+        # Reload collision_ prefixed map to show updated collision zones
+        if self.collision_zone_editor and self.collision_zone_editor.map_name:
+            from pathlib import Path
+            map_name = self.collision_zone_editor.map_name
+            maps_dir = Path.home() / ".robotroutes" / "maps"
+            # Try PNG first, fallback to PGM
+            collision_map_path = maps_dir / f"collision_{map_name}.png"
+            if not collision_map_path.exists():
+                collision_map_path = maps_dir / f"collision_{map_name}.pgm"
+            collision_yaml_path = maps_dir / f"collision_{map_name}.yaml"
+
+            print(f"DEBUG: Reloading collision map: {collision_map_path}")
+            try:
+                import yaml
+
+                with open(collision_yaml_path, 'r') as file:
+                    yaml_data = yaml.safe_load(file)
+                self.map_view.load_image(str(collision_map_path), yaml_data['origin'], yaml_data.get('resolution'))
+                print(f"DEBUG: Successfully reloaded collision map")
+            except Exception as e:
+                print(f"Error reloading collision map: {e}")
         else:
             print(f"DEBUG: No map name available for reload")
