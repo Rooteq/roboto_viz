@@ -68,6 +68,8 @@ class MainView(QMainWindow):
         super().__init__()
         self.setWindowTitle("Sterowanie Robotem")
         # Fullscreen for 1920x1080 displays
+        # self.showFullScreen()
+        # self.showMinimized
         self.showFullScreen()
         
         # Apply global font scaling for large screens (1920x1080)

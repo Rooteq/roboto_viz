@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QPushButton,
                              QLabel, QListWidget, QListWidgetItem,
                              QTabWidget, QGridLayout, QGroupBox,
-                             QMessageBox)
+                             QMessageBox, QHBoxLayout)
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
 from PyQt5.QtGui import QFont
 from typing import Optional
@@ -152,8 +152,12 @@ class PlanTools(QWidget):
         plan_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #2c3e50;")
         control_layout.addWidget(plan_label)
 
+        # Plan list with navigation buttons
+        plan_list_layout = QHBoxLayout()
+
         self.plan_list = QListWidget()
         self.plan_list.setMaximumHeight(140)  # Reduced height
+        self.plan_list.setMinimumWidth(200)  # Ensure list has minimum width
         self.plan_list.setStyleSheet("""
             QListWidget {
                 border: 2px solid #bdc3c7;
@@ -176,7 +180,56 @@ class PlanTools(QWidget):
                 background-color: #d5dbdb;
             }
         """)
-        control_layout.addWidget(self.plan_list)
+        plan_list_layout.addWidget(self.plan_list)
+
+        # Navigation buttons for plan list
+        self.plan_up_btn = QPushButton("▲")
+        self.plan_up_btn.setFixedSize(50, 65)
+        self.plan_up_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 24px;
+                font-weight: bold;
+                border: 2px solid #2c3e50;
+                border-radius: 8px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+        """)
+        self.plan_up_btn.clicked.connect(self.scroll_plan_up)
+        plan_list_layout.addWidget(self.plan_up_btn)
+
+        self.plan_down_btn = QPushButton("▼")
+        self.plan_down_btn.setFixedSize(50, 65)
+        self.plan_down_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 24px;
+                font-weight: bold;
+                border: 2px solid #2c3e50;
+                border-radius: 8px;
+                background-color: #ecf0f1;
+                color: #2c3e50;
+            }
+            QPushButton:hover {
+                background-color: #d0d3d4;
+                border-color: #34495e;
+            }
+            QPushButton:pressed {
+                background-color: #bdc3c7;
+                border-color: #2c3e50;
+            }
+        """)
+        self.plan_down_btn.clicked.connect(self.scroll_plan_down)
+        plan_list_layout.addWidget(self.plan_down_btn)
+
+        control_layout.addLayout(plan_list_layout)
 
         self.choose_plan_btn = QPushButton("Wybierz Plan")
         self.choose_plan_btn.setStyleSheet("""
@@ -211,8 +264,12 @@ class PlanTools(QWidget):
         action_label.setStyleSheet("font-weight: bold; font-size: 13px; color: #2c3e50; margin-top: 8px;")
         control_layout.addWidget(action_label)
 
+        # Action list with navigation buttons
+        action_list_layout = QHBoxLayout()
+
         self.action_list = QListWidget()
         self.action_list.setMaximumHeight(160)  # Reduced height
+        self.action_list.setMinimumWidth(200)  # Ensure list has minimum width
         self.action_list.setStyleSheet("""
             QListWidget {
                 border: 2px solid #bdc3c7;
@@ -235,7 +292,56 @@ class PlanTools(QWidget):
                 background-color: #d5dbdb;
             }
         """)
-        control_layout.addWidget(self.action_list)
+        action_list_layout.addWidget(self.action_list)
+
+        # Navigation buttons for action list
+        self.action_up_btn = QPushButton("▲")
+        self.action_up_btn.setFixedSize(50, 72)
+        self.action_up_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 24px;
+                font-weight: bold;
+                border: 2px solid #27ae60;
+                border-radius: 8px;
+                background-color: #d5f4e6;
+                color: #27ae60;
+            }
+            QPushButton:hover {
+                background-color: #a9dfbf;
+                border-color: #229954;
+            }
+            QPushButton:pressed {
+                background-color: #82c99a;
+                border-color: #1e8449;
+            }
+        """)
+        self.action_up_btn.clicked.connect(self.scroll_action_up)
+        action_list_layout.addWidget(self.action_up_btn)
+
+        self.action_down_btn = QPushButton("▼")
+        self.action_down_btn.setFixedSize(50, 72)
+        self.action_down_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 24px;
+                font-weight: bold;
+                border: 2px solid #27ae60;
+                border-radius: 8px;
+                background-color: #d5f4e6;
+                color: #27ae60;
+            }
+            QPushButton:hover {
+                background-color: #a9dfbf;
+                border-color: #229954;
+            }
+            QPushButton:pressed {
+                background-color: #82c99a;
+                border-color: #1e8449;
+            }
+        """)
+        self.action_down_btn.clicked.connect(self.scroll_action_down)
+        action_list_layout.addWidget(self.action_down_btn)
+
+        control_layout.addLayout(action_list_layout)
 
         self.execute_action_btn = QPushButton("START")
         self.execute_action_btn.setStyleSheet("""
@@ -742,4 +848,28 @@ class PlanTools(QWidget):
         
         # Update button visibility after checking next action
         self._update_signal_button_visibility()
-    
+
+    def scroll_plan_up(self):
+        """Scroll plan list up by one item"""
+        current_row = self.plan_list.currentRow()
+        if current_row > 0:
+            self.plan_list.setCurrentRow(current_row - 1)
+
+    def scroll_plan_down(self):
+        """Scroll plan list down by one item"""
+        current_row = self.plan_list.currentRow()
+        if current_row < self.plan_list.count() - 1:
+            self.plan_list.setCurrentRow(current_row + 1)
+
+    def scroll_action_up(self):
+        """Scroll action list up by one item"""
+        current_row = self.action_list.currentRow()
+        if current_row > 0:
+            self.action_list.setCurrentRow(current_row - 1)
+
+    def scroll_action_down(self):
+        """Scroll action list down by one item"""
+        current_row = self.action_list.currentRow()
+        if current_row < self.action_list.count() - 1:
+            self.action_list.setCurrentRow(current_row + 1)
+
