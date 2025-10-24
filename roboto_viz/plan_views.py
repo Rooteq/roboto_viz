@@ -574,9 +574,18 @@ class PlanActiveView(QWidget):
         """Update robot status display"""
         # Call the same logic as set_current_status to update grid cell
         self.set_current_status(status)
-        
+
         # Forward navigation status to plan tools for signal button logic
         self.plan_tools.update_navigation_status(status)
+
+    @pyqtSlot(bool)
+    def handle_collision_detection(self, collision_detected: bool):
+        """Handle collision detection status and update robot status display"""
+        if collision_detected:
+            # Show orange warning when obstacle is detected
+            self.set_current_status("Wykryto przeszkodę")
+        # Note: We don't clear the status when collision is cleared
+        # because the robot will have other status updates (navigating, etc.)
     
     def close_plan_editor(self):
         """Close the plan editor if open"""
