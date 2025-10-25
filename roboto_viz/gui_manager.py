@@ -765,45 +765,77 @@ class Navigator(QThread):
                     
                     path_msg.poses.append(pose_stamped)
                 
-                # Wait for nav2 to be active first (with timeout)
-                print("DEBUG: Waiting for nav2 to become active...")
-                try:
-                    # Add timeout to prevent infinite blocking
-                    nav2_ready = threading.Event()
-                    
-                    def wait_for_nav2():
+                # Start navigation in a separate thread to avoid blocking the app
+                print("DEBUG: Starting navigation in background thread...")
+                nav_start_complete = threading.Event()
+                nav_start_error = [None]  # Use list to allow modification in nested function
+
+                def start_navigation_async():
+                    try:
+                        # Wait for nav2 to be active first (with timeout)
+                        print("DEBUG: Waiting for nav2 to become active...")
                         try:
-                            self.nav_data.navigator.waitUntilNav2Active()
-                            nav2_ready.set()
+                            # Wait up to 10 seconds for nav2 to be ready
+                            nav2_ready = threading.Event()
+
+                            def wait_for_nav2():
+                                try:
+                                    self.nav_data.navigator.waitUntilNav2Active()
+                                    nav2_ready.set()
+                                except Exception as e:
+                                    print(f"DEBUG: Error waiting for nav2: {e}")
+                                    nav_start_error[0] = str(e)
+
+                            wait_thread = threading.Thread(target=wait_for_nav2)
+                            wait_thread.daemon = True
+                            wait_thread.start()
+
+                            # Wait up to 10 seconds for nav2 to be ready
+                            if not nav2_ready.wait(timeout=10.0):
+                                print("DEBUG: Timeout waiting for nav2 to become active, proceeding anyway...")
+                            else:
+                                print("DEBUG: Nav2 is now active!")
+
                         except Exception as e:
-                            print(f"DEBUG: Error waiting for nav2: {e}")
-                    
-                    wait_thread = threading.Thread(target=wait_for_nav2)
-                    wait_thread.daemon = True
-                    wait_thread.start()
-                    
-                    # Wait up to 10 seconds for nav2 to be ready
-                    if not nav2_ready.wait(timeout=10.0):
-                        print("DEBUG: Timeout waiting for nav2 to become active, proceeding anyway...")
-                    else:
-                        print("DEBUG: Nav2 is now active!")
-                        
-                except Exception as e:
-                    print(f"DEBUG: Exception in nav2 wait: {e}")
-                    # Continue anyway
-                
-                # Start path navigation with specific controller and goal checker
-                # Try with precise_goal_checker to maintain orientation
-                print(f"DEBUG: Starting navigation with followPath, {len(path_msg.poses)} poses")
-                try:
-                    self.nav_data.navigator.followPath(
-                        path_msg,
-                        controller_id='FollowPath',
-                        goal_checker_id='goal_checker'
-                    )
-                    print("DEBUG: followPath() call completed, navigation should now be active")
-                except Exception as e:
-                    print(f"DEBUG: followPath() failed with exception: {e}")
+                            print(f"DEBUG: Exception in nav2 wait: {e}")
+                            # Continue anyway
+
+                        # Start path navigation with specific controller and goal checker
+                        print(f"DEBUG: Starting navigation with followPath, {len(path_msg.poses)} poses")
+                        try:
+                            self.nav_data.navigator.followPath(
+                                path_msg,
+                                controller_id='FollowPath',
+                                goal_checker_id='goal_checker'
+                            )
+                            print("DEBUG: followPath() call completed, navigation should now be active")
+                        except Exception as e:
+                            print(f"DEBUG: followPath() failed with exception: {e}")
+                            nav_start_error[0] = str(e)
+
+                        nav_start_complete.set()
+
+                    except Exception as e:
+                        print(f"DEBUG: Navigation start thread failed: {e}")
+                        nav_start_error[0] = str(e)
+                        nav_start_complete.set()
+
+                # Start the navigation in a background thread
+                nav_thread = threading.Thread(target=start_navigation_async)
+                nav_thread.daemon = True
+                nav_thread.start()
+
+                # Wait for navigation to start (non-blocking for the Navigator thread)
+                # Use a short timeout to avoid blocking indefinitely
+                if not nav_start_complete.wait(timeout=15.0):
+                    print("DEBUG: Timeout waiting for navigation to start")
+                    self._last_status = "Błąd - Timeout podczas startu nawigacji"
+                    self.navStatus.emit("Błąd - Timeout podczas startu nawigacji")
+                    continue
+
+                # Check if there was an error during navigation start
+                if nav_start_error[0]:
+                    print(f"DEBUG: Navigation start failed: {nav_start_error[0]}")
                     self._last_status = "Błąd - Usługa nawigacji niedostępna"
                     self.navStatus.emit("Błąd - Usługa nawigacji niedostępna")
                     continue
