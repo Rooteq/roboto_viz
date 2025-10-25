@@ -553,6 +553,12 @@ class PlanActiveState(State):
             self.gui.gui_manager.navigator.finished,
             self.gui.main_view.plan_executor.on_navigation_completed
         )
+
+        # Hide collision zones when navigation completes
+        self.connect_and_store_connections(
+            self.gui.gui_manager.navigator.finished,
+            self.gui.gui_manager.hide_collision_zones.emit
+        )
         
         # Connect docking status to plan executor
         self.connect_and_store_connections(
@@ -598,6 +604,17 @@ class PlanActiveState(State):
         self.connect_and_store_connections(
             self.gui.main_view.plan_executor.wait_status_update,
             self.gui.gui_manager.wait_action_status.emit
+        )
+
+        # Connect collision zone display signals
+        self.connect_and_store_connections(
+            self.gui.gui_manager.show_collision_zones,
+            self.gui.main_view.plan_active_view.mini_map_view.show_collision_zones_for_route
+        )
+
+        self.connect_and_store_connections(
+            self.gui.gui_manager.hide_collision_zones,
+            self.gui.main_view.plan_active_view.mini_map_view.clear_collision_zones
         )
 
     def setup_can_status_forwarding(self):

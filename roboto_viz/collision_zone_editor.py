@@ -12,15 +12,17 @@ import json
 
 
 class CollisionZone:
-    """Represents a collision zone with its polygon points"""
+    """Represents a collision zone with its polygon points and associated routes"""
 
     def __init__(self, zone_id: int, polygon_points: str, color: QColor,
-                 use_polygon_slow: bool = True, use_polygon_stop: bool = False):
+                 use_polygon_slow: bool = True, use_polygon_stop: bool = False,
+                 route_names: List[str] = None):
         self.zone_id = zone_id
         self.polygon_points = polygon_points  # String like "[[0.4, 0.4], [0.4, -0.4], [-0.4, -0.4], [-0.4, 0.4]]"
         self.color = color
         self.use_polygon_slow = use_polygon_slow
         self.use_polygon_stop = use_polygon_stop
+        self.route_names = route_names or []  # List of route names this zone is associated with
 
     def to_dict(self):
         return {
@@ -28,7 +30,8 @@ class CollisionZone:
             'polygon_points': self.polygon_points,
             'color': [self.color.red(), self.color.green(), self.color.blue()],
             'use_polygon_slow': self.use_polygon_slow,
-            'use_polygon_stop': self.use_polygon_stop
+            'use_polygon_stop': self.use_polygon_stop,
+            'route_names': self.route_names
         }
 
     @staticmethod
@@ -38,7 +41,8 @@ class CollisionZone:
             polygon_points=data['polygon_points'],
             color=QColor(data['color'][0], data['color'][1], data['color'][2]),
             use_polygon_slow=data.get('use_polygon_slow', True),  # Default to True for backward compatibility
-            use_polygon_stop=data.get('use_polygon_stop', False)
+            use_polygon_stop=data.get('use_polygon_stop', False),
+            route_names=data.get('route_names', [])  # Default to empty list for backward compatibility
         )
         return zone
 
@@ -49,8 +53,9 @@ class CollisionZoneEditor(QWidget):
     collision_zone_updated = pyqtSignal()
     editing_finished = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, route_manager=None, parent=None):
         super().__init__(parent)
+        self.route_manager = route_manager
         self.current_map_path: Optional[str] = None
         self.current_yaml_path: Optional[str] = None
         self.original_map_path: Optional[str] = None
@@ -258,10 +263,11 @@ class CollisionZoneEditor(QWidget):
     def add_new_zone(self):
         """Add a new collision zone"""
         # Create custom dialog with checkboxes
-        from PyQt5.QtWidgets import QDialog, QTextEdit
+        from PyQt5.QtWidgets import QDialog, QTextEdit, QListWidget
 
         dialog = QDialog(self)
         dialog.setWindowTitle('Nowa Strefa Kolizji')
+        dialog.setMinimumWidth(500)
         dialog_layout = QVBoxLayout(dialog)
 
         # Polygon points input
@@ -285,6 +291,22 @@ class CollisionZoneEditor(QWidget):
         stop_checkbox.setChecked(False)
         dialog_layout.addWidget(stop_checkbox)
 
+        # Route selection
+        route_label = QLabel('Wybierz trasy dla tej strefy (możesz wybrać wiele):')
+        dialog_layout.addWidget(route_label)
+
+        route_list = QListWidget()
+        route_list.setSelectionMode(QListWidget.MultiSelection)
+        route_list.setMaximumHeight(150)
+
+        # Get available routes from route_manager
+        if self.route_manager:
+            routes = self.route_manager.load_routes()
+            for route_name in sorted(routes.keys()):
+                route_list.addItem(route_name)
+
+        dialog_layout.addWidget(route_list)
+
         # Buttons
         button_layout = QHBoxLayout()
         ok_button = QPushButton('OK')
@@ -303,9 +325,17 @@ class CollisionZoneEditor(QWidget):
         use_polygon_slow = slow_checkbox.isChecked()
         use_polygon_stop = stop_checkbox.isChecked()
 
+        # Get selected routes
+        selected_routes = [item.text() for item in route_list.selectedItems()]
+
         # Validate at least one polygon type is selected
         if not use_polygon_slow and not use_polygon_stop:
             QMessageBox.warning(self, "Błąd", "Musisz wybrać co najmniej jeden typ wielokąta!")
+            return
+
+        # Validate at least one route is selected
+        if not selected_routes:
+            QMessageBox.warning(self, "Błąd", "Musisz wybrać co najmniej jedną trasę!")
             return
 
         # Validate the input
@@ -327,7 +357,7 @@ class CollisionZoneEditor(QWidget):
         # Get color for this zone (cycle through available colors)
         color = self.zone_colors[(zone_id - 1) % len(self.zone_colors)]
 
-        zone = CollisionZone(zone_id, text, color, use_polygon_slow, use_polygon_stop)
+        zone = CollisionZone(zone_id, text, color, use_polygon_slow, use_polygon_stop, selected_routes)
         self.zones[zone_id] = zone
 
         # Select this zone as current
@@ -343,13 +373,16 @@ class CollisionZoneEditor(QWidget):
             polygon_types.append("Stop")
         types_str = " + ".join(polygon_types)
 
-        QMessageBox.information(self, "Sukces", f"Dodano nową strefę kolizji (ID: {zone_id}, Typ: {types_str})")
+        routes_str = ", ".join(selected_routes)
+        QMessageBox.information(self, "Sukces", f"Dodano nową strefę kolizji (ID: {zone_id}, Typ: {types_str}, Trasy: {routes_str})")
 
     def refresh_zones_list(self):
         """Refresh the zones list display"""
         self.zones_list.clear()
         for zone_id, zone in sorted(self.zones.items()):
-            self.zones_list.addItem(f"Strefa {zone_id}: {zone.polygon_points}")
+            # Display zone with route names
+            routes_str = ", ".join(zone.route_names) if zone.route_names else "Brak tras"
+            self.zones_list.addItem(f"Strefa {zone_id}: {zone.polygon_points} | Trasy: {routes_str}")
 
         # Highlight current zone
         if self.current_zone_id is not None:
@@ -470,19 +503,43 @@ class CollisionZoneEditor(QWidget):
         self.original_map_path = str(original_map_path)
         self.map_name = map_name
 
-        # Load zones from JSON if it exists
-        if collision_zones_path.exists():
-            try:
-                with open(collision_zones_path, 'r') as f:
-                    zones_data = json.load(f)
-                    self.zones = {int(k): CollisionZone.from_dict(v) for k, v in zones_data.items()}
-                    if self.zones:
-                        self.next_zone_id = max(self.zones.keys()) + 1
-                        self.current_zone_id = min(self.zones.keys())
-                    print(f"DEBUG: Loaded {len(self.zones)} zones from JSON")
-            except Exception as e:
-                print(f"Error loading zones: {e}")
-                self.zones = {}
+        # Load zones from all route-specific JSON files
+        # Pattern: collision_<route_name>_zones.json
+        self.zones = {}
+        zone_files = list(maps_dir.glob("collision_*_zones.json"))
+
+        for zone_file in zone_files:
+            # Extract route name from filename
+            # collision_<route_name>_zones.json
+            filename = zone_file.stem  # collision_<route_name>_zones
+            if filename.endswith("_zones"):
+                try:
+                    with open(zone_file, 'r') as f:
+                        zones_data = json.load(f)
+                        for zone_id_str, zone_dict in zones_data.items():
+                            zone_id = int(zone_id_str)
+                            # If zone already exists, merge route names
+                            if zone_id in self.zones:
+                                # Merge route names from this file
+                                existing_zone = self.zones[zone_id]
+                                new_routes = zone_dict.get('route_names', [])
+                                for route in new_routes:
+                                    if route not in existing_zone.route_names:
+                                        existing_zone.route_names.append(route)
+                            else:
+                                # Create new zone
+                                self.zones[zone_id] = CollisionZone.from_dict(zone_dict)
+                    print(f"DEBUG: Loaded zones from {zone_file.name}")
+                except Exception as e:
+                    print(f"Error loading zones from {zone_file}: {e}")
+
+        if self.zones:
+            self.next_zone_id = max(self.zones.keys()) + 1
+            self.current_zone_id = min(self.zones.keys())
+            print(f"DEBUG: Loaded {len(self.zones)} total zones from route files")
+        else:
+            self.zones = {}
+            print(f"DEBUG: No zones loaded")
 
         # Load the collision_ prefixed map for editing
         self.collision_mask_pixmap = QPixmap(self.current_map_path)
@@ -598,7 +655,7 @@ class CollisionZoneEditor(QWidget):
         self.box_end_pos = None
 
     def save_collision_mask(self):
-        """Save the current collision zones with proper collision_ prefix"""
+        """Save the current collision zones - zones are saved per-route"""
         if not self.current_map_path or not self.current_yaml_path or not self.map_name:
             QMessageBox.warning(self, "Błąd", "Nie załadowano mapy!")
             return
@@ -611,7 +668,6 @@ class CollisionZoneEditor(QWidget):
             # Use collision_ prefixed naming - SAVE AS PNG to preserve colors!
             collision_map_png = maps_dir / f"collision_{self.map_name}.png"
             collision_map_yaml = maps_dir / f"collision_{self.map_name}.yaml"
-            collision_zones_json = maps_dir / f"collision_{self.map_name}_zones.json"
 
             # Save current working map as PNG (to preserve RGB colors)
             self.collision_mask_pixmap.save(str(collision_map_png), "PNG")
@@ -633,13 +689,27 @@ class CollisionZoneEditor(QWidget):
             with open(collision_map_yaml, 'w') as f:
                 yaml.dump(yaml_data, f, default_flow_style=False)
 
-            # Save zones to JSON
-            zones_data = {str(k): v.to_dict() for k, v in self.zones.items()}
-            with open(collision_zones_json, 'w') as f:
-                json.dump(zones_data, f, indent=2)
+            # Save zones per-route: create a separate JSON file for each route
+            saved_files = []
 
+            # Group zones by route
+            route_zones = {}  # route_name -> list of zones
+            for zone_id, zone in self.zones.items():
+                for route_name in zone.route_names:
+                    if route_name not in route_zones:
+                        route_zones[route_name] = {}
+                    route_zones[route_name][str(zone_id)] = zone.to_dict()
+
+            # Save a file for each route
+            for route_name, zones_data in route_zones.items():
+                collision_zones_json = maps_dir / f"collision_{route_name}_zones.json"
+                with open(collision_zones_json, 'w') as f:
+                    json.dump(zones_data, f, indent=2)
+                saved_files.append(str(collision_zones_json))
+
+            files_list = "\n".join(saved_files) if saved_files else "Brak stref do zapisania"
             QMessageBox.information(self, "Sukces",
-                                  f"Maska kolizji zapisana jako:\n{collision_map_png}\n{collision_map_yaml}\n{collision_zones_json}")
+                                  f"Maska kolizji zapisana jako:\n{collision_map_png}\n{collision_map_yaml}\n\nStrefy zapisane dla tras:\n{files_list}")
 
         except Exception as e:
             QMessageBox.critical(self, "Błąd", f"Nie udało się zapisać maski kolizji: {str(e)}")

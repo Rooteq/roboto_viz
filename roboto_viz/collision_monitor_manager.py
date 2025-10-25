@@ -18,13 +18,14 @@ class CollisionZone:
 
     def __init__(self, zone_id: int, polygon_points: str, color: List[int],
                  use_polygon_slow: bool = True, use_polygon_stop: bool = False,
-                 painted_pixels: set = None):
+                 painted_pixels: set = None, route_names: List[str] = None):
         self.zone_id = zone_id
         self.polygon_points = polygon_points
         self.color = tuple(color)  # RGB tuple
         self.use_polygon_slow = use_polygon_slow
         self.use_polygon_stop = use_polygon_stop
         self.painted_pixels = painted_pixels or set()  # Set of (x, y) pixel coordinates for O(1) lookup
+        self.route_names = route_names or []  # List of route names this zone is associated with
 
     def contains_pixel(self, pixel_x: int, pixel_y: int) -> bool:
         """Check if this zone contains the given pixel"""
@@ -90,7 +91,7 @@ class CollisionMonitorManager(QObject):
         self.check_counter = 0
 
     def set_current_map(self, map_name: str, origin, resolution):
-        """Set the current map and load collision zones"""
+        """Set the current map - zones will be loaded when route navigation starts"""
         self.current_map_name = map_name
         self.map_origin = origin
         self.map_resolution = resolution
@@ -101,31 +102,33 @@ class CollisionMonitorManager(QObject):
             self.check_timer.stop()
             return
 
-        # Load collision zones for this map
-        self.load_collision_zones(map_name)
-
-    def load_collision_zones(self, map_name: str):
-        """Load collision zones from the map files"""
+        # Load the collision mask image (without zones yet)
         maps_dir = Path.home() / ".robotroutes" / "maps"
-
-        # Try PNG first (color format), fallback to PGM (grayscale)
         collision_map_path = maps_dir / f"collision_{map_name}.png"
         if not collision_map_path.exists():
             collision_map_path = maps_dir / f"collision_{map_name}.pgm"
 
-        collision_zones_path = maps_dir / f"collision_{map_name}_zones.json"
-
-        # Load the collision mask pixmap
-        if not collision_map_path.exists():
+        if collision_map_path.exists():
+            self.collision_mask_pixmap = QPixmap(str(collision_map_path))
+        else:
             self.collision_mask_pixmap = None
-            self.zones = {}
+
+    def load_collision_zones_for_route(self, route_name: str):
+        """Load collision zones for a specific route"""
+        maps_dir = Path.home() / ".robotroutes" / "maps"
+        collision_zones_path = maps_dir / f"collision_{route_name}_zones.json"
+
+        # Clear existing zones
+        self.zones = {}
+
+        # Check if collision mask exists
+        if not self.collision_mask_pixmap:
+            print(f"WARNING: No collision mask loaded, cannot load zones for route '{route_name}'")
             return
 
-        self.collision_mask_pixmap = QPixmap(str(collision_map_path))
-
-        # Load zone definitions
+        # Load zone definitions for this route
         if not collision_zones_path.exists():
-            self.zones = {}
+            print(f"INFO: No collision zones file found for route '{route_name}'")
             return
 
         try:
@@ -140,14 +143,17 @@ class CollisionMonitorManager(QObject):
                     polygon_points=zone_data['polygon_points'],
                     color=zone_data['color'],
                     use_polygon_slow=zone_data.get('use_polygon_slow', True),
-                    use_polygon_stop=zone_data.get('use_polygon_stop', False)
+                    use_polygon_stop=zone_data.get('use_polygon_stop', False),
+                    route_names=zone_data.get('route_names', [])
                 )
                 # Load painted pixels for this zone
                 zone.load_painted_pixels_from_image(self.collision_mask_pixmap)
                 self.zones[zone_id] = zone
 
-        except Exception:
-            print(f"ERROR: Failed to load collision zones")
+            print(f"INFO: Loaded {len(self.zones)} collision zones for route '{route_name}'")
+
+        except Exception as e:
+            print(f"ERROR: Failed to load collision zones for route '{route_name}': {e}")
             self.zones = {}
 
     def start_monitoring(self):

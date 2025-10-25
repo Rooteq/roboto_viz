@@ -1395,7 +1395,7 @@ class PlanEditor(QMainWindow):
 
         # Create collision zone editor if it doesn't exist
         if not self.collision_zone_editor:
-            self.collision_zone_editor = CollisionZoneEditor()
+            self.collision_zone_editor = CollisionZoneEditor(route_manager=self.route_manager)
             # Connect signals
             self.collision_zone_editor.collision_zone_updated.connect(self.on_collision_zone_updated)
             self.collision_zone_editor.editing_finished.connect(self.stop_collision_zone_editing)
@@ -1488,10 +1488,6 @@ class PlanEditor(QMainWindow):
         """Stop collision zone editing mode"""
         # Stop collision zone editing mode in map view first
         self.map_view.stop_collision_zone_editing()
-
-        # Clean up collision zone editor state
-        if self.collision_zone_editor:
-            self.collision_zone_editor.cleanup_editing()
 
         # Hide the collision zone editor window
         if self.collision_zone_window:

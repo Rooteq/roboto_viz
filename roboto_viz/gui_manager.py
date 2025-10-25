@@ -56,6 +56,25 @@ from roboto_viz.can_signal_receiver import CANSignalReceiver
 from roboto_viz.music_player import MusicPlayer
 from roboto_viz.collision_monitor_manager import CollisionMonitorManager
 
+
+class MapLoadWorker(QThread):
+    """Worker thread for loading maps onto the robot in the background"""
+    loading_complete = pyqtSignal(bool, str, str)  # success, map_name, error_msg
+
+    def __init__(self, route_manager, map_name):
+        super().__init__()
+        self.route_manager = route_manager
+        self.map_name = map_name
+
+    def run(self):
+        """Load the map in background thread"""
+        try:
+            success, error_msg = self.route_manager.load_map_onto_robot(self.map_name)
+            self.loading_complete.emit(success, self.map_name, error_msg)
+        except Exception as e:
+            self.loading_complete.emit(False, self.map_name, str(e))
+
+
 class LState(Enum):
     UNCONFIGURED = 0
     INACTIVE = 1
@@ -887,6 +906,10 @@ class GuiManager(QThread):
     plan_execution_stop = pyqtSignal()
     plan_action_execute = pyqtSignal(str, int)  # plan_name, action_index
 
+    # Collision zone display signals
+    show_collision_zones = pyqtSignal(str)  # route_name - show zones for this route
+    hide_collision_zones = pyqtSignal()  # hide all collision zones
+
     """ 
     DISCONNECTED STATE:
         service availability dictates if user should be able to connect 
@@ -916,6 +939,9 @@ class GuiManager(QThread):
         self.nav_data: NavData = NavData()
         self.navigator: Navigator = Navigator(self.nav_data)
         self.dock_manager = dock_manager
+
+        # Map loading worker thread
+        self.map_load_worker = None
 
         # Initialize CAN status manager
         self.can_manager = None
@@ -1041,7 +1067,7 @@ class GuiManager(QThread):
 
     @pyqtSlot(str)
     def handle_map_selected(self, map_name: str):
-        """Handle map selection from GUI"""
+        """Handle map selection from GUI - loads map in background thread"""
         print(f"DEBUG: GuiManager.handle_map_selected called with map: {map_name}")
         self.nav_data.set_current_map(map_name)
         print(f"DEBUG: nav_data.current_map set to: {self.nav_data.current_map}")
@@ -1050,8 +1076,19 @@ class GuiManager(QThread):
         # Emit status update to inform user that map loading is starting
         self.manualStatus.emit(f"Ładowanie mapy '{map_name}'...")
 
-        # Load the map into nav2 navigation stack
-        success, error_msg = self.nav_data.route_manager.load_map_onto_robot(map_name)
+        # Cancel any existing map loading operation
+        if self.map_load_worker and self.map_load_worker.isRunning():
+            print("DEBUG: Cancelling previous map load operation")
+            self.map_load_worker.quit()
+            self.map_load_worker.wait()
+
+        # Create and start worker thread to load map in background
+        self.map_load_worker = MapLoadWorker(self.nav_data.route_manager, map_name)
+        self.map_load_worker.loading_complete.connect(self._on_map_load_complete)
+        self.map_load_worker.start()
+
+    def _on_map_load_complete(self, success: bool, map_name: str, error_msg: str):
+        """Handle completion of background map loading"""
         if success:
             print(f"Map '{map_name}' loaded into nav2 successfully")
             self.manualStatus.emit(f"Mapa '{map_name}' załadowana pomyślnie")
@@ -1249,8 +1286,17 @@ class GuiManager(QThread):
     @pyqtSlot(str, bool, float, float)
     def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):
         print(f"New goal set!, To_dest: {to_dest}")
+
+        # Load collision zones for this route
+        if self.node and self.node.collision_monitor_manager:
+            self.node.collision_monitor_manager.load_collision_zones_for_route(route)
+            self.node.collision_monitor_manager.start_monitoring()
+
+        # Show collision zones on minimap
+        self.show_collision_zones.emit(route)
+
         self.navigator.set_goal(route, to_dest, x, y)
-        
+
         # Send OK CAN message for navigation start (respects battery warning)
         if self.can_manager:
             self.can_manager.send_navigation_start_ok_message()
@@ -1260,22 +1306,25 @@ class GuiManager(QThread):
         """Stop navigation and cancel any ongoing docking/undocking operations"""
         # Set flag to suppress docking status messages during general stop
         self.node.suppress_docking_status = True
-        
+
         # Force stop navigation
         self.navigator.stop()
         # Also cancel any ongoing docking operations
         self.cancel_docking()
         # Also cancel any ongoing undocking operations
         self.cancel_undocking()
-        
+
+        # Hide collision zones when navigation stops
+        self.hide_collision_zones.emit()
+
         # Only emit "Stopped" if navigator didn't preserve a failure status
         if not (self.navigator._last_status and ("fail" in self.navigator._last_status.lower() or "error" in self.navigator._last_status.lower())):
             self.navigator.navStatus.emit("Zatrzymany")
-        
+
         # Send OK CAN message for STOP command (only if battery warning is not active)
         if self.can_manager:
             self.can_manager.send_stop_ok_message()
-        
+
         # Reset the flag after a short delay to allow normal operation to resume
         QTimer.singleShot(500, self.reset_suppress_flag)
     

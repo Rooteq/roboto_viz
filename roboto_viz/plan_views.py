@@ -354,15 +354,7 @@ class PlanActiveView(QWidget):
         """Handle map selection request"""
         self.map_load_requested.emit(map_name)
 
-        # Load collision zones on minimap when map is selected
-        from pathlib import Path
-        maps_dir = Path.home() / ".robotroutes" / "maps"
-        map_path = maps_dir / f"{map_name}.pgm"
-        if not map_path.exists():
-            map_path = maps_dir / f"{map_name}.png"
-
-        if map_path.exists():
-            self.mini_map_view.load_collision_zones(str(map_path))
+        # Collision zones will be displayed when navigation starts on a route
     
     def on_plan_selected(self, plan_name: str):
         """Handle plan selection and update status"""
@@ -388,18 +380,9 @@ class PlanActiveView(QWidget):
 
     @pyqtSlot(str)
     def on_collision_zones_updated(self, map_name: str):
-        """Handle collision zones update from plan editor - reload minimap collision zones"""
-        from pathlib import Path
-        maps_dir = Path.home() / ".robotroutes" / "maps"
-
-        # Find the original map file (non-collision prefixed)
-        map_path = maps_dir / f"{map_name}.pgm"
-        if not map_path.exists():
-            map_path = maps_dir / f"{map_name}.png"
-
-        if map_path.exists():
-            # Reload collision zones on minimap
-            self.mini_map_view.load_collision_zones(str(map_path))
+        """Handle collision zones update from plan editor"""
+        # Collision zones will be displayed when navigation starts on a route
+        pass
     
     @pyqtSlot(float, float, float)
     def update_robot_pose(self, x: float, y: float, theta: float):
@@ -637,24 +620,11 @@ class PlanActiveView(QWidget):
         self.mini_map_view.clear_route()
 
     def load_current_map_collision_zones(self):
-        """Load collision zones for the current map onto the minimap"""
-        if not self.route_manager.current_map:
-            return
-
-        from pathlib import Path
-        maps_dir = Path.home() / ".robotroutes" / "maps"
-        map_name = self.route_manager.current_map
-
-        # Find the original map file (non-collision prefixed)
-        map_path = maps_dir / f"{map_name}.pgm"
-        if not map_path.exists():
-            map_path = maps_dir / f"{map_name}.png"
-
-        if map_path.exists():
-            self.mini_map_view.load_collision_zones(str(map_path))
+        """Collision zones are loaded when navigation starts on a route"""
+        # This method is kept for compatibility but does nothing
+        # Zones will be shown when navigation starts
+        pass
 
     def showEvent(self, event):
         """Called when the widget is shown"""
         super().showEvent(event)
-        # Load collision zones whenever the view is shown
-        self.load_current_map_collision_zones()

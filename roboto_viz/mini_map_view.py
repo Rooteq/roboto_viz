@@ -79,8 +79,9 @@ class MiniMapView(QGraphicsView):
         # Update scene rectangle to match image
         self.scene.setSceneRect(QRectF(self.pixmap.rect()))
 
-        # Load and display collision zones if they exist
-        self.load_collision_zones(image_path)
+        # Don't auto-load collision zones - they will be loaded when navigation starts
+        # Clear any existing collision zones
+        self.clear_collision_zones()
 
         # Center on robot if available, otherwise center on map origin
         if self.robot_item.isVisible():
@@ -165,43 +166,72 @@ class MiniMapView(QGraphicsView):
             self.current_route_graphics.clear_graphics()  # Use correct method name
             self.current_route_graphics = None
 
-    def load_collision_zones(self, image_path: str):
-        """Load and display collision zones as a transparent overlay"""
-        # Remove existing collision zones overlay
+    def clear_collision_zones(self):
+        """Clear the collision zones overlay"""
         if self.collision_zones_item:
             self.scene.removeItem(self.collision_zones_item)
             self.collision_zones_item = None
 
-        # Try to find collision map for this map
-        map_path = Path(image_path)
-        map_name = map_path.stem  # Get filename without extension
+    def show_collision_zones_for_route(self, route_name: str):
+        """Load and display collision zones for a specific route as a transparent overlay"""
+        # Remove existing collision zones overlay
+        self.clear_collision_zones()
 
-        # Check if this is already a collision_ or speed_ prefixed map
-        if map_name.startswith("collision_") or map_name.startswith("speed_"):
-            map_name = map_name.replace("collision_", "").replace("speed_", "")
+        if not self.pixmap:
+            print(f"WARNING: Cannot show collision zones - no map loaded")
+            return
 
-        # Try PNG first (color format), fallback to PGM
-        collision_map_path = map_path.parent / f"collision_{map_name}.png"
-        if not collision_map_path.exists():
-            collision_map_path = map_path.parent / f"collision_{map_name}.pgm"
+        # Find the collision map (should be loaded already)
+        maps_dir = Path.home() / ".robotroutes" / "maps"
 
-        if collision_map_path.exists():
-            # Load collision map
-            collision_pixmap = QPixmap(str(collision_map_path))
+        # Get the current map name from the loaded pixmap
+        # We need to figure out which map is currently loaded
+        # The collision mask is the same regardless of route
+        collision_map_files = list(maps_dir.glob("collision_*.png"))
+        if not collision_map_files:
+            collision_map_files = list(maps_dir.glob("collision_*.pgm"))
 
-            # Make it semi-transparent (30% opacity)
-            transparent_pixmap = QPixmap(collision_pixmap.size())
-            transparent_pixmap.fill(Qt.transparent)
+        # Find the collision map that's not a route-specific file
+        collision_map_path = None
+        for file in collision_map_files:
+            filename = file.stem
+            # Skip route-specific zone files (those ending with _zones are JSON files anyway)
+            # We want collision_<mapname>.png/pgm files
+            if not filename.endswith("_zones"):
+                # Check if this matches our current map dimensions
+                test_pixmap = QPixmap(str(file))
+                if test_pixmap.size() == self.pixmap.size():
+                    collision_map_path = file
+                    break
 
-            painter = QPainter(transparent_pixmap)
-            painter.setOpacity(0.3)  # 30% opacity
-            painter.drawPixmap(0, 0, collision_pixmap)
-            painter.end()
+        if not collision_map_path or not collision_map_path.exists():
+            print(f"INFO: No collision map found for route '{route_name}'")
+            return
 
-            # Add to scene
-            self.collision_zones_item = self.scene.addPixmap(transparent_pixmap)
-            self.collision_zones_item.setPos(0, 0)
-            self.collision_zones_item.setZValue(0)  # Above map, below robot
+        # Check if zones exist for this route
+        collision_zones_json = maps_dir / f"collision_{route_name}_zones.json"
+        if not collision_zones_json.exists():
+            print(f"INFO: No collision zones file found for route '{route_name}'")
+            return
+
+        # Load collision map
+        collision_pixmap = QPixmap(str(collision_map_path))
+
+        # Make it semi-transparent (30% opacity)
+        transparent_pixmap = QPixmap(collision_pixmap.size())
+        transparent_pixmap.fill(Qt.transparent)
+
+        painter = QPainter(transparent_pixmap)
+        painter.setOpacity(0.3)  # 30% opacity
+        painter.drawPixmap(0, 0, collision_pixmap)
+        painter.end()
+
+        # Add to scene
+        self.collision_zones_item = self.scene.addPixmap(transparent_pixmap)
+        self.collision_zones_item.setPos(0, 0)
+        self.collision_zones_item.setZValue(0)  # Above map, below robot
+
+        print(f"INFO: Displayed collision zones for route '{route_name}'")
 
     def resizeEvent(self, event):
         """Handle resize events by re-centering on robot"""

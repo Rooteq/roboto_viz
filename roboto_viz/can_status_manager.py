@@ -362,58 +362,19 @@ class CANStatusManager(QObject):
         """Send OK or WARNING message when navigation starts based on battery level"""
         if not self.socket_fd:
             return False
-        
+
         # End preparation phase and stop the preparation buzzer
         self.navigation_preparation_active = False
         if hasattr(self, '_preparation_buzzer_timer'):
             self._preparation_buzzer_timer.stop()
         self._send_buzzer_can_message(CANBuzzerType.BUZZER_OFF)
-        
+
         if self.battery_warning_active:
-            # Send WARNING LED instead of blocking the message
-            success = self._send_led_can_message(CANLEDType.ORANGE_LED)
-            if success:
-                # Send the same WARNING message again after 117ms for reliability
-                from PyQt5.QtCore import QTimer
-                QTimer.singleShot(117, self._send_navigation_start_warning_delayed)
-            return success
-        
-        # Send GREEN LED for navigation start (first time)
-        success = self._send_led_can_message(CANLEDType.GREEN_LED)
-        if success:
-            # Send the same message again after 117ms for reliability
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(117, self._send_navigation_start_ok_delayed)
-        
-        return success
-    
-    def _send_navigation_start_ok_delayed(self):
-        """Send the navigation start OK message again after 117ms delay"""
-        if self.socket_fd and not self.battery_warning_active:
-            success = self._send_led_can_message(CANLEDType.GREEN_LED)
-            if success:
-                # Send third message after another 117ms (234ms total)
-                from PyQt5.QtCore import QTimer
-                QTimer.singleShot(117, self._send_navigation_start_ok_third)
-    
-    def _send_navigation_start_warning_delayed(self):
-        """Send the navigation start WARNING message again after 117ms delay"""
-        if self.socket_fd and self.battery_warning_active:
-            success = self._send_led_can_message(CANLEDType.ORANGE_LED)
-            if success:
-                # Send third message after another 117ms (234ms total)
-                from PyQt5.QtCore import QTimer
-                QTimer.singleShot(117, self._send_navigation_start_warning_third)
-    
-    def _send_navigation_start_ok_third(self):
-        """Send the navigation start OK message a third time after 234ms total delay"""
-        if self.socket_fd and not self.battery_warning_active:
-            self._send_led_can_message(CANLEDType.GREEN_LED)
-                
-    def _send_navigation_start_warning_third(self):
-        """Send the navigation start WARNING message a third time after 234ms total delay"""
-        if self.socket_fd and self.battery_warning_active:
-            self._send_led_can_message(CANLEDType.ORANGE_LED)
+            # Send WARNING LED once
+            return self._send_led_can_message(CANLEDType.ORANGE_LED)
+
+        # Send GREEN LED for navigation start once
+        return self._send_led_can_message(CANLEDType.GREEN_LED)
         
     def get_status_info(self) -> Dict:
         """
