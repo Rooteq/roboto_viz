@@ -23,7 +23,7 @@ class SpeedZoneEditor(QWidget):
         self.speed_mask_pixmap: Optional[QPixmap] = None
         self.drawing_enabled = False
         self.current_tool = 'paint'  # 'paint' or 'erase'
-        self.current_speed_ms = 0.3  # Current speed in m/s (default 0.3 m/s)
+        self.current_speed_ms = 0.6  # Current speed in m/s (default 0.6 m/s, 60% of max)
         self.drawing_box = False
         self.box_start_pos = None
         self.box_end_pos = None
@@ -102,16 +102,16 @@ class SpeedZoneEditor(QWidget):
         # Speed setting
         speed_layout = QVBoxLayout()
         speed_layout.addWidget(QLabel("Limit Prędkości (m/s):"))
-        
+
         self.speed_combo = QComboBox()
         self.speed_combo.addItems([
-            "0.1 m/s",
-            "0.2 m/s", 
-            "0.3 m/s",
+            "0.2 m/s",
             "0.4 m/s",
-            "0.5 m/s"
+            "0.6 m/s",
+            "0.8 m/s",
+            "1.0 m/s"
         ])
-        self.speed_combo.setCurrentIndex(2)  # Default to 0.3 m/s
+        self.speed_combo.setCurrentIndex(2)  # Default to 0.6 m/s (60% of max)
         speed_layout.addWidget(self.speed_combo)
         
         tools_layout.addLayout(speed_layout)
@@ -191,8 +191,8 @@ class SpeedZoneEditor(QWidget):
                 self.current_tool = "erase"
     
     def on_speed_changed(self, index):
-        # Map combo index to speed in m/s
-        speeds = [0.1, 0.2, 0.3, 0.4, 0.5]
+        # Map combo index to speed in m/s (scaled to new max of 1.0 m/s)
+        speeds = [0.2, 0.4, 0.6, 0.8, 1.0]
         self.current_speed_ms = speeds[index]
         
     def load_map(self, map_name: str):
@@ -248,12 +248,12 @@ class SpeedZoneEditor(QWidget):
             
     def get_gray_value_for_speed(self, speed_ms: float) -> int:
         """Convert speed in m/s to gray value for speed mask
-        
+
         For nav2 speed filter:
         - Higher gray values = higher speed
         - Speed scaling: gray_value = (speed_ms / max_speed) * 255
         """
-        max_speed = 0.5  # Maximum speed
+        max_speed = 1.0  # Maximum speed (updated from 0.5 to 1.0 m/s)
         return int((speed_ms / max_speed) * 255)
         
     def start_box_drawing(self, scene_x: float, scene_y: float):

@@ -59,8 +59,8 @@ class CollisionMonitorManager(QObject):
     # DEFAULT COLLISION POLYGONS - CHANGE THESE VALUES AS NEEDED
     # These are the default polygons that will be used when the robot exits zones
     # ========================================================================
-    DEFAULT_POLYGON_SLOW_POINTS = "[[0.95, 0.55], [0.95, -0.55], [-0.8, -0.55], [-0.8, 0.55]]"
-    DEFAULT_POLYGON_STOP_POINTS = "[[0.75, 0.45], [0.75, -0.45], [-0.8, -0.45], [-0.8, 0.45]]"
+    DEFAULT_POLYGON_SLOW_POINTS = "[[1.30, 0.55], [1.30, -0.55], [-0.8, -0.55], [-0.8, 0.55]]"
+    DEFAULT_POLYGON_STOP_POINTS = "[[1.0, 0.45], [1.0, -0.45], [-0.8, -0.45], [-0.8, 0.45]]"
 
     def __init__(self, node: Node, parent=None):
         super().__init__(parent)

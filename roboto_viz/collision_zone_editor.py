@@ -275,7 +275,7 @@ class CollisionZoneEditor(QWidget):
         dialog_layout.addWidget(label)
 
         text_edit = QTextEdit()
-        text_edit.setPlainText('[[0.95, 0.55], [0.95, -0.55], [-0.8, -0.55], [-0.8, 0.55]]')
+        text_edit.setPlainText('[[1.0, 0.45], [1.0, -0.45], [-0.8, -0.45], [-0.8, 0.45]]')
         text_edit.setMaximumHeight(80)
         dialog_layout.addWidget(text_edit)
 
