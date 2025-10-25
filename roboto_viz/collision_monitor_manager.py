@@ -58,8 +58,8 @@ class CollisionMonitorManager(QObject):
     # DEFAULT COLLISION POLYGONS - CHANGE THESE VALUES AS NEEDED
     # These are the default polygons that will be used when the robot exits zones
     # ========================================================================
-    DEFAULT_POLYGON_SLOW_POINTS = "[[0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5]]"
-    DEFAULT_POLYGON_STOP_POINTS = "[[0.3, 0.3], [0.3, -0.3], [-0.3, -0.3], [-0.3, 0.3]]"
+    DEFAULT_POLYGON_SLOW_POINTS = "[[0.95, 0.55], [0.95, -0.55], [-0.8, -0.55], [-0.8, 0.55]]"
+    DEFAULT_POLYGON_STOP_POINTS = "[[0.75, 0.45], [0.75, -0.45], [-0.8, -0.45], [-0.8, 0.45]]"
 
     def __init__(self, node: Node, parent=None):
         super().__init__(parent)
@@ -332,17 +332,20 @@ class CollisionMonitorManager(QObject):
                 polygon_points
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 
             if result.returncode == 0:
                 print(f"✓ Successfully set {polygon_type} polygon parameter")
                 if result.stdout and result.stdout.strip():
                     print(f"  ROS2 response: {result.stdout.strip()}")
             else:
-                print(f"✗ Failed to set {polygon_type} polygon parameter!")
-                print(f"  Error: {result.stderr}")
+                print(f"✗ Failed to set {polygon_type} polygon parameter (non-critical, continuing)")
+                if result.stderr:
+                    print(f"  Error: {result.stderr.strip()}")
 
         except subprocess.TimeoutExpired:
-            print(f"✗ ROS2 param set command timed out (5 seconds)")
+            print(f"✗ ROS2 param set command timed out after 10 seconds (non-critical, continuing)")
+        except FileNotFoundError:
+            print(f"✗ ROS2 command not found - is ROS2 installed? (non-critical, continuing)")
         except Exception as e:
-            print(f"✗ Exception setting collision polygon: {e}")
+            print(f"✗ Exception setting collision polygon (non-critical, continuing): {e}")

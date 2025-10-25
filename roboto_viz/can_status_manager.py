@@ -3,7 +3,7 @@
 import socket
 import struct
 from typing import Dict
-from PyQt5.QtCore import QObject, pyqtSlot, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSlot
 from enum import IntEnum
 
 
@@ -32,9 +32,6 @@ class CANStatusManager(QObject):
     Manages CAN message transmission for robot status signals.
     Sends status updates as CAN messages when status changes occur.
     """
-
-    # Signal emitted when obstacle is detected during navigation (when orange LED is sent)
-    obstacle_detected_during_navigation = pyqtSignal(bool)
 
     def __init__(self, can_interface: str = "can0"):
         super().__init__()
@@ -449,12 +446,8 @@ class CANStatusManager(QObject):
             if collision_detected:
                 # Always send WARNING LED for collision detection during navigation
                 self._send_led_can_message(CANLEDType.ORANGE_LED)
-                # Emit signal for GUI to update robot status
-                self.obstacle_detected_during_navigation.emit(True)
             else:
                 # No collision detected during navigation
-                # Emit signal to clear obstacle status
-                self.obstacle_detected_during_navigation.emit(False)
                 if self.battery_warning_active:
                     # Battery warning is active - keep sending WARNING LED
                     self._send_led_can_message(CANLEDType.ORANGE_LED)

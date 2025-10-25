@@ -52,6 +52,10 @@ class PlanActiveView(QWidget):
         # Plan editor window (created on demand)
         self.plan_editor: Optional[PlanEditor] = None
 
+        # Track navigation state for collision detection
+        self.is_navigating: bool = False
+        self.obstacle_detected: bool = False
+
         # Create plan tools
         self.plan_tools = PlanTools(self.plan_manager)
 
@@ -572,8 +576,19 @@ class PlanActiveView(QWidget):
     
     def update_robot_status(self, status: str):
         """Update robot status display"""
-        # Call the same logic as set_current_status to update grid cell
-        self.set_current_status(status)
+        # Track navigation state
+        status_lower = status.lower()
+        self.is_navigating = any(word in status_lower for word in ['nav', 'navigating', 'executing'])
+
+        # If we're showing obstacle status and navigation stopped, clear it
+        if not self.is_navigating and self.obstacle_detected:
+            self.obstacle_detected = False
+            # Don't override status - the navigation status will update naturally
+
+        # Only update status if we're not currently showing an obstacle warning
+        # or if navigation has stopped
+        if not self.obstacle_detected or not self.is_navigating:
+            self.set_current_status(status)
 
         # Forward navigation status to plan tools for signal button logic
         self.plan_tools.update_navigation_status(status)
@@ -581,11 +596,18 @@ class PlanActiveView(QWidget):
     @pyqtSlot(bool)
     def handle_collision_detection(self, collision_detected: bool):
         """Handle collision detection status and update robot status display"""
-        if collision_detected:
-            # Show orange warning when obstacle is detected
-            self.set_current_status("Wykryto przeszkodę")
-        # Note: We don't clear the status when collision is cleared
-        # because the robot will have other status updates (navigating, etc.)
+        # Only show obstacle status when navigating (matching CAN LED logic)
+        if self.is_navigating:
+            if collision_detected:
+                # Show orange warning when obstacle is detected during navigation
+                self.obstacle_detected = True
+                self.set_current_status("Wykryto przeszkodę")
+            else:
+                # Obstacle cleared during navigation
+                if self.obstacle_detected:
+                    self.obstacle_detected = False
+                    # Restore navigation status
+                    self.set_current_status("Navigating")
     
     def close_plan_editor(self):
         """Close the plan editor if open"""

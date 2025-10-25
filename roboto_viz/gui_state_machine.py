@@ -533,9 +533,9 @@ class PlanActiveState(State):
             lambda velocity: self.gui.main_view.plan_active_view.update_velocity(velocity)
         )
 
-        # Collision detection updates (only when CAN orange light is sent)
+        # Collision detection updates
         self.connect_and_store_connections(
-            self.gui.gui_manager.can_manager.obstacle_detected_during_navigation,
+            self.gui.gui_manager.collision_detected,
             self.gui.main_view.plan_active_view.handle_collision_detection
         )
 

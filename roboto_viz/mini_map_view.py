@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QImage
 from roboto_viz.robot_item import RobotItem
 from roboto_viz.bezier_graphics import BezierRouteGraphics
@@ -77,7 +77,7 @@ class MiniMapView(QGraphicsView):
         self.map_pixmap_item.setPos(0, 0)
 
         # Update scene rectangle to match image
-        self.scene.setSceneRect(self.pixmap.rect())
+        self.scene.setSceneRect(QRectF(self.pixmap.rect()))
 
         # Load and display collision zones if they exist
         self.load_collision_zones(image_path)
