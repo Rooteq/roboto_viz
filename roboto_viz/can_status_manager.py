@@ -47,22 +47,24 @@ class CANStatusManager(QObject):
         self.status_level_map = {
             # OK states
             'idle': StatusLevel.OK,
-            'at base': StatusLevel.OK, 
+            'at base': StatusLevel.OK,
             'at destination': StatusLevel.OK,
             'docked': StatusLevel.OK,
             'undocked': StatusLevel.OK,
             'connected': StatusLevel.OK,
             'available': StatusLevel.OK,
-            
-            # Warning states  
+
+            # Warning states
             'warning': StatusLevel.WARNING,
             'low battery': StatusLevel.WARNING,
             'obstacle detected': StatusLevel.WARNING,
+            'wykryto przeszkodę': StatusLevel.WARNING,
             'oczekiwanie na sygnał': StatusLevel.WARNING,
-            
+
             # Error states
             'failed': StatusLevel.ERROR,
             'error': StatusLevel.ERROR,
+            'błąd': StatusLevel.ERROR,
             'connection lost': StatusLevel.ERROR,
             'navigation error': StatusLevel.ERROR,
             'navigation failed': StatusLevel.ERROR,
@@ -130,51 +132,63 @@ class CANStatusManager(QObject):
     def _send_led_can_message(self, led_can_id: CANLEDType):
         """
         Send empty CAN message for LED control
-        
+
         Message format: Empty frame (0 bytes) - just the CAN ID triggers LED
         """
+        # Debug message (always print, even if CAN not connected)
+        led_color = {
+            CANLEDType.GREEN_LED: "GREEN",
+            CANLEDType.ORANGE_LED: "ORANGE",
+            CANLEDType.RED_LED: "RED"
+        }.get(led_can_id, "UNKNOWN")
+        print(f"CAN DEBUG: Sent {led_color} LED msg (0x{int(led_can_id):03X})")
+
         if not self.socket_fd:
             return False
-            
+
         try:
             # Create empty CAN frame - just the ID is needed for LED control
-            can_frame = struct.pack("=IB3x8s", 
+            can_frame = struct.pack("=IB3x8s",
                                   int(led_can_id),  # CAN ID
                                   0,                # Data length (0 bytes - empty frame)
                                   b'\x00' * 8)     # Empty data payload
-            
+
             # Send frame
             self.socket_fd.send(can_frame)
-            
+
             return True
-            
+
         except Exception as e:
-            print(f"Error sending CAN LED message: {e}")
+            print(f"CAN ERROR: Failed to send LED message: {e}")
             return False
             
     def _send_buzzer_can_message(self, buzzer_can_id: CANBuzzerType):
         """
         Send empty CAN message for buzzer control
-        
+
         Message format: Empty frame (0 bytes) - just the CAN ID triggers buzzer
         """
+        # Debug message (always print, even if CAN not connected)
+        buzzer_state = "ON" if buzzer_can_id == CANBuzzerType.BUZZER_ON else "OFF"
+        print(f"CAN DEBUG: Sent BUZZER {buzzer_state} msg (0x{int(buzzer_can_id):03X})")
+
         if not self.socket_fd:
             return False
-            
+
         try:
             # Create empty CAN frame - just the ID is needed for buzzer control
-            can_frame = struct.pack("=IB3x8s", 
+            can_frame = struct.pack("=IB3x8s",
                                   int(buzzer_can_id),  # CAN ID
                                   0,                   # Data length (0 bytes - empty frame)
                                   b'\x00' * 8)        # Empty data payload
-            
+
             # Send frame
             self.socket_fd.send(can_frame)
-            
+
             return True
-            
+
         except Exception as e:
-            print(f"Error sending CAN buzzer message: {e}")
+            print(f"CAN ERROR: Failed to send buzzer message: {e}")
             return False
 
     def send_buzzer_status(self, collision_detected: bool):
@@ -220,15 +234,12 @@ class CANStatusManager(QObject):
         """
         Send LED control message only if status level has changed
         """
-        if not self.socket_fd:
-            return
-            
         status_level = self._get_status_level(status_text)
-        
+
         # Block OK status if battery is in warning state
         if self._should_block_ok_status(status_level):
             return
-        
+
         if self._should_send_led(status_level):
             # Map status level to LED CAN ID
             led_mapping = {
@@ -236,9 +247,9 @@ class CANStatusManager(QObject):
                 StatusLevel.WARNING: CANLEDType.ORANGE_LED,
                 StatusLevel.ERROR: CANLEDType.RED_LED
             }
-            
+
             led_can_id = led_mapping[status_level]
-            self._send_led_can_message(led_can_id)
+            self._send_led_can_message(led_can_id)  # This will print debug even if socket_fd is None
             
     # PyQt slots for connecting to existing status signals
     @pyqtSlot(str)
@@ -319,62 +330,74 @@ class CANStatusManager(QObject):
     
     def send_stop_ok_message(self):
         """Send OK or WARNING message when STOP is pressed based on battery level"""
-        if not self.socket_fd:
-            return False
-            
         if self.battery_warning_active:
             # Send WARNING LED instead of blocking the message
             success = self._send_led_can_message(CANLEDType.ORANGE_LED)
             return success
-        
+
         # Send GREEN LED for successful stop
         success = self._send_led_can_message(CANLEDType.GREEN_LED)
         return success
     
     def send_navigation_preparation_message(self):
         """Send buzzer ON and warning LED for navigation preparation (during 5s countdown)"""
-        if not self.socket_fd:
-            return False
-        
         # Set preparation phase flag to prevent interference
         self.navigation_preparation_active = True
-        
+
         # Start beeping during preparation phase
         success_buzzer = self._send_buzzer_can_message(CANBuzzerType.BUZZER_ON)
-        
+
         # Send WARNING LED for preparation phase
         success_led = self._send_led_can_message(CANLEDType.ORANGE_LED)
-        
+
         # Start a timer to repeatedly send buzzer ON during preparation phase
         from PyQt5.QtCore import QTimer
         self._preparation_buzzer_timer = QTimer()
         self._preparation_buzzer_timer.timeout.connect(self._send_preparation_buzzer_repeat)
         self._preparation_buzzer_timer.start(500)  # Send buzzer ON every 500ms
-        
+
         return success_buzzer and success_led
     
     def _send_preparation_buzzer_repeat(self):
         """Repeatedly send buzzer ON during navigation preparation to ensure it stays on"""
-        if self.navigation_preparation_active and self.socket_fd:
-            self._send_buzzer_can_message(CANBuzzerType.BUZZER_ON)
+        if not self.navigation_preparation_active:
+            # Stop the timer if preparation is no longer active
+            if hasattr(self, '_preparation_buzzer_timer') and self._preparation_buzzer_timer:
+                print("CAN DEBUG: Stopping preparation buzzer timer (flag is False)")
+                self._preparation_buzzer_timer.stop()
+            return
+        self._send_buzzer_can_message(CANBuzzerType.BUZZER_ON)
     
-    def send_navigation_start_ok_message(self):
-        """Send OK or WARNING message when navigation starts based on battery level"""
-        if not self.socket_fd:
-            return False
+    def stop_navigation_preparation(self):
+        """Stop navigation preparation - called when STOP pressed or countdown ends"""
+        # Check if preparation is already stopped (idempotent)
+        if not self.navigation_preparation_active:
+            return
 
+        print("CAN DEBUG: Stopping navigation preparation")
         # End preparation phase and stop the preparation buzzer
         self.navigation_preparation_active = False
-        if hasattr(self, '_preparation_buzzer_timer'):
+        if hasattr(self, '_preparation_buzzer_timer') and self._preparation_buzzer_timer:
             self._preparation_buzzer_timer.stop()
+            self._preparation_buzzer_timer = None
+
+        # Turn off buzzer
         self._send_buzzer_can_message(CANBuzzerType.BUZZER_OFF)
 
+        # Send appropriate LED based on battery status
         if self.battery_warning_active:
-            # Send WARNING LED once
-            return self._send_led_can_message(CANLEDType.ORANGE_LED)
+            self._send_led_can_message(CANLEDType.ORANGE_LED)
+        else:
+            self._send_led_can_message(CANLEDType.GREEN_LED)
 
-        # Send GREEN LED for navigation start once
-        return self._send_led_can_message(CANLEDType.GREEN_LED)
+    def send_navigation_start_ok_message(self):
+        """Send OK or WARNING message when navigation starts based on battery level"""
+        # Preparation should already be stopped by now (at end of 5s countdown)
+        # But call stop_navigation_preparation to be safe (it's idempotent)
+        self.stop_navigation_preparation()
+
+        # Note: LED messages are already sent by stop_navigation_preparation
+        # No need to send them again here
         
     def get_status_info(self) -> Dict:
         """

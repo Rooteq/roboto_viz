@@ -416,8 +416,10 @@ class PlanActiveView(QWidget):
                 # Light red for errors and cancellations
                 bg_color = "#fadbd8"
                 text_color = "#e74c3c"
-            elif status in ["Ostrzeżenie", "Słaba bateria", "Wykryto przeszkodę"]:
-                # Light orange for warnings
+            elif (status in ["Ostrzeżenie", "Słaba bateria", "Wykryto przeszkodę", "Wykryto przeszkodę!"] or
+                  "wykryto przeszkodę" in status.lower() or
+                  ("start" in status.lower() and "sek" in status.lower())):
+                # Light orange for warnings, obstacle detection, and navigation countdown
                 bg_color = "#fdebd0"
                 text_color = "#f39c12"
             else:
@@ -584,7 +586,7 @@ class PlanActiveView(QWidget):
             if collision_detected:
                 # Show orange warning when obstacle is detected during navigation
                 self.obstacle_detected = True
-                self.set_current_status("Wykryto przeszkodę")
+                self.set_current_status("Wykryto przeszkodę!")
             else:
                 # Obstacle cleared during navigation
                 if self.obstacle_detected:

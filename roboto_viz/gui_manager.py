@@ -632,6 +632,7 @@ class Navigator(QThread):
 
     finished = pyqtSignal()  # Emitted when a goal is reached
     navigation_status = pyqtSignal(str)  # Optional: to inform GUI about status
+    navigation_started = pyqtSignal()  # Emitted when navigation actually starts (after followPath completes)
 
     def __init__(self, nav_data: NavData):
         super().__init__()
@@ -723,8 +724,8 @@ class Navigator(QThread):
                 path_msg.header.frame_id = 'map'
                 # Don't set timestamp - let nav2 handle it
                 
-                print(f"DEBUG: Creating path with {len(waypoints)} waypoints, _to_dest={self._to_dest}")
-                
+                print(f"NAV DEBUG: Creating path with {len(waypoints)} waypoints, to_dest={self._to_dest}")
+
                 for i, point in enumerate(waypoints):
                     pose_stamped = PoseStamped()
                     pose_stamped.header.frame_id = 'map'
@@ -749,8 +750,8 @@ class Navigator(QThread):
                         # else:
                         #     # Going back to base: direction from current to previous (reverse)
                         #     # orientation = math.atan2(-dy, -dx)
-                            
-                        print(f"DEBUG: Final waypoint calculated orientation: {orientation} radians ({math.degrees(orientation)} degrees)")
+
+                        # print(f"DEBUG: Final waypoint calculated orientation: {orientation} radians ({math.degrees(orientation)} degrees}")
                     else:
                         # For non-final waypoints, use original or reverse orientation
                         if self._to_dest:
@@ -766,14 +767,14 @@ class Navigator(QThread):
                     path_msg.poses.append(pose_stamped)
                 
                 # Start navigation in a separate thread to avoid blocking the app
-                print("DEBUG: Starting navigation in background thread...")
+                print("NAV DEBUG: Starting navigation in background thread...")
                 nav_start_complete = threading.Event()
                 nav_start_error = [None]  # Use list to allow modification in nested function
 
                 def start_navigation_async():
                     try:
                         # Wait for nav2 to be active first (with timeout)
-                        print("DEBUG: Waiting for nav2 to become active...")
+                        # print("DEBUG: Waiting for nav2 to become active...")
                         try:
                             # Wait up to 10 seconds for nav2 to be ready
                             nav2_ready = threading.Event()
@@ -783,7 +784,7 @@ class Navigator(QThread):
                                     self.nav_data.navigator.waitUntilNav2Active()
                                     nav2_ready.set()
                                 except Exception as e:
-                                    print(f"DEBUG: Error waiting for nav2: {e}")
+                                    print(f"NAV ERROR: Error waiting for nav2: {e}")
                                     nav_start_error[0] = str(e)
 
                             wait_thread = threading.Thread(target=wait_for_nav2)
@@ -792,31 +793,33 @@ class Navigator(QThread):
 
                             # Wait up to 10 seconds for nav2 to be ready
                             if not nav2_ready.wait(timeout=10.0):
-                                print("DEBUG: Timeout waiting for nav2 to become active, proceeding anyway...")
-                            else:
-                                print("DEBUG: Nav2 is now active!")
+                                print("NAV DEBUG: Timeout waiting for nav2, proceeding anyway...")
+                            # else:
+                            #     print("NAV DEBUG: Nav2 is now active!")
 
                         except Exception as e:
-                            print(f"DEBUG: Exception in nav2 wait: {e}")
+                            print(f"NAV ERROR: Exception in nav2 wait: {e}")
                             # Continue anyway
 
                         # Start path navigation with specific controller and goal checker
-                        print(f"DEBUG: Starting navigation with followPath, {len(path_msg.poses)} poses")
+                        print(f"NAV DEBUG: Starting followPath with {len(path_msg.poses)} poses")
                         try:
                             self.nav_data.navigator.followPath(
                                 path_msg,
                                 controller_id='FollowPath',
                                 goal_checker_id='goal_checker'
                             )
-                            print("DEBUG: followPath() call completed, navigation should now be active")
+                            print("NAV DEBUG: followPath() completed, navigation active")
+                            # Emit signal that navigation has actually started
+                            self.navigation_started.emit()
                         except Exception as e:
-                            print(f"DEBUG: followPath() failed with exception: {e}")
+                            print(f"NAV ERROR: followPath() failed: {e}")
                             nav_start_error[0] = str(e)
 
                         nav_start_complete.set()
 
                     except Exception as e:
-                        print(f"DEBUG: Navigation start thread failed: {e}")
+                        print(f"NAV ERROR: Navigation start thread failed: {e}")
                         nav_start_error[0] = str(e)
                         nav_start_complete.set()
 
@@ -828,14 +831,14 @@ class Navigator(QThread):
                 # Wait for navigation to start (non-blocking for the Navigator thread)
                 # Use a short timeout to avoid blocking indefinitely
                 if not nav_start_complete.wait(timeout=15.0):
-                    print("DEBUG: Timeout waiting for navigation to start")
+                    print("NAV ERROR: Timeout waiting for navigation to start")
                     self._last_status = "Błąd - Timeout podczas startu nawigacji"
                     self.navStatus.emit("Błąd - Timeout podczas startu nawigacji")
                     continue
 
                 # Check if there was an error during navigation start
                 if nav_start_error[0]:
-                    print(f"DEBUG: Navigation start failed: {nav_start_error[0]}")
+                    print(f"NAV ERROR: Navigation start failed: {nav_start_error[0]}")
                     self._last_status = "Błąd - Usługa nawigacji niedostępna"
                     self.navStatus.emit("Błąd - Usługa nawigacji niedostępna")
                     continue
@@ -847,7 +850,7 @@ class Navigator(QThread):
                 if self.nav_data.navigator.isTaskComplete():
                     result = self.nav_data.navigator.getResult()
                     if result == TaskResult.FAILED:
-                        print("DEBUG: Navigation goal was rejected by server")
+                        print("NAV ERROR: Navigation goal rejected by server")
                         self._last_status = "Błąd - Cel odrzucony przez serwer"
                         self.navStatus.emit("Błąd - Cel odrzucony przez serwer")
                         continue
@@ -861,7 +864,7 @@ class Navigator(QThread):
                 
                 if self._running and self.nav_data.navigator.isTaskComplete():
                     if self.nav_data.navigator.getResult() is TaskResult.SUCCEEDED:
-                        print(f"DEBUG: Navigation completed, _to_dest = {self._to_dest}")
+                        print(f"NAV DEBUG: Navigation completed, to_dest={self._to_dest}")
                         if self._to_dest:
                             self._last_status = "Na miejscu docelowym"
                             self.navStatus.emit("Na miejscu docelowym")
@@ -893,7 +896,8 @@ class Navigator(QThread):
                                     else:
                                         error_msg = "Błąd - Przekroczono czas nawigacji"
                         except Exception as e:
-                            print(f"DEBUG: Could not extract detailed nav2 error: {e}")
+                            # print(f"DEBUG: Could not extract detailed nav2 error: {e}")
+                            pass
                             error_msg = "Błąd - Błąd Nav2"
                         
                         self._last_status = error_msg
@@ -1005,7 +1009,7 @@ class GuiManager(QThread):
         """Connect all status signals to CAN manager and battery receiver"""
         if not self.can_manager:
             return
-            
+
         # Connect the various status signals to CAN handlers
         self.manualStatus.connect(self.can_manager.handle_manual_status)
         self.dockingStatus.connect(self.can_manager.handle_docking_status)
@@ -1013,19 +1017,23 @@ class GuiManager(QThread):
         self.batteryStatusCAN.connect(self.can_manager.handle_battery_status)
         self.planStatusCAN.connect(self.can_manager.handle_plan_status)
         self.wait_action_status.connect(self.can_manager.handle_wait_action_status)
-        
+
         # Connect collision detection signal to buzzer control
         self.collision_detected.connect(self.can_manager.handle_collision_detection)
 
         # Connect navigation status from navigator if available
         if hasattr(self.navigator, 'navStatus'):
             self.navigator.navStatus.connect(self.can_manager.handle_navigation_status)
-            
+
+        # Connect navigation_started signal to send CAN message after nav starts
+        if hasattr(self.navigator, 'navigation_started'):
+            self.navigator.navigation_started.connect(self.handle_navigation_started)
+
         # Connect battery receiver if available
         if self.can_battery_receiver:
             self.can_battery_receiver.battery_status_update.connect(self.handle_battery_adc_update)
             self.can_battery_receiver.battery_percentage_update.connect(self.handle_battery_percentage_update)
-            
+
         # Connect signal receiver if available
         if self.can_signal_receiver:
             self.can_signal_receiver.signal_received.connect(self.handle_can_signal_received)
@@ -1033,14 +1041,28 @@ class GuiManager(QThread):
     def send_robot_status_to_can(self, status: str):
         """Send robot status to CAN bus via signal"""
         self.robotStatusCAN.emit(status)
-    
+
     def send_battery_status_to_can(self, status: str):
         """Send battery status to CAN bus via signal"""
         self.batteryStatusCAN.emit(status)
-    
+
     def send_plan_status_to_can(self, status: str):
         """Send plan status to CAN bus via signal"""
         self.planStatusCAN.emit(status)
+
+    @pyqtSlot()
+    def handle_navigation_started(self):
+        """Handle navigation actually starting - send CAN message after delay to avoid overwhelming bus"""
+        print("NAV DEBUG: Navigation started, waiting 500ms before CAN messages...")
+        # Use QTimer to add a delay before sending CAN messages
+        # This prevents overwhelming the CAN bus when nav2 service calls complete
+        QTimer.singleShot(500, self._send_navigation_start_can_message)
+
+    def _send_navigation_start_can_message(self):
+        """Send CAN message for navigation start after delay"""
+        # print("NAV DEBUG: Sending navigation start CAN message now")
+        if self.can_manager:
+            self.can_manager.send_navigation_start_ok_message()
     
     def handle_battery_adc_update(self, adc_value: int):
         """Handle battery ADC updates from CAN"""
@@ -1062,7 +1084,7 @@ class GuiManager(QThread):
     
     def handle_can_signal_received(self):
         """Handle CAN wait signal received from ID 0x69"""
-        print("DEBUG: CAN Signal received on ID 0x69 - forwarding to plan executor")
+        print("CAN DEBUG: Signal received on ID 0x69 - forwarding to plan executor")
         self.can_signal_received.emit()
 
     def send_maps(self):
@@ -1093,17 +1115,18 @@ class GuiManager(QThread):
     @pyqtSlot(str)
     def handle_map_selected(self, map_name: str):
         """Handle map selection from GUI - loads map in background thread"""
-        print(f"DEBUG: GuiManager.handle_map_selected called with map: {map_name}")
+        # print(f"DEBUG: GuiManager.handle_map_selected called with map: {map_name}")
         self.nav_data.set_current_map(map_name)
-        print(f"DEBUG: nav_data.current_map set to: {self.nav_data.current_map}")
-        print(f"DEBUG: nav_data routes loaded: {list(self.nav_data.routes.keys())}")
+        # print(f"DEBUG: nav_data.current_map set to: {self.nav_data.current_map}")
+        # print(f"DEBUG: nav_data routes loaded: {list(self.nav_data.routes.keys())}")
 
         # Emit status update to inform user that map loading is starting
         self.manualStatus.emit(f"Ładowanie mapy '{map_name}'...")
 
         # Cancel any existing map loading operation
         if self.map_load_worker and self.map_load_worker.isRunning():
-            print("DEBUG: Cancelling previous map load operation")
+            # print("DEBUG: Cancelling previous map load operation")
+            pass
             self.map_load_worker.quit()
             self.map_load_worker.wait()
 
@@ -1136,7 +1159,7 @@ class GuiManager(QThread):
             yaml_path = maps_dir / f"{map_name}.yaml"
 
             if not yaml_path.exists():
-                print(f"DEBUG: YAML file not found for collision monitor setup: {yaml_path}")
+                # print(f"DEBUG: YAML file not found for collision monitor setup: {yaml_path}")
                 return
 
             with open(yaml_path, 'r') as file:
@@ -1146,20 +1169,20 @@ class GuiManager(QThread):
             resolution = yaml_data.get('resolution')
 
             if not origin or not resolution:
-                print(f"DEBUG: Missing origin or resolution in YAML for collision monitor")
+                # print(f"DEBUG: Missing origin or resolution in YAML for collision monitor")
                 return
 
             # Create collision monitor manager if it doesn't exist
             if not self.node.collision_monitor_manager:
                 self.node.collision_monitor_manager = CollisionMonitorManager(self.node)
-                print(f"DEBUG: Created CollisionMonitorManager")
+                print(f"COLLISION DEBUG: Created CollisionMonitorManager")
 
             # Set the current map
             self.node.collision_monitor_manager.set_current_map(map_name, origin, resolution)
 
             # Start monitoring
             self.node.collision_monitor_manager.start_monitoring()
-            print(f"DEBUG: Collision monitor manager started for map: {map_name}")
+            print(f"COLLISION DEBUG: Monitoring started for map: {map_name}")
 
         except Exception as e:
             print(f"ERROR: Failed to setup collision monitor: {e}")
@@ -1304,6 +1327,10 @@ class GuiManager(QThread):
         """Emit collision detection status"""
         self.collision_detected.emit(collision_detected)
 
+        # Note: The collision_detected signal is handled by plan_active_view.handle_collision_detection
+        # which displays "Wykryto przeszkodę!" in the robot status with orange background
+        # We don't need to emit navStatus here as handle_collision_detection handles the display
+
     def emit_velocity_update(self, velocity: float):
         """Emit velocity update signal"""
         self.velocity_update.emit(velocity)
@@ -1322,9 +1349,8 @@ class GuiManager(QThread):
 
         self.navigator.set_goal(route, to_dest, x, y)
 
-        # Send OK CAN message for navigation start (respects battery warning)
-        if self.can_manager:
-            self.can_manager.send_navigation_start_ok_message()
+        # Note: CAN message will be sent after navigation actually starts
+        # via the navigation_started signal connection
 
     @pyqtSlot()
     def stop_nav(self):

@@ -40,6 +40,7 @@ class PlanExecutor(QObject):
     wait_status_update = pyqtSignal(str)  # Wait action status for CAN messages
     single_action_completed = pyqtSignal(str, int)  # plan_name, action_index - for single action execution
     navigation_preparation_started = pyqtSignal()  # emitted when 5s preparation phase starts
+    navigation_preparation_stopped = pyqtSignal()  # emitted when preparation is cancelled (e.g., STOP pressed)
 
     def __init__(self, plan_manager: PlanManager):
         super().__init__()
@@ -125,20 +126,36 @@ class PlanExecutor(QObject):
         """Stop current plan execution"""
         if not self.is_executing:
             return
-        
+
         print("Plan Executor: stop_plan_execution() called - manual stop")
         self.is_executing = False
         self.continuous_execution = False
-        
+
+        # Stop any ongoing preparation timers
+        if hasattr(self, '_preparation_timer') and self._preparation_timer:
+            print("Plan Executor: Stopping _preparation_timer")
+            self._preparation_timer.stop()
+            self._preparation_timer = None
+
+        if hasattr(self, '_plan_timer') and self._plan_timer:
+            print("Plan Executor: Stopping _plan_timer")
+            self._plan_timer.stop()
+            self._plan_timer = None
+
+        # Emit signal to stop preparation buzzer and LEDs in CAN manager
+        print("Plan Executor: Emitting navigation_preparation_stopped signal")
+        self.navigation_preparation_stopped.emit()
+
         plan_name = self.current_plan.name if self.current_plan else "Unknown"
         self.status_update.emit(f"Zatrzymano wykonywanie planu '{plan_name}'")
         self.execution_stopped.emit(plan_name)
-        
+
         # Clear waiting states
         self.waiting_for_completion = False
         self.current_action_type = None
         self.waiting_for_signal_name = None
         self.waiting_for_can_signal = False
+        self._pending_navigation = None
     
     @pyqtSlot(str, int)
     def execute_action(self, plan_name: str, action_index: int):
@@ -439,10 +456,15 @@ class PlanExecutor(QObject):
         """Start 5-second preparation phase with buzzer and warning signals"""
         # Emit navigation preparation signal for CAN manager
         self.navigation_preparation_started.emit()
-        
-        # Emit obstacle detected status (same as detecting an obstacle)
-        self.status_update.emit("OBSTACLE DETECTED - Przygotowanie do nawigacji")
-        
+
+        # Get navigation info for initial status message
+        nav_info = self._pending_navigation
+        if nav_info:
+            direction_text = "do celu" if nav_info['to_dest'] else "do bazy"
+            self.status_update.emit(f"Start nawigacji {direction_text} za 5 sek")
+        else:
+            self.status_update.emit("Start nawigacji za 5 sek")
+
         # Start a timer to update the countdown
         self._preparation_countdown = 5
         self._preparation_timer = QTimer()
@@ -455,8 +477,10 @@ class PlanExecutor(QObject):
             self._preparation_countdown -= 1
             nav_info = self._pending_navigation
             if nav_info:
-                direction_text = "in reverse" if not nav_info['to_dest'] else "forward"
-                self.status_update.emit(f"OBSTACLE DETECTED - Start nawigacji za {self._preparation_countdown} sek: {nav_info['route_name']} {direction_text}")
+                direction_text = "do celu" if nav_info['to_dest'] else "do bazy"
+                self.status_update.emit(f"Start nawigacji {direction_text} za {self._preparation_countdown} sek")
+            else:
+                self.status_update.emit(f"Start nawigacji za {self._preparation_countdown} sek")
         else:
             # Stop the countdown timer
             if self._preparation_timer:
@@ -467,13 +491,15 @@ class PlanExecutor(QObject):
         """Execute the navigation after 5-second delay"""
         if self._pending_navigation and self.is_executing and self.waiting_for_completion:
             nav_info = self._pending_navigation
-            
-            # Send OK signal to stop buzzer and warning
+
+            # Stop the preparation phase immediately (stop buzzer)
+            # This ensures buzzer stops right at the end of 5 seconds
+            print("Plan Executor: 5s countdown complete, stopping preparation buzzer")
+            self.navigation_preparation_stopped.emit()
+
+            # Send OK signal
             self.status_update.emit("OK - Starting navigation")
-            
-            # Clear obstacle detected status and send OK
-            # This will be handled by CAN status manager to stop buzzer and send OK signal
-            
+
             # Clear pending navigation
             self._pending_navigation = None
             
@@ -497,19 +523,23 @@ class PlanExecutor(QObject):
         """Start 5-second preparation phase before plan execution"""
         # Store plan info for countdown
         self._pending_plan_name = plan_name
-        
+
+        # Initial countdown message
+        action_index = self.current_action_index + 1 if self.current_plan else 1
+        self.status_update.emit(f"Start planu '{plan_name}' za 5 sek (od akcji {action_index})")
+
         # Start a timer to update the countdown
         self._plan_countdown = 5
         self._plan_timer = QTimer()
         self._plan_timer.timeout.connect(self._update_plan_countdown)
         self._plan_timer.start(1000)  # Update every second
-    
+
     def _update_plan_countdown(self):
         """Update the plan preparation countdown display"""
         if self._plan_countdown > 1:
             self._plan_countdown -= 1
             action_index = self.current_action_index + 1 if self.current_plan else 1
-            self.status_update.emit(f"OBSTACLE DETECTED - Start planu '{self._pending_plan_name}' za {self._plan_countdown} sek (od akcji {action_index})")
+            self.status_update.emit(f"Start planu '{self._pending_plan_name}' za {self._plan_countdown} sek (od akcji {action_index})")
         else:
             # Stop the countdown timer
             if self._plan_timer:

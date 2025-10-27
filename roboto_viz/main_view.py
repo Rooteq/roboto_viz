@@ -360,11 +360,14 @@ class MainView(QMainWindow):
             self.plan_active_view.plan_tools.signal_btn.setVisible(False)
     
     def update_robot_status_from_plan_executor(self, status: str):
-        """Update robot status display for error messages from plan executor"""
+        """Update robot status display from plan executor"""
         if self.use_plan_system:
-            # Only update robot status for error conditions, let normal status updates handle other cases
-            if ("failed" in status.lower() or "error" in status.lower() or 
-                "cancelled" in status.lower() or status in ["Failed", "Error"]):
+            # Update robot status for:
+            # 1. Error conditions
+            # 2. Navigation preparation countdown messages (start za X sek)
+            if ("failed" in status.lower() or "error" in status.lower() or
+                "cancelled" in status.lower() or status in ["Failed", "Error"] or
+                "start" in status.lower() and "sek" in status.lower()):
                 self.plan_active_view.set_current_status(status)
 
 
