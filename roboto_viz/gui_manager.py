@@ -1068,22 +1068,15 @@ class GuiManager(QThread):
     def send_maps(self):
         """Load and send available maps"""
         self.nav_data.load_maps()
-        # Load default map if needed
+        # Set default map for GUI (but don't load it onto robot yet)
         if self.nav_data.maps:
             default_map = "robots_map"
             if default_map in self.nav_data.maps:
-                success, error_msg = self.nav_data.route_manager.load_map_onto_robot(default_map)
-                if success:
-                    self.nav_data.set_current_map(default_map)
-                    print(f"Default map '{default_map}' loaded successfully during connection")
-                else:
-                    print(f"Warning: Failed to load default map '{default_map}' during connection: {error_msg}")
-                    # Still set it as current map so the GUI works, but don't block connection
-                    self.nav_data.set_current_map(default_map)
+                self.nav_data.set_current_map(default_map)
             else:
                 # If default map doesn't exist, use first available map
                 self.nav_data.set_current_map(self.nav_data.maps[0])
-        
+
         self.send_map_names.emit(self.nav_data.maps)
 
 
