@@ -109,12 +109,12 @@ class PlanActiveView(QWidget):
         """)
         robot_layout.addWidget(robot_title)
 
-        # Create a container for the status display - VERY LARGE AND VISIBLE
+        # Create a container for the status display - smaller font for better readability
         self.robot_status_text = QLabel("Bezczynny")
         self.robot_status_text.setAlignment(Qt.AlignCenter)
         self.robot_status_text.setStyleSheet("""
             QLabel {
-                font-size: 42px;
+                font-size: 21px;
                 color: #2c3e50;
                 background: none;
                 border: none;
@@ -437,11 +437,11 @@ class PlanActiveView(QWidget):
                 }}
             """)
             
-            # Update text color with large fonts
+            # Update text color with smaller fonts
             if hasattr(self, 'robot_status_text'):
                 self.robot_status_text.setStyleSheet(f"""
                     QLabel {{
-                        font-size: 42px;
+                        font-size: 21px;
                         color: {text_color};
                         background: none;
                         border: none;
