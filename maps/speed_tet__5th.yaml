@@ -1,0 +1,10 @@
+free_thresh: 0.0
+image: speed_tet__5th.pgm
+mode: scale
+negate: 0
+occupied_thresh: 1.0
+origin:
+- -50.7
+- -13.6
+- 0
+resolution: 0.05
