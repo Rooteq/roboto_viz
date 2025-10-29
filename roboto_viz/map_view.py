@@ -249,9 +249,16 @@ class MapView(QGraphicsView):
         # Don't force reset on resize - just maintain current view
 
     def update_robot_pose(self, x, y, theta):
+        # Check if map_origin is properly initialized
+        if not self.map_origin or len(self.map_origin) < 2:
+            return
+
+        if not self.pixmap:
+            return
+
         map_x = (x - self.map_origin[0]) * 20
         map_y = self.pixmap.rect().height() - ((y - self.map_origin[1]) * 20)
-        
+
         self.robot_item.update_pose(map_x, map_y, theta)
         self.scene.update()
 

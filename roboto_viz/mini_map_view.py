@@ -97,6 +97,13 @@ class MiniMapView(QGraphicsView):
             x, y: position in meters (world coordinates)
             theta: orientation in radians
         """
+        # Check if origin and pixmap are properly initialized
+        if not self.origin or len(self.origin) < 2:
+            return
+
+        if not self.pixmap:
+            return
+
         self.robot_x = x
         self.robot_y = y
 
