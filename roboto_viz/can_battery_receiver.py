@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from collections import deque
 import socket
 import statistics
 import struct
@@ -14,10 +15,15 @@ class CANBatteryReceiver(QObject):
 
     Frame ID: 42 (0x2A)
     Data: 2 bytes representing battery ADC reading (0-1023)
+
+    Implements simple but effective filtering:
+    1. Outlier rejection: ignores zeros and extreme jumps (>5V)
+    2. Exponential Moving Average (EMA) for voltage smoothing
+    3. Emission rate limiting to reduce UI update frequency
     """
 
-    battery_status_update = pyqtSignal(int)  # Raw ADC value (0-1023)
-    battery_percentage_update = pyqtSignal(int, str)  # Battery percentage (0-100) and status string
+    battery_status_update = pyqtSignal(int)  # Filtered ADC (0-1023)
+    battery_percentage_update = pyqtSignal(int, str)  # % (0-100), str
 
     def __init__(self, can_interface: str = 'can0'):
         super().__init__()
@@ -29,13 +35,24 @@ class CANBatteryReceiver(QObject):
         # Battery frame ID
         self.BATTERY_FRAME_ID = 0x42  # Frame ID 42
 
-        # Median filter variables
-        self.sample_buffer = []
-        self.BUFFER_SIZE = 50
+        # Filter variables
+        self.sample_window = deque(maxlen=20)  # Rolling window for outlier detection
+        self.voltage_ema = None  # Exponential moving average of voltage
+        self.last_valid_adc = None  # Last known good ADC value
+
+        # Filter parameters
+        self.EMA_ALPHA = 0.05  # EMA smoothing (lower = more stable)
+        self.MIN_SAMPLES_FOR_INIT = 5  # Minimum samples before first emission
+
+        # Startup handling
         self.initial_value_set = False
         self.start_time = None
-        self.INITIAL_DELAY = 10.0  # 10 seconds delay
-        self.MIN_STARTUP_PERCENTAGE = 2.5  # Minimum percentage to accept during buffer fill-up
+        self.INITIAL_DELAY = 1.0  # 1 second delay before first emission
+        self.samples_received = 0
+
+        # Emission rate limiting (emit every N samples to reduce UI updates)
+        self.emission_counter = 0
+        self.EMISSION_INTERVAL = 10  # Emit every 10 valid samples
 
         # Battery voltage constants for 10S Li-ion pack
         self.MAX_VOLTAGE = 42.0  # 100% - 1023 ADC value
@@ -43,29 +60,72 @@ class CANBatteryReceiver(QObject):
         self.NOMINAL_VOLTAGE = 36.0  # 10S * 3.6V nominal
         self.WARNING_PERCENTAGE = 10  # Warning threshold
 
+    def is_outlier(self, adc_value: int) -> bool:
+        """Detect outliers - only reject zeros and extreme values.
+
+        Returns True if the value is an outlier and should be rejected.
+        """
+        # Always reject zero values (invalid readings from microcontroller)
+        if adc_value == 0:
+            return True
+
+        # Reject extremely low values (below 5% of range = ~2V)
+        if adc_value < 50:
+            return True
+
+        # If we have previous valid readings, check for huge jumps
+        if self.voltage_ema is not None and len(self.sample_window) >= 3:
+            current_voltage = self.adc_to_voltage(adc_value)
+            voltage_diff = abs(current_voltage - self.voltage_ema)
+
+            # Reject only if jump is more than 5V (extremely unrealistic)
+            if voltage_diff > 5.0:
+                return True
+
+        return False
+
+    def apply_ema_filter(self, voltage: float) -> float:
+        """Apply Exponential Moving Average filter.
+
+        Smooths voltage readings over time with configurable smoothing factor.
+        """
+        if self.voltage_ema is None:
+            self.voltage_ema = voltage
+            return voltage
+
+        # EMA formula: EMA_new = alpha * value + (1 - alpha) * EMA_old
+        self.voltage_ema = (self.EMA_ALPHA * voltage +
+                            (1 - self.EMA_ALPHA) * self.voltage_ema)
+        return self.voltage_ema
+
     def adc_to_voltage(self, adc_value: int) -> float:
         """Convert ADC value (0-1023) to voltage (V)."""
         return (adc_value / 1023.0) * self.MAX_VOLTAGE
-    
+
     def voltage_to_percentage(self, voltage: float) -> int:
         """Convert voltage to battery percentage (0-100).
-        Scales so that 90% becomes 100%, 0% stays 0%."""
+
+        Scales so that 90% becomes 100%, 0% stays 0%.
+        """
         if voltage >= self.MAX_VOLTAGE:
             raw_percentage = 100
         elif voltage <= self.MIN_VOLTAGE:
             return 0
         else:
             # Linear interpolation between min and max voltage
-            raw_percentage = ((voltage - self.MIN_VOLTAGE) / (self.MAX_VOLTAGE - self.MIN_VOLTAGE)) * 100
+            voltage_range = self.MAX_VOLTAGE - self.MIN_VOLTAGE
+            raw_percentage = ((voltage - self.MIN_VOLTAGE) /
+                              voltage_range) * 100
 
         # Scale so that 90% becomes 100%, 0% stays 0%
         # Formula: scaled = (raw / 90) * 100
         scaled_percentage = (raw_percentage / 90.0) * 100.0
         return max(0, min(100, int(round(scaled_percentage))))
-    
-    def get_battery_status_string(self, percentage: int, voltage: float) -> str:
+
+    def get_battery_status_string(
+            self, percentage: int, voltage: float) -> str:
         """Get battery status string based on percentage."""
-        return f"{percentage}%"
+        return '{0}%'.format(percentage)
 
     def connect_can(self) -> bool:
         """Connect to CAN interface for receiving messages."""
@@ -122,7 +182,7 @@ class CANBatteryReceiver(QObject):
             print('Stopped receiving CAN battery messages')
 
     def _receive_messages(self):
-        """Receive and parse CAN messages in background thread."""
+        """Receive and parse CAN messages in background thread with multi-stage filtering."""
         while self.receiving and self.socket_fd:
             try:
                 # Set socket timeout to prevent infinite blocking
@@ -145,56 +205,85 @@ class CANBatteryReceiver(QObject):
 
                     # Ensure value is in expected range
                     if 0 <= battery_adc <= 1023:
-                        # Check if buffer is still filling up (not yet operational)
-                        buffer_filling = len(self.sample_buffer) < self.BUFFER_SIZE
+                        # Stage 1: Outlier rejection (ignores zeros and spikes)
+                        if self.is_outlier(battery_adc):
+                            # Outlier detected - ignore this sample
+                            if battery_adc == 0:
+                                pass  # Silent for zero values
+                            else:
+                                print(f'Battery outlier rejected: {battery_adc}')
+                            continue
 
-                        # During buffer fill-up, ignore samples below minimum percentage threshold
-                        if buffer_filling:
-                            voltage = self.adc_to_voltage(battery_adc)
-                            percentage = self.voltage_to_percentage(voltage)
+                        # Add valid sample to rolling window
+                        self.sample_window.append(battery_adc)
+                        self.last_valid_adc = battery_adc
+                        self.samples_received += 1
 
-                            # Skip samples that give less than minimum percentage during startup
-                            if percentage < self.MIN_STARTUP_PERCENTAGE:
-                                continue  # Ignore this sample
+                        if not self.initial_value_set and self.samples_received <= 5:
+                            print(f'Battery sample {self.samples_received}: '
+                                  f'ADC={battery_adc}, '
+                                  f'window_size={len(self.sample_window)}')
 
-                        # Set initial value on first valid sample after delay
-                        if not self.initial_value_set and self.start_time is not None:
+                        # Wait for initial delay period before first emission
+                        if not self.initial_value_set:
+                            if self.start_time is None:
+                                continue  # Start time not set yet
+
                             current_time = time.time()
-                            if current_time - self.start_time >= self.INITIAL_DELAY:
-                                voltage = self.adc_to_voltage(battery_adc)
-                                percentage = self.voltage_to_percentage(voltage)
-                                status_string = self.get_battery_status_string(percentage, voltage)
+                            if current_time - self.start_time < self.INITIAL_DELAY:
+                                continue  # Still in initial delay period
 
-                                # Emit initial values
-                                self.battery_status_update.emit(battery_adc)
-                                self.battery_percentage_update.emit(percentage, status_string)
-                                self.initial_value_set = True
+                            # Check if we have enough samples for initialization
+                            if len(self.sample_window) < self.MIN_SAMPLES_FOR_INIT:
+                                continue  # Not enough samples yet
 
-                        # Add sample to buffer
-                        self.sample_buffer.append(battery_adc)
+                            # Initialize filter with median of current samples
+                            init_adc = statistics.median(self.sample_window)
+                            init_voltage = self.adc_to_voltage(init_adc)
+                            self.voltage_ema = init_voltage
+                            init_percentage = self.voltage_to_percentage(
+                                init_voltage)
+                            init_status = self.get_battery_status_string(
+                                init_percentage, init_voltage)
 
-                        # Keep buffer at specified size
-                        if len(self.sample_buffer) > self.BUFFER_SIZE:
-                            self.sample_buffer.pop(0)
+                            # Emit initial value immediately
+                            self.battery_status_update.emit(init_adc)
+                            self.battery_percentage_update.emit(
+                                init_percentage, init_status)
+                            self.initial_value_set = True
+                            print(f'Battery initialized: {init_percentage}% '
+                                  f'({init_voltage:.1f}V)')
+                            continue
 
-                        # Only emit signals when we have enough samples (median filter operational)
-                        if len(self.sample_buffer) >= self.BUFFER_SIZE:
-                            # Calculate median of buffer
-                            median_adc = statistics.median(self.sample_buffer)
+                        # Skip processing if not initialized yet
+                        if not self.initial_value_set:
+                            continue
 
-                            # Convert median ADC to voltage and percentage
-                            voltage = self.adc_to_voltage(median_adc)
-                            percentage = self.voltage_to_percentage(voltage)
-                            status_string = self.get_battery_status_string(percentage, voltage)
+                        # Apply EMA filtering to smooth voltage
+                        raw_voltage = self.adc_to_voltage(battery_adc)
+                        filtered_voltage = self.apply_ema_filter(raw_voltage)
 
-                            # Emit both raw median ADC and processed percentage/status
-                            self.battery_status_update.emit(int(median_adc))
-                            self.battery_percentage_update.emit(percentage, status_string)
+                        # Convert to percentage
+                        percentage = self.voltage_to_percentage(filtered_voltage)
 
-                            # Clear buffer to wait for next 50 samples
-                            self.sample_buffer.clear()
+                        # Emission rate limiting (update UI less frequently)
+                        self.emission_counter += 1
+                        if self.emission_counter >= self.EMISSION_INTERVAL:
+                            self.emission_counter = 0
+
+                            # Emit signals with filtered values
+                            filtered_adc = int((filtered_voltage /
+                                                self.MAX_VOLTAGE) * 1023)
+                            status_string = self.get_battery_status_string(
+                                percentage, filtered_voltage)
+
+                            self.battery_status_update.emit(filtered_adc)
+                            self.battery_percentage_update.emit(
+                                percentage, status_string)
+
                     else:
                         pass  # ADC value out of range
+
             except socket.timeout:
                 # Normal timeout, continue receiving
                 continue
