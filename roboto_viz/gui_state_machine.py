@@ -5,10 +5,31 @@ from roboto_viz.main_view import MainView
 from abc import ABC, abstractmethod
 
 import rclpy
+import os
 
 class Gui:
     def __init__(self) -> None:
+        # Set ROS2 logging level environment variable BEFORE rclpy.init()
+        # This suppresses verbose output from nav2 action servers (map pixels, etc.)
+        if 'RCUTILS_CONSOLE_OUTPUT_FORMAT' not in os.environ:
+            os.environ['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = '[{severity}] [{name}]: {message}'
+
+        # Set minimum log severity to WARN for all ROS2 nodes
+        # This prevents verbose DEBUG and INFO messages from nav2
+        os.environ['RCUTILS_LOGGING_MIN_SEVERITY'] = 'WARN'
+
         rclpy.init()
+
+        # Set global ROS2 logging level to WARN to suppress verbose nav2 output
+        # This prevents the nav2 server from printing map pixels and other verbose data
+        try:
+            import logging
+            # Set ROS2 logger to WARNING level
+            logging.getLogger('nav2_simple_commander').setLevel(logging.WARNING)
+            logging.getLogger('action_client').setLevel(logging.WARNING)
+            logging.getLogger('rclpy').setLevel(logging.WARNING)
+        except Exception:
+            pass  # If setting log level fails, continue anyway
 
         self._state = None
         self.main_view: MainView = MainView()

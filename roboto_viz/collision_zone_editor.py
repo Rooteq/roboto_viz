@@ -73,7 +73,7 @@ class CollisionZoneEditor(QWidget):
         self.current_zone_id: Optional[int] = None
         self.default_polygon_points: Optional[str] = None  # Default polygon from collision monitor
 
-        # Colors for different zones (cycling through these)
+        # Colors for different zones - 20 distinct colors
         self.zone_colors = [
             QColor(255, 100, 100),  # Red
             QColor(100, 255, 100),  # Green
@@ -81,6 +81,20 @@ class CollisionZoneEditor(QWidget):
             QColor(255, 255, 100),  # Yellow
             QColor(255, 100, 255),  # Magenta
             QColor(100, 255, 255),  # Cyan
+            QColor(255, 150, 0),    # Orange
+            QColor(150, 0, 255),    # Purple
+            QColor(0, 255, 150),    # Mint
+            QColor(255, 50, 150),   # Pink
+            QColor(150, 255, 50),   # Lime
+            QColor(50, 150, 255),   # Sky Blue
+            QColor(200, 50, 50),    # Dark Red
+            QColor(50, 200, 50),    # Dark Green
+            QColor(255, 200, 100),  # Peach
+            QColor(100, 200, 255),  # Light Blue
+            QColor(200, 100, 255),  # Lavender
+            QColor(255, 255, 150),  # Light Yellow
+            QColor(150, 100, 50),   # Brown
+            QColor(100, 50, 150),   # Dark Purple
         ]
 
         self.setup_ui()
@@ -253,6 +267,36 @@ class CollisionZoneEditor(QWidget):
         self.zones_list.itemClicked.connect(self.on_zone_selected)
         self.zones_list.itemDoubleClicked.connect(self.delete_zone)
 
+    def get_unused_color(self) -> QColor:
+        """Get an unused color from the palette, or generate a new one if all are used"""
+        # Get set of colors currently in use
+        used_colors = set()
+        for zone in self.zones.values():
+            used_colors.add((zone.color.red(), zone.color.green(), zone.color.blue()))
+
+        # Find first unused color from palette
+        for color in self.zone_colors:
+            color_tuple = (color.red(), color.green(), color.blue())
+            if color_tuple not in used_colors:
+                return QColor(color)  # Return a copy
+
+        # If all palette colors are used, generate a random unique color
+        import random
+        max_attempts = 100
+        for _ in range(max_attempts):
+            # Generate random bright colors (avoid white/black)
+            r = random.randint(50, 255)
+            g = random.randint(50, 255)
+            b = random.randint(50, 255)
+            color_tuple = (r, g, b)
+            if color_tuple not in used_colors:
+                print(f"WARNING: All palette colors used, generated random color RGB{color_tuple}")
+                return QColor(r, g, b)
+
+        # Fallback: return red (should never happen)
+        print("ERROR: Could not generate unique color after 100 attempts")
+        return QColor(255, 0, 0)
+
     def on_tool_changed(self, button, checked):
         if checked:
             if button == self.paint_btn:
@@ -354,8 +398,9 @@ class CollisionZoneEditor(QWidget):
         zone_id = self.next_zone_id
         self.next_zone_id += 1
 
-        # Get color for this zone (cycle through available colors)
-        color = self.zone_colors[(zone_id - 1) % len(self.zone_colors)]
+        # Get an unused color for this zone
+        color = self.get_unused_color()
+        print(f"DEBUG: Assigning color RGB({color.red()}, {color.green()}, {color.blue()}) to zone {zone_id}")
 
         zone = CollisionZone(zone_id, text, color, use_polygon_slow, use_polygon_stop, selected_routes)
         self.zones[zone_id] = zone
@@ -427,6 +472,9 @@ class CollisionZoneEditor(QWidget):
                     if zone_id in self.zones:
                         del self.zones[zone_id]
 
+                    # Re-enumerate zones starting from 1
+                    self.renumerate_zones()
+
                     # Clear current selection if this was selected
                     if self.current_zone_id == zone_id:
                         self.current_zone_id = None
@@ -434,11 +482,45 @@ class CollisionZoneEditor(QWidget):
                             # Select first available zone
                             self.current_zone_id = min(self.zones.keys())
 
+                    # Save changes immediately to update JSON files
+                    self.save_collision_mask()
+
                     self.refresh_zones_list()
                     self.collision_zone_updated.emit()
-                    QMessageBox.information(self, "Sukces", f"Usunięto strefę {zone_id}")
+                    QMessageBox.information(self, "Sukces", f"Usunięto strefę {zone_id} i ponumerowano ponownie")
             except Exception as e:
                 QMessageBox.warning(self, "Błąd", f"Nie udało się usunąć strefy: {str(e)}")
+
+    def renumerate_zones(self):
+        """Re-enumerate zones starting from 1 after deletion"""
+        if not self.zones:
+            self.next_zone_id = 1
+            return
+
+        # Get sorted list of current zone IDs
+        old_zone_ids = sorted(self.zones.keys())
+
+        # Create mapping from old IDs to new IDs
+        id_mapping = {old_id: new_id for new_id, old_id in enumerate(old_zone_ids, start=1)}
+
+        # Create new zones dict with re-numbered IDs
+        new_zones = {}
+        for old_id, new_id in id_mapping.items():
+            zone = self.zones[old_id]
+            zone.zone_id = new_id
+            new_zones[new_id] = zone
+
+        # Replace zones dict
+        self.zones = new_zones
+
+        # Update next_zone_id to be one more than the highest
+        self.next_zone_id = max(self.zones.keys()) + 1 if self.zones else 1
+
+        # Update current selection if needed
+        if self.current_zone_id in id_mapping:
+            self.current_zone_id = id_mapping[self.current_zone_id]
+
+        print(f"DEBUG: Re-enumerated zones. New zone count: {len(self.zones)}, next_zone_id: {self.next_zone_id}")
 
     def erase_zone_from_map(self, zone_id: int):
         """Erase all pixels of a specific zone from the map"""
@@ -555,7 +637,7 @@ class CollisionZoneEditor(QWidget):
         return self.current_map_path if self.current_map_path else None
 
     def clear_all_zones(self):
-        """Clear all collision zones by loading the original map"""
+        """Clear all collision zones by loading the original map and deleting all zone files"""
         reply = QMessageBox.question(self, 'Wyczyść Strefy',
                                    'Czy na pewno chcesz wyczyścić wszystkie strefy kolizji?',
                                    QMessageBox.Yes | QMessageBox.No)
@@ -566,13 +648,28 @@ class CollisionZoneEditor(QWidget):
                     shutil.copy2(self.original_map_path, self.current_map_path)
                     self.collision_mask_pixmap = QPixmap(self.current_map_path)
 
-                    # Clear all zones
+                    # Clear all zones from memory
                     self.zones = {}
                     self.current_zone_id = None
                     self.next_zone_id = 1
                     self.refresh_zones_list()
 
-                    QMessageBox.information(self, "Sukces", "Wszystkie strefy kolizji zostały wyczyszczone!")
+                    # Delete all route-specific zone JSON files for this map
+                    maps_dir = Path(self.current_map_path).parent
+                    zone_files = list(maps_dir.glob(f"collision_*_zones.json"))
+                    deleted_files = []
+                    for zone_file in zone_files:
+                        try:
+                            zone_file.unlink()
+                            deleted_files.append(zone_file.name)
+                        except Exception as e:
+                            print(f"WARNING: Failed to delete {zone_file}: {e}")
+
+                    # Save the cleared collision mask (overwrites with clean map)
+                    self.save_collision_mask()
+
+                    files_info = f"\n\nUsunięto pliki:\n{chr(10).join(deleted_files)}" if deleted_files else ""
+                    QMessageBox.information(self, "Sukces", f"Wszystkie strefy kolizji zostały wyczyszczone!{files_info}")
                     self.collision_zone_updated.emit()
                 except Exception as e:
                     QMessageBox.critical(self, "Błąd", f"Nie udało się wyczyścić stref kolizji: {str(e)}")
@@ -689,6 +786,15 @@ class CollisionZoneEditor(QWidget):
             with open(collision_map_yaml, 'w') as f:
                 yaml.dump(yaml_data, f, default_flow_style=False)
 
+            # Delete ALL existing zone JSON files first (to remove zones that were deleted)
+            existing_zone_files = list(maps_dir.glob(f"collision_*_zones.json"))
+            for zone_file in existing_zone_files:
+                try:
+                    zone_file.unlink()
+                    print(f"DEBUG: Deleted old zone file: {zone_file.name}")
+                except Exception as e:
+                    print(f"WARNING: Failed to delete old zone file {zone_file}: {e}")
+
             # Save zones per-route: create a separate JSON file for each route
             saved_files = []
 
@@ -700,12 +806,13 @@ class CollisionZoneEditor(QWidget):
                         route_zones[route_name] = {}
                     route_zones[route_name][str(zone_id)] = zone.to_dict()
 
-            # Save a file for each route
-            for route_name, zones_data in route_zones.items():
-                collision_zones_json = maps_dir / f"collision_{route_name}_zones.json"
-                with open(collision_zones_json, 'w') as f:
-                    json.dump(zones_data, f, indent=2)
-                saved_files.append(str(collision_zones_json))
+            # Save a file for each route (only if zones exist)
+            if route_zones:
+                for route_name, zones_data in route_zones.items():
+                    collision_zones_json = maps_dir / f"collision_{route_name}_zones.json"
+                    with open(collision_zones_json, 'w') as f:
+                        json.dump(zones_data, f, indent=2)
+                    saved_files.append(str(collision_zones_json))
 
             files_list = "\n".join(saved_files) if saved_files else "Brak stref do zapisania"
             QMessageBox.information(self, "Sukces",

@@ -42,6 +42,8 @@ class CANStatusManager(QObject):
         self.last_battery_warning_state = None  # Track battery warning state changes
         self.is_navigating = False  # Track if robot is currently navigating
         self.navigation_preparation_active = False  # Track if in 5s preparation phase
+        self.last_buzzer_state = None  # Track last buzzer state to avoid sending duplicates
+        self.can_paused = False  # Track if CAN messages are temporarily paused
         
         # Status level mapping for different status strings
         self.status_level_map = {
@@ -135,6 +137,10 @@ class CANStatusManager(QObject):
 
         Message format: Empty frame (0 bytes) - just the CAN ID triggers LED
         """
+        # Check if CAN is paused (during navigation start)
+        if self.can_paused:
+            return True  # Silently skip, don't print
+
         # Debug message (always print, even if CAN not connected)
         led_color = {
             CANLEDType.GREEN_LED: "GREEN",
@@ -168,6 +174,10 @@ class CANStatusManager(QObject):
 
         Message format: Empty frame (0 bytes) - just the CAN ID triggers buzzer
         """
+        # Check if CAN is paused (during navigation start)
+        if self.can_paused:
+            return True  # Silently skip, don't print
+
         # Debug message (always print, even if CAN not connected)
         buzzer_state = "ON" if buzzer_can_id == CANBuzzerType.BUZZER_ON else "OFF"
         print(f"CAN DEBUG: Sent BUZZER {buzzer_state} msg (0x{int(buzzer_can_id):03X})")
@@ -195,20 +205,26 @@ class CANStatusManager(QObject):
         """
         Send buzzer control message based on collision detection status.
         Only sends buzzer ON when both collision is detected AND robot is navigating.
-        Always sends buzzer OFF when not navigating or no collision.
+        Only sends buzzer OFF when state changes from ON to OFF.
         Does NOT interfere with navigation preparation buzzer.
         """
         if not self.socket_fd:
             return False
-        
+
         # Don't interfere with navigation preparation buzzer
         if self.navigation_preparation_active:
             return True
-            
+
         # Only turn buzzer ON if collision detected AND robot is navigating
         should_buzz = collision_detected and self.is_navigating
         buzzer_id = CANBuzzerType.BUZZER_ON if should_buzz else CANBuzzerType.BUZZER_OFF
-        return self._send_buzzer_can_message(buzzer_id)
+
+        # Only send if buzzer state changed
+        if self.last_buzzer_state != buzzer_id:
+            self.last_buzzer_state = buzzer_id
+            return self._send_buzzer_can_message(buzzer_id)
+
+        return True  # No change, no message sent
 
     def _should_send_led(self, status_level: StatusLevel) -> bool:
         """
@@ -257,23 +273,25 @@ class CANStatusManager(QObject):
         """Handle robot status updates"""
         self.send_led_status_if_changed(status)
         
-    @pyqtSlot(str) 
+    @pyqtSlot(str)
     def handle_navigation_status(self, status: str):
         """Handle navigation status updates"""
-        
+
         # Update navigation state based on status
         nav_active_keywords = ["nav to", "navigating", "nawigacja"]
         nav_inactive_keywords = ["zatrzymany", "stopped", "na miejscu", "w bazie", "bezczynny", "idle", "błąd", "failed", "error"]
-        
+
         status_lower = status.lower()
         if any(keyword in status_lower for keyword in nav_active_keywords):
             self.is_navigating = True
         elif any(keyword in status_lower for keyword in nav_inactive_keywords):
             self.is_navigating = False
-            # When navigation stops, send buzzer OFF (unless in preparation phase)
+            # When navigation stops, send buzzer OFF only if it was ON (unless in preparation phase)
             if self.socket_fd and not self.navigation_preparation_active:
-                self._send_buzzer_can_message(CANBuzzerType.BUZZER_OFF)
-        
+                if self.last_buzzer_state == CANBuzzerType.BUZZER_ON:
+                    self.last_buzzer_state = CANBuzzerType.BUZZER_OFF
+                    self._send_buzzer_can_message(CANBuzzerType.BUZZER_OFF)
+
         self.send_led_status_if_changed(status)
         
     @pyqtSlot(str)
@@ -344,6 +362,9 @@ class CANStatusManager(QObject):
         # Set preparation phase flag to prevent interference
         self.navigation_preparation_active = True
 
+        # Reset buzzer state tracking since we're entering preparation mode
+        self.last_buzzer_state = CANBuzzerType.BUZZER_ON
+
         # Start beeping during preparation phase
         success_buzzer = self._send_buzzer_can_message(CANBuzzerType.BUZZER_ON)
 
@@ -381,7 +402,8 @@ class CANStatusManager(QObject):
             self._preparation_buzzer_timer.stop()
             self._preparation_buzzer_timer = None
 
-        # Turn off buzzer
+        # Turn off buzzer and update state tracking
+        self.last_buzzer_state = CANBuzzerType.BUZZER_OFF
         self._send_buzzer_can_message(CANBuzzerType.BUZZER_OFF)
 
         # Send appropriate LED based on battery status
@@ -438,3 +460,13 @@ class CANStatusManager(QObject):
                 else:
                     # No collision and no battery warning during navigation - send OK LED
                     self._send_led_can_message(CANLEDType.GREEN_LED)
+
+    def pause_can_messages(self):
+        """Pause all CAN message sending (used during navigation start to prevent buffer overflow)"""
+        print("CAN DEBUG: Pausing CAN messages during navigation start")
+        self.can_paused = True
+
+    def resume_can_messages(self):
+        """Resume CAN message sending after navigation has started"""
+        print("CAN DEBUG: Resuming CAN messages after navigation start")
+        self.can_paused = False

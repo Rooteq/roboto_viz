@@ -580,12 +580,20 @@ class RouteManager:
             for attempt in range(max_retries):
                 try:
                     print(f"Attempting to load map '{map_name}' (attempt {attempt + 1}/{max_retries})")
+                    # Suppress verbose ros2 service output by redirecting stderr and stdout
+                    # Also set environment variables to minimize ROS2 logging
+                    env = os.environ.copy()
+                    env['RCUTILS_LOGGING_MIN_SEVERITY'] = 'FATAL'  # Only show fatal errors
+                    env['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = ''  # Minimal output format
+
                     result = subprocess.run(
                         cmd,
-                        capture_output=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL,  # Suppress verbose ros2 service output
                         text=True,
                         timeout=10.0,  # 10 second timeout to prevent hanging
-                        check=False  # Don't raise exception, handle return code manually
+                        check=False,  # Don't raise exception, handle return code manually
+                        env=env  # Use modified environment
                     )
                     
                     # Check if the command was successful
@@ -612,12 +620,10 @@ class RouteManager:
             
             # Check if speed mask exists and load it
             speed_map_path = self.maps_dir / f"speed_{map_name}.yaml"
-            print(f"DEBUG: Checking for speed mask at: {speed_map_path}")
-            print(f"DEBUG: Speed mask exists: {speed_map_path.exists()}")
-            
+
             if speed_map_path.exists():
-                print(f"Found speed mask for '{map_name}', loading...")
-                
+                print(f"Loading speed mask for '{map_name}'...")
+
                 # Construct command for speed mask
                 speed_cmd = [
                     "ros2", "service", "call",
@@ -625,25 +631,28 @@ class RouteManager:
                     "nav2_msgs/srv/LoadMap",
                     f"{{map_url: '{str(speed_map_path)}'}}"
                 ]
-                
-                print(f"DEBUG: Speed mask command: {' '.join(speed_cmd)}")
-                
+
                 try:
+                    # Suppress verbose output by redirecting stderr and setting env vars
+                    env = os.environ.copy()
+                    env['RCUTILS_LOGGING_MIN_SEVERITY'] = 'FATAL'  # Only show fatal errors
+                    env['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = ''  # Minimal output format
+
                     speed_result = subprocess.run(
                         speed_cmd,
-                        capture_output=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL,  # Suppress verbose ros2 service output
                         text=True,
                         timeout=10.0,  # 10 second timeout for speed mask too
-                        check=False
+                        check=False,
+                        env=env  # Use modified environment
                     )
-                    
-                    print(f"DEBUG: Speed mask service stdout: {speed_result.stdout}")
-                    print(f"DEBUG: Speed mask service stderr: {speed_result.stderr}")
-                    
+
+                    # Only check result code, don't print verbose stdout/stderr
                     if speed_result.returncode == 0 and "result=0" in speed_result.stdout:
-                        print(f"Successfully loaded speed mask 'speed_{map_name}' onto robot")
+                        print(f"Successfully loaded speed mask 'speed_{map_name}'")
                     else:
-                        print(f"Warning: Failed to load speed mask (return code: {speed_result.returncode}): {speed_result.stdout}")
+                        print(f"Warning: Failed to load speed mask (return code: {speed_result.returncode})")
                         
                 except subprocess.TimeoutExpired:
                     print(f"Warning: Speed mask service call timed out after 10 seconds. Filter mask server may not be responding.")

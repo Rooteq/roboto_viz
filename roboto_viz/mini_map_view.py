@@ -221,16 +221,51 @@ class MiniMapView(QGraphicsView):
             print(f"INFO: No collision zones file found for route '{route_name}'")
             return
 
-        # Load collision map
+        # Load zone definitions to get colors for this route
+        try:
+            with open(collision_zones_json, 'r') as f:
+                import json
+                zones_data = json.load(f)
+        except Exception as e:
+            print(f"ERROR: Failed to load zones JSON for route '{route_name}': {e}")
+            return
+
+        if not zones_data:
+            print(f"INFO: No zones defined for route '{route_name}'")
+            return
+
+        # Extract colors for zones belonging to this route
+        route_zone_colors = set()
+        for zone_id_str, zone_data in zones_data.items():
+            color = zone_data.get('color', [])
+            if len(color) == 3:
+                route_zone_colors.add(tuple(color))  # (R, G, B)
+
+        # Load collision map and filter to show only zones for this route
         collision_pixmap = QPixmap(str(collision_map_path))
+        collision_image = collision_pixmap.toImage()
+
+        # Create filtered image showing only zones for this route
+        filtered_image = collision_image.copy()
+        for y in range(filtered_image.height()):
+            for x in range(filtered_image.width()):
+                pixel_color = QColor(filtered_image.pixel(x, y))
+                pixel_rgb = (pixel_color.red(), pixel_color.green(), pixel_color.blue())
+
+                # If pixel color is not in this route's zone colors, make it transparent
+                if pixel_rgb not in route_zone_colors:
+                    filtered_image.setPixel(x, y, QColor(255, 255, 255, 0).rgba())
+
+        # Convert to pixmap
+        filtered_pixmap = QPixmap.fromImage(filtered_image)
 
         # Make it semi-transparent (30% opacity)
-        transparent_pixmap = QPixmap(collision_pixmap.size())
+        transparent_pixmap = QPixmap(filtered_pixmap.size())
         transparent_pixmap.fill(Qt.transparent)
 
         painter = QPainter(transparent_pixmap)
         painter.setOpacity(0.3)  # 30% opacity
-        painter.drawPixmap(0, 0, collision_pixmap)
+        painter.drawPixmap(0, 0, filtered_pixmap)
         painter.end()
 
         # Add to scene
@@ -238,7 +273,7 @@ class MiniMapView(QGraphicsView):
         self.collision_zones_item.setPos(0, 0)
         self.collision_zones_item.setZValue(0)  # Above map, below robot
 
-        print(f"INFO: Displayed collision zones for route '{route_name}'")
+        print(f"INFO: Displayed {len(route_zone_colors)} collision zones for route '{route_name}'")
 
     def resizeEvent(self, event):
         """Handle resize events by re-centering on robot"""
