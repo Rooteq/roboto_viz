@@ -1,10 +1,48 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtCore import Qt, QRectF, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QImage, qRgba
 from roboto_viz.robot_item import RobotItem
 from roboto_viz.bezier_graphics import BezierRouteGraphics
 import math
 from pathlib import Path
+import time
+
+
+class CollisionZoneFilterWorker(QThread):
+    """Background thread worker to filter collision zones without blocking UI"""
+    finished = pyqtSignal(QPixmap)  # Emits the filtered pixmap when done
+    
+    def __init__(self, collision_image, route_zone_colors):
+        super().__init__()
+        self.collision_image = collision_image
+        self.route_zone_colors = route_zone_colors
+    
+    def run(self):
+        """Filter collision zones in background thread"""
+        start_time = time.time()
+        
+        # Create filtered image showing only zones for this route
+        filtered_image = QImage(self.collision_image.size(), QImage.Format_ARGB32)
+        filtered_image.fill(Qt.transparent)
+
+        # Copy only pixels that match route zone colors
+        for y in range(self.collision_image.height()):
+            for x in range(self.collision_image.width()):
+                pixel_color = QColor(self.collision_image.pixel(x, y))
+                pixel_rgb = (pixel_color.red(), pixel_color.green(), pixel_color.blue())
+
+                # If pixel color matches a zone for this route, copy it
+                if pixel_rgb in self.route_zone_colors:
+                    filtered_image.setPixel(x, y, pixel_color.rgba())
+
+        # Convert to pixmap
+        filtered_pixmap = QPixmap.fromImage(filtered_image)
+        
+        elapsed = time.time() - start_time
+        print(f"PERF: Filtered collision zones in {elapsed:.3f}s (background thread)")
+        
+        # Emit result
+        self.finished.emit(filtered_pixmap)
 
 
 class MiniMapView(QGraphicsView):
@@ -50,6 +88,9 @@ class MiniMapView(QGraphicsView):
 
         # Collision zones overlay
         self.collision_zones_item = None
+        
+        # Background worker for collision zone filtering
+        self.filter_worker = None
 
         # Styling
         self.setStyleSheet("""
@@ -263,31 +304,21 @@ class MiniMapView(QGraphicsView):
         collision_pixmap = QPixmap(str(collision_map_path))
         collision_image = collision_pixmap.toImage()
 
-        import time
-        start_time = time.time()
-
-        # Most robust approach: Copy the image and make non-zone pixels transparent
-        # Convert to ARGB32 format which supports transparency
-        filtered_image = collision_image.convertToFormat(QImage.Format_ARGB32)
-
-        # Make all pixels transparent that DON'T match our route zone colors
-        for y in range(filtered_image.height()):
-            for x in range(filtered_image.width()):
-                pixel = filtered_image.pixel(x, y)
-                pixel_color = QColor(pixel)
-                pixel_rgb = (pixel_color.red(), pixel_color.green(), pixel_color.blue())
-
-                # If pixel is NOT one of our zone colors, make it transparent
-                if pixel_rgb not in route_zone_colors:
-                    filtered_image.setPixel(x, y, qRgba(0, 0, 0, 0))
-                # Otherwise keep the pixel as-is (keeps original color perfectly)
-
-        elapsed = time.time() - start_time
-        print(f"PERF: Filtered collision zones in {elapsed:.3f}s")
-
-        # Convert to pixmap
-        filtered_pixmap = QPixmap.fromImage(filtered_image)
-
+        print(f"INFO: Starting collision zone filtering in background thread (won't block UI)...")
+        
+        # Cancel any existing filter worker
+        if self.filter_worker and self.filter_worker.isRunning():
+            self.filter_worker.finished.disconnect()
+            self.filter_worker.terminate()
+            self.filter_worker.wait()
+        
+        # Start background filtering
+        self.filter_worker = CollisionZoneFilterWorker(collision_image, route_zone_colors)
+        self.filter_worker.finished.connect(lambda pixmap: self._apply_filtered_zones(pixmap, route_name, len(route_zone_colors)))
+        self.filter_worker.start()
+    
+    def _apply_filtered_zones(self, filtered_pixmap: QPixmap, route_name: str, num_zones: int):
+        """Apply the filtered collision zones to the scene (called from background thread)"""
         # Make it semi-transparent (30% opacity)
         transparent_pixmap = QPixmap(filtered_pixmap.size())
         transparent_pixmap.fill(Qt.transparent)
@@ -302,7 +333,7 @@ class MiniMapView(QGraphicsView):
         self.collision_zones_item.setPos(0, 0)
         self.collision_zones_item.setZValue(0)  # Above map, below robot
 
-        print(f"✓ SUCCESS: Displayed {len(route_zone_colors)} collision zone(s) for route '{route_name}' on mini map")
+        print(f"✓ SUCCESS: Displayed {num_zones} collision zone(s) for route '{route_name}' on mini map")
 
     def resizeEvent(self, event):
         """Handle resize events by re-centering on robot"""
