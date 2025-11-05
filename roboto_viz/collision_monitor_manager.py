@@ -5,12 +5,13 @@ monitor polygon parameters based on painted zones on the map.
 """
 
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
-from PyQt5.QtGui import QPixmap, QColor
+from PyQt5.QtGui import QPixmap, QColor, QImage
 from pathlib import Path
 import json
 from typing import Optional, Dict, List, Tuple
 from rclpy.node import Node
 import threading
+import numpy as np
 
 
 class CollisionZone:
@@ -32,7 +33,10 @@ class CollisionZone:
         return (pixel_x, pixel_y) in self.painted_pixels
 
     def load_painted_pixels_from_image(self, pixmap: QPixmap):
-        """Scan the collision mask image and find all pixels of this zone's color"""
+        """Scan the collision mask image and find all pixels of this zone's color - DEPRECATED, use load_from_cache"""
+        # This method is kept for backwards compatibility but should not be used
+        # Use CollisionMonitorManager._build_color_cache() and load_from_cache() instead
+        print(f"WARNING: Using slow pixel-by-pixel scan for zone {self.zone_id}. Use load_from_cache() instead.")
         image = pixmap.toImage()
         self.painted_pixels = set()
 
@@ -44,6 +48,10 @@ class CollisionZone:
                     pixel_color.green() == self.color[1] and
                     pixel_color.blue() == self.color[2]):
                     self.painted_pixels.add((x, y))
+
+    def load_from_cache(self, color_cache: Dict[Tuple[int, int, int], set]):
+        """Load painted pixels from pre-built color cache (FAST - O(1) lookup)"""
+        self.painted_pixels = color_cache.get(self.color, set())
 
 
 class CollisionMonitorManager(QObject):
@@ -90,6 +98,10 @@ class CollisionMonitorManager(QObject):
         # Debug counter for position checks
         self.check_counter = 0
 
+        # Cache for fast collision zone pixel lookup: color (R,G,B) -> set of (x,y) pixels
+        # This is built once per map and reused for all zones
+        self.color_cache: Dict[Tuple[int, int, int], set] = {}
+
     def set_current_map(self, map_name: str, origin, resolution):
         """Set the current map - zones will be loaded when route navigation starts"""
         self.current_map_name = map_name
@@ -110,50 +122,153 @@ class CollisionMonitorManager(QObject):
 
         if collision_map_path.exists():
             self.collision_mask_pixmap = QPixmap(str(collision_map_path))
+            # Clear color cache when map changes
+            self.color_cache = {}
         else:
             self.collision_mask_pixmap = None
+            self.color_cache = {}
+
+    def _build_color_cache(self):
+        """Build color cache from collision mask - scans image ONCE using fast numpy operations"""
+        if not self.collision_mask_pixmap:
+            return
+
+        # Check if cache already built
+        if self.color_cache:
+            return
+
+        import time
+        start_time = time.time()
+
+        # Convert QPixmap to QImage to numpy array (MUCH faster than pixel-by-pixel access)
+        image = self.collision_mask_pixmap.toImage()
+
+        # Convert to format that numpy can read efficiently
+        image = image.convertToFormat(QImage.Format_RGB888)
+
+        width = image.width()
+        height = image.height()
+        ptr = image.bits()
+        ptr.setsize(height * width * 3)
+
+        # Create numpy array from image data (read-only, no copy)
+        arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+
+        # Build cache using vectorized operations (MUCH faster than iterating unique colors)
+        self.color_cache = {}
+
+        # Create coordinate grids
+        y_grid, x_grid = np.mgrid[0:height, 0:width]
+
+        # Flatten arrays for easier processing
+        colors_flat = arr.reshape(-1, 3)  # (N, 3) where N = width*height
+        x_flat = x_grid.flatten()  # (N,)
+        y_flat = y_grid.flatten()  # (N,)
+
+        # Convert RGB to single integer for fast grouping (R*256^2 + G*256 + B)
+        # This avoids the slow np.unique with axis=1
+        color_keys = (colors_flat[:, 0].astype(np.uint32) << 16) | \
+                     (colors_flat[:, 1].astype(np.uint32) << 8) | \
+                     colors_flat[:, 2].astype(np.uint32)
+
+        # Get unique color keys
+        unique_keys = np.unique(color_keys)
+
+        print(f"PERF: Found {len(unique_keys)} unique colors in collision mask ({width}x{height} pixels)")
+
+        # For each unique color key, find all matching pixels
+        for color_key in unique_keys:
+            # Find all pixels with this color (vectorized comparison)
+            mask = (color_keys == color_key)
+
+            # Extract RGB from key
+            r = (color_key >> 16) & 0xFF
+            g = (color_key >> 8) & 0xFF
+            b = color_key & 0xFF
+            color_tuple = (int(r), int(g), int(b))
+
+            # Get coordinates (using numpy boolean indexing - very fast)
+            x_coords = x_flat[mask]
+            y_coords = y_flat[mask]
+
+            # Store as set of (x, y) tuples for O(1) lookup
+            self.color_cache[color_tuple] = set(zip(x_coords.tolist(), y_coords.tolist()))
+
+        elapsed = time.time() - start_time
+        print(f"PERF: Built color cache in {elapsed:.3f}s ({len(self.color_cache)} colors, {width*height} pixels)")
+
+        # Return the cache for use by mini_map_view
+        return self.color_cache
+
+    def get_color_cache(self) -> Dict[Tuple[int, int, int], set]:
+        """Get the color cache (builds it if not already built)"""
+        if not self.color_cache:
+            self._build_color_cache()
+        return self.color_cache
 
     def load_collision_zones_for_route(self, route_name: str):
-        """Load collision zones for a specific route"""
+        """Load collision zones for the current map, filtering by route name"""
+        if not self.current_map_name:
+            print(f"WARNING: No map loaded, cannot load collision zones")
+            return
+
         maps_dir = Path.home() / ".robotroutes" / "maps"
-        collision_zones_path = maps_dir / f"collision_{route_name}_zones.json"
+        collision_zones_path = maps_dir / f"collision_{self.current_map_name}_zones.json"
 
         # Clear existing zones
         self.zones = {}
 
         # Check if collision mask exists
         if not self.collision_mask_pixmap:
-            print(f"WARNING: No collision mask loaded, cannot load zones for route '{route_name}'")
+            print(f"WARNING: No collision mask loaded, cannot load zones for map '{self.current_map_name}'")
             return
 
-        # Load zone definitions for this route
+        # Load zone definitions for this map
         if not collision_zones_path.exists():
-            print(f"INFO: No collision zones file found for route '{route_name}'")
+            print(f"INFO: No collision zones file found for map '{self.current_map_name}'")
             return
 
         try:
+            import time
+            start_time = time.time()
+
+            # Build color cache ONCE for all zones (fast numpy operation)
+            self._build_color_cache()
+
             with open(collision_zones_path, 'r') as f:
                 zones_data = json.load(f)
 
             self.zones = {}
+            zones_for_route = 0
             for zone_id_str, zone_data in zones_data.items():
                 zone_id = int(zone_id_str)
+
+                # Check if this zone applies to the current route
+                route_names = zone_data.get('route_names', [])
+                if route_name not in route_names:
+                    # Skip zones that don't apply to this route
+                    continue
+
+                zones_for_route += 1
                 zone = CollisionZone(
                     zone_id=zone_id,
                     polygon_points=zone_data['polygon_points'],
                     color=zone_data['color'],
                     use_polygon_slow=zone_data.get('use_polygon_slow', True),
                     use_polygon_stop=zone_data.get('use_polygon_stop', False),
-                    route_names=zone_data.get('route_names', [])
+                    route_names=route_names
                 )
-                # Load painted pixels for this zone
-                zone.load_painted_pixels_from_image(self.collision_mask_pixmap)
+                # Load painted pixels from cache (O(1) lookup instead of O(width*height) scan)
+                zone.load_from_cache(self.color_cache)
                 self.zones[zone_id] = zone
 
-            print(f"INFO: Loaded {len(self.zones)} collision zones for route '{route_name}'")
+            elapsed = time.time() - start_time
+            print(f"INFO: Loaded {zones_for_route} collision zones for route '{route_name}' (from map '{self.current_map_name}') in {elapsed:.3f}s")
 
         except Exception as e:
             print(f"ERROR: Failed to load collision zones for route '{route_name}': {e}")
+            import traceback
+            traceback.print_exc()
             self.zones = {}
 
     def start_monitoring(self):

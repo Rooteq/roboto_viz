@@ -910,7 +910,7 @@ class GuiManager(QThread):
     plan_action_execute = pyqtSignal(str, int)  # plan_name, action_index
 
     # Collision zone display signals
-    show_collision_zones = pyqtSignal(str)  # route_name - show zones for this route
+    show_collision_zones = pyqtSignal(str, object)  # route_name, color_cache - show zones for this route
     hide_collision_zones = pyqtSignal()  # hide all collision zones
 
     """ 
@@ -1302,18 +1302,23 @@ class GuiManager(QThread):
 
     @pyqtSlot(str, bool, float, float)
     def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):
-        # Show collision zones on minimap FIRST (before GUI potentially hangs)
-        self.show_collision_zones.emit(route)
-
         # Pause CAN messages before starting navigation to prevent buffer overflow
         # Navigation start can take several seconds and CAN messages would accumulate
         if self.can_manager:
             self.can_manager.pause_can_messages()
 
-        # Load collision zones for this route (this may cause GUI hang)
+        # Load collision zones for this route FIRST (builds the color cache)
+        # This is now FAST due to numpy optimization
+        color_cache = None
         if self.node and self.node.collision_monitor_manager:
             self.node.collision_monitor_manager.load_collision_zones_for_route(route)
             self.node.collision_monitor_manager.start_monitoring()
+            # Get the color cache for fast minimap rendering
+            color_cache = self.node.collision_monitor_manager.color_cache
+
+        # Show collision zones on minimap using the pre-built cache (FAST)
+        # Emit signal with color cache (or None if not available)
+        self.show_collision_zones.emit(route, color_cache)
 
         # Set navigation goal
         self.navigator.set_goal(route, to_dest, x, y)

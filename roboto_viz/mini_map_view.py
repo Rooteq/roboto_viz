@@ -179,8 +179,13 @@ class MiniMapView(QGraphicsView):
             self.scene.removeItem(self.collision_zones_item)
             self.collision_zones_item = None
 
-    def show_collision_zones_for_route(self, route_name: str):
-        """Load and display collision zones for a specific route as a transparent overlay"""
+    def show_collision_zones_for_route(self, route_name: str, color_cache: dict = None):
+        """Load and display collision zones for a specific route as a transparent overlay
+
+        Args:
+            route_name: Name of the route to display zones for
+            color_cache: Optional pre-built color cache from CollisionMonitorManager for fast pixel lookup
+        """
         # Remove existing collision zones overlay
         self.clear_collision_zones()
 
@@ -191,34 +196,34 @@ class MiniMapView(QGraphicsView):
         # Find the collision map (should be loaded already)
         maps_dir = Path.home() / ".robotroutes" / "maps"
 
-        # Get the current map name from the loaded pixmap
-        # We need to figure out which map is currently loaded
-        # The collision mask is the same regardless of route
+        # Determine current map name from loaded pixmap
+        # We need to find which map is currently loaded to get the right zones file
+        # The zones are now stored per-map, not per-route
+        # Try to infer map name from collision map files
         collision_map_files = list(maps_dir.glob("collision_*.png"))
         if not collision_map_files:
             collision_map_files = list(maps_dir.glob("collision_*.pgm"))
 
-        # Find the collision map that's not a route-specific file
-        collision_map_path = None
+        map_name = None
         for file in collision_map_files:
-            filename = file.stem
-            # Skip route-specific zone files (those ending with _zones are JSON files anyway)
-            # We want collision_<mapname>.png/pgm files
+            filename = file.stem  # collision_<mapname>
             if not filename.endswith("_zones"):
-                # Check if this matches our current map dimensions
+                # Extract map name
+                map_name_candidate = filename.replace("collision_", "")
+                # Check if this matches our current pixmap dimensions
                 test_pixmap = QPixmap(str(file))
                 if test_pixmap.size() == self.pixmap.size():
-                    collision_map_path = file
+                    map_name = map_name_candidate
                     break
 
-        if not collision_map_path or not collision_map_path.exists():
-            print(f"INFO: No collision map found for route '{route_name}'")
+        if not map_name:
+            print(f"INFO: Could not determine current map name")
             return
 
-        # Check if zones exist for this route
-        collision_zones_json = maps_dir / f"collision_{route_name}_zones.json"
+        # Check if zones exist for this map
+        collision_zones_json = maps_dir / f"collision_{map_name}_zones.json"
         if not collision_zones_json.exists():
-            print(f"INFO: No collision zones file found for route '{route_name}'")
+            print(f"INFO: No collision zones file found for map '{map_name}'")
             return
 
         # Load zone definitions to get colors for this route
@@ -237,24 +242,74 @@ class MiniMapView(QGraphicsView):
         # Extract colors for zones belonging to this route
         route_zone_colors = set()
         for zone_id_str, zone_data in zones_data.items():
+            # Check if this zone applies to the current route
+            zone_routes = zone_data.get('route_names', [])
+            if route_name not in zone_routes:
+                continue
+
             color = zone_data.get('color', [])
             if len(color) == 3:
                 route_zone_colors.add(tuple(color))  # (R, G, B)
 
-        # Load collision map and filter to show only zones for this route
-        collision_pixmap = QPixmap(str(collision_map_path))
-        collision_image = collision_pixmap.toImage()
+        if not route_zone_colors:
+            print(f"INFO: No zones found for route '{route_name}' on map '{map_name}'")
+            return
 
-        # Create filtered image showing only zones for this route
-        filtered_image = collision_image.copy()
-        for y in range(filtered_image.height()):
-            for x in range(filtered_image.width()):
-                pixel_color = QColor(filtered_image.pixel(x, y))
-                pixel_rgb = (pixel_color.red(), pixel_color.green(), pixel_color.blue())
+        # If we have a color cache, use it for FAST rendering (avoid pixel-by-pixel scan)
+        if color_cache:
+            import time
+            start_time = time.time()
 
-                # If pixel color is not in this route's zone colors, make it transparent
-                if pixel_rgb not in route_zone_colors:
-                    filtered_image.setPixel(x, y, QColor(255, 255, 255, 0).rgba())
+            # Create a blank transparent image
+            filtered_image = QImage(self.pixmap.size(), QImage.Format_ARGB32)
+            filtered_image.fill(Qt.transparent)
+
+            # For each route color, draw all pixels from cache
+            for color_tuple in route_zone_colors:
+                if color_tuple in color_cache:
+                    pixels = color_cache[color_tuple]
+                    # Set pixels directly (still needs pixel-by-pixel but only for zone pixels, not entire image)
+                    for x, y in pixels:
+                        filtered_image.setPixel(x, y, QColor(*color_tuple).rgba())
+
+            elapsed = time.time() - start_time
+            print(f"PERF: Rendered {len(route_zone_colors)} collision zones in {elapsed:.3f}s using cache")
+
+        else:
+            # Fallback: slow pixel-by-pixel scan (DEPRECATED)
+            print("WARNING: No color cache provided, using slow pixel-by-pixel scan")
+
+            # Find the collision map
+            collision_map_files = list(maps_dir.glob("collision_*.png"))
+            if not collision_map_files:
+                collision_map_files = list(maps_dir.glob("collision_*.pgm"))
+
+            collision_map_path = None
+            for file in collision_map_files:
+                filename = file.stem
+                if not filename.endswith("_zones"):
+                    test_pixmap = QPixmap(str(file))
+                    if test_pixmap.size() == self.pixmap.size():
+                        collision_map_path = file
+                        break
+
+            if not collision_map_path or not collision_map_path.exists():
+                print(f"INFO: No collision map found for route '{route_name}'")
+                return
+
+            collision_pixmap = QPixmap(str(collision_map_path))
+            collision_image = collision_pixmap.toImage()
+
+            # Create filtered image showing only zones for this route
+            filtered_image = collision_image.copy()
+            for y in range(filtered_image.height()):
+                for x in range(filtered_image.width()):
+                    pixel_color = QColor(filtered_image.pixel(x, y))
+                    pixel_rgb = (pixel_color.red(), pixel_color.green(), pixel_color.blue())
+
+                    # If pixel color is not in this route's zone colors, make it transparent
+                    if pixel_rgb not in route_zone_colors:
+                        filtered_image.setPixel(x, y, QColor(255, 255, 255, 0).rgba())
 
         # Convert to pixmap
         filtered_pixmap = QPixmap.fromImage(filtered_image)
