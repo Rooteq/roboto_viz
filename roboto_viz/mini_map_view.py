@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 from PyQt5.QtCore import Qt, QRectF
-from PyQt5.QtGui import QPixmap, QPainter, QColor, QImage
+from PyQt5.QtGui import QPixmap, QPainter, QColor, QImage, qRgba
 from roboto_viz.robot_item import RobotItem
 from roboto_viz.bezier_graphics import BezierRouteGraphics
 import math
@@ -263,24 +263,27 @@ class MiniMapView(QGraphicsView):
         collision_pixmap = QPixmap(str(collision_map_path))
         collision_image = collision_pixmap.toImage()
 
-        print(f"DEBUG: Collision map loaded: {collision_map_path.name}, size: {collision_pixmap.width()}x{collision_pixmap.height()}")
-        print(f"DEBUG: Base map size: {self.pixmap.width()}x{self.pixmap.height()}")
-        print(f"DEBUG: Route zone colors: {route_zone_colors}")
+        import time
+        start_time = time.time()
 
-        # Create filtered image showing only zones for this route
-        # This is pixel-perfect because we're using the ACTUAL collision map
-        filtered_image = QImage(collision_image.size(), QImage.Format_ARGB32)
-        filtered_image.fill(Qt.transparent)
+        # Most robust approach: Copy the image and make non-zone pixels transparent
+        # Convert to ARGB32 format which supports transparency
+        filtered_image = collision_image.convertToFormat(QImage.Format_ARGB32)
 
-        # Copy only pixels that match route zone colors
-        for y in range(collision_image.height()):
-            for x in range(collision_image.width()):
-                pixel_color = QColor(collision_image.pixel(x, y))
+        # Make all pixels transparent that DON'T match our route zone colors
+        for y in range(filtered_image.height()):
+            for x in range(filtered_image.width()):
+                pixel = filtered_image.pixel(x, y)
+                pixel_color = QColor(pixel)
                 pixel_rgb = (pixel_color.red(), pixel_color.green(), pixel_color.blue())
 
-                # If pixel color matches a zone for this route, copy it
-                if pixel_rgb in route_zone_colors:
-                    filtered_image.setPixel(x, y, pixel_color.rgba())
+                # If pixel is NOT one of our zone colors, make it transparent
+                if pixel_rgb not in route_zone_colors:
+                    filtered_image.setPixel(x, y, qRgba(0, 0, 0, 0))
+                # Otherwise keep the pixel as-is (keeps original color perfectly)
+
+        elapsed = time.time() - start_time
+        print(f"PERF: Filtered collision zones in {elapsed:.3f}s")
 
         # Convert to pixmap
         filtered_pixmap = QPixmap.fromImage(filtered_image)
@@ -289,10 +292,10 @@ class MiniMapView(QGraphicsView):
         transparent_pixmap = QPixmap(filtered_pixmap.size())
         transparent_pixmap.fill(Qt.transparent)
 
-        painter = QPainter(transparent_pixmap)
-        painter.setOpacity(0.3)  # 30% opacity
-        painter.drawPixmap(0, 0, filtered_pixmap)
-        painter.end()
+        opacity_painter = QPainter(transparent_pixmap)
+        opacity_painter.setOpacity(0.3)  # 30% opacity
+        opacity_painter.drawPixmap(0, 0, filtered_pixmap)
+        opacity_painter.end()
 
         # Add to scene at (0, 0) - same position as map
         self.collision_zones_item = self.scene.addPixmap(transparent_pixmap)

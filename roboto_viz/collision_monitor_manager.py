@@ -19,17 +19,42 @@ class CollisionZone:
 
     def __init__(self, zone_id: int, polygon_points: str, color: List[int],
                  use_polygon_slow: bool = True, use_polygon_stop: bool = False,
-                 painted_pixels: set = None, route_names: List[str] = None):
+                 painted_pixels: set = None, route_names: List[str] = None,
+                 numpy_cache: dict = None):
         self.zone_id = zone_id
         self.polygon_points = polygon_points
         self.color = tuple(color)  # RGB tuple
         self.use_polygon_slow = use_polygon_slow
         self.use_polygon_stop = use_polygon_stop
-        self.painted_pixels = painted_pixels or set()  # Set of (x, y) pixel coordinates for O(1) lookup
+        self.painted_pixels = painted_pixels or set()  # Legacy: Set of (x, y) pixel coordinates
         self.route_names = route_names or []  # List of route names this zone is associated with
+        
+        # NEW: numpy-based cache for ULTRA-FAST lookups
+        self.numpy_cache = numpy_cache  # Dict with 'numpy_array', 'width', 'height'
 
     def contains_pixel(self, pixel_x: int, pixel_y: int) -> bool:
-        """Check if this zone contains the given pixel"""
+        """Check if this zone contains the given pixel - ULTRA-FAST numpy lookup"""
+        # Use numpy cache if available (MUCH faster than set lookup)
+        if self.numpy_cache:
+            arr = self.numpy_cache.get('numpy_array')
+            height = self.numpy_cache.get('height', 0)
+            width = self.numpy_cache.get('width', 0)
+            
+            # Bounds check
+            if arr is None or pixel_x < 0 or pixel_y < 0 or pixel_x >= width or pixel_y >= height:
+                return False
+            
+            # Direct numpy array lookup: O(1) operation!
+            pixel_color = arr[pixel_y, pixel_x]  # [R, G, B]
+            
+            # Compare with zone color
+            matches = (pixel_color[0] == self.color[0] and
+                      pixel_color[1] == self.color[1] and
+                      pixel_color[2] == self.color[2])
+            
+            return matches
+        
+        # Fallback to legacy set lookup (slower)
         return (pixel_x, pixel_y) in self.painted_pixels
 
     def load_painted_pixels_from_image(self, pixmap: QPixmap):
@@ -49,9 +74,13 @@ class CollisionZone:
                     pixel_color.blue() == self.color[2]):
                     self.painted_pixels.add((x, y))
 
-    def load_from_cache(self, color_cache: Dict[Tuple[int, int, int], set]):
-        """Load painted pixels from pre-built color cache (FAST - O(1) lookup)"""
-        self.painted_pixels = color_cache.get(self.color, set())
+    def load_from_cache(self, color_cache: dict):
+        """Load from numpy-based cache (ULTRA-FAST - no pixel scanning needed!)"""
+        # Store reference to numpy cache for instant pixel lookups
+        self.numpy_cache = color_cache
+        # Clear legacy painted_pixels set (not needed anymore)
+        self.painted_pixels = set()
+
 
 
 class CollisionMonitorManager(QObject):
@@ -129,7 +158,7 @@ class CollisionMonitorManager(QObject):
             self.color_cache = {}
 
     def _build_color_cache(self):
-        """Build color cache from collision mask - scans image ONCE using fast numpy operations"""
+        """Build color cache from collision mask - ULTRA-FAST: just store the numpy image array"""
         if not self.collision_mask_pixmap:
             return
 
@@ -149,53 +178,32 @@ class CollisionMonitorManager(QObject):
         width = image.width()
         height = image.height()
         ptr = image.bits()
-        ptr.setsize(height * width * 3)
+        ptr.setsize(image.sizeInBytes())
 
-        # Create numpy array from image data (read-only, no copy)
-        arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
-
-        # Build cache using vectorized operations (MUCH faster than iterating unique colors)
-        self.color_cache = {}
-
-        # Create coordinate grids
-        y_grid, x_grid = np.mgrid[0:height, 0:width]
-
-        # Flatten arrays for easier processing
-        colors_flat = arr.reshape(-1, 3)  # (N, 3) where N = width*height
-        x_flat = x_grid.flatten()  # (N,)
-        y_flat = y_grid.flatten()  # (N,)
-
-        # Convert RGB to single integer for fast grouping (R*256^2 + G*256 + B)
-        # This avoids the slow np.unique with axis=1
-        color_keys = (colors_flat[:, 0].astype(np.uint32) << 16) | \
-                     (colors_flat[:, 1].astype(np.uint32) << 8) | \
-                     colors_flat[:, 2].astype(np.uint32)
-
-        # Get unique color keys
-        unique_keys = np.unique(color_keys)
-
-        print(f"PERF: Found {len(unique_keys)} unique colors in collision mask ({width}x{height} pixels)")
-
-        # For each unique color key, find all matching pixels
-        for color_key in unique_keys:
-            # Find all pixels with this color (vectorized comparison)
-            mask = (color_keys == color_key)
-
-            # Extract RGB from key
-            r = (color_key >> 16) & 0xFF
-            g = (color_key >> 8) & 0xFF
-            b = color_key & 0xFF
-            color_tuple = (int(r), int(g), int(b))
-
-            # Get coordinates (using numpy boolean indexing - very fast)
-            x_coords = x_flat[mask]
-            y_coords = y_flat[mask]
-
-            # Store as set of (x, y) tuples for O(1) lookup
-            self.color_cache[color_tuple] = set(zip(x_coords.tolist(), y_coords.tolist()))
+        # Get bytes per line (stride) - this is CRITICAL for correct image reading!
+        bytes_per_line = image.bytesPerLine()
+        
+        # Create numpy array from image data with proper stride handling
+        # QImage may have padding at the end of each row, so we need to use bytesPerLine
+        if bytes_per_line == width * 3:
+            # No padding - can reshape directly
+            arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 3)).copy()
+        else:
+            # Has padding - need to handle stride properly
+            arr_with_padding = np.frombuffer(ptr, np.uint8).reshape((height, bytes_per_line))
+            # Extract only the actual image data (remove padding)
+            arr = arr_with_padding[:, :width*3].reshape((height, width, 3)).copy()
+        
+        # Store the numpy array itself as the cache
+        # Pixel lookup becomes: arr[y, x] = [R, G, B]
+        self.color_cache = {
+            'numpy_array': arr,
+            'width': width,
+            'height': height
+        }
 
         elapsed = time.time() - start_time
-        print(f"PERF: Built color cache in {elapsed:.3f}s ({len(self.color_cache)} colors, {width*height} pixels)")
+        print(f"PERF: Built numpy image cache in {elapsed:.3f}s ({width}x{height} pixels = {width*height:,} total)")
 
         # Return the cache for use by mini_map_view
         return self.color_cache
@@ -275,14 +283,39 @@ class CollisionMonitorManager(QObject):
         """Start monitoring robot position for collision zones"""
         if self.zones:
             self.enabled = True
+            # Reset initial check flag so we check the starting position
+            self.initial_check_done = False
+            print(f"DEBUG: start_monitoring() - robot pose: x={self.robot_x}, y={self.robot_y}")
+            
+            # Start periodic checking first
             self.check_timer.start()
+            
+            # Schedule initial check with a small delay to ensure:
+            # 1. Latest robot pose is received
+            # 2. All initialization is complete
+            # Use QTimer.singleShot for delayed check
+            if self.robot_x is not None and self.robot_y is not None:
+                print(f"DEBUG: Scheduling delayed initial position check (500ms delay)")
+                QTimer.singleShot(500, self._delayed_initial_check)
+            else:
+                print(f"WARNING: Robot position not available yet, will check on first pose update")
         else:
             self.enabled = False
+    
+    def _delayed_initial_check(self):
+        """Perform initial position check after a short delay"""
+        print(f"DEBUG: Performing delayed initial check - robot pose: x={self.robot_x}, y={self.robot_y}")
+        if self.robot_x is not None and self.robot_y is not None:
+            self.check_robot_position()
+        else:
+            print(f"WARNING: Robot position STILL not available after delay")
 
     def stop_monitoring(self):
         """Stop monitoring robot position"""
         self.enabled = False
         self.check_timer.stop()
+        # Reset initial check flag for next navigation
+        self.initial_check_done = False
 
     def update_robot_pose(self, x: float, y: float):
         """Update the robot's current pose"""
@@ -293,7 +326,10 @@ class CollisionMonitorManager(QObject):
         """Check if robot is in a collision zone and update parameters accordingly"""
         self.check_counter += 1
 
-        if not self.enabled or self.robot_x is None or self.robot_y is None:
+        if not self.enabled:
+            return
+
+        if self.robot_x is None or self.robot_y is None:
             return
 
         if not self.collision_mask_pixmap or not self.zones:
@@ -314,12 +350,15 @@ class CollisionMonitorManager(QObject):
         # On first check, if robot starts in a zone, apply that zone's polygon immediately
         if not self.initial_check_done:
             self.initial_check_done = True
+            
             if zone_id is not None:
                 print(f"\n{'='*70}")
                 print(f"INITIAL POSITION: Robot starts in collision zone {zone_id}")
                 print(f"{'='*70}\n")
                 self.current_zone_id = zone_id
                 self.enter_zone(zone_id, pixel_x, pixel_y)
+                return
+            else:
                 return
 
         # If zone changed, update parameters
