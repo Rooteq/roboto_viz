@@ -1412,11 +1412,12 @@ class PlanEditor(QMainWindow):
 
         # Create collision_ prefixed copies if they don't exist
         if not collision_map_path.exists() and map_path.exists():
-            # Load as pixmap and save as PNG
+            # Load as pixmap and save as PNG (preserves exact dimensions)
             from PyQt5.QtGui import QPixmap
             pixmap = QPixmap(str(map_path))
             pixmap.save(str(collision_map_path), "PNG")
             print(f"DEBUG: Created collision map copy as PNG: {collision_map_path}")
+            print(f"DEBUG: Collision map dimensions: {pixmap.width()}x{pixmap.height()}")
 
         if not collision_yaml_path.exists() and yaml_path.exists():
             shutil.copy2(yaml_path, collision_yaml_path)

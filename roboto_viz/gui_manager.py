@@ -1318,6 +1318,7 @@ class GuiManager(QThread):
 
         # Show collision zones on minimap using the pre-built cache (FAST)
         # Emit signal with color cache (or None if not available)
+        print(f"INFO: GuiManager emitting show_collision_zones signal for route '{route}', cache available: {color_cache is not None}")
         self.show_collision_zones.emit(route, color_cache)
 
         # Set navigation goal

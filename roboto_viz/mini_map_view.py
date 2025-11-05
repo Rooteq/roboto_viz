@@ -130,7 +130,7 @@ class MiniMapView(QGraphicsView):
 
         # Adjust zoom to show reasonable area around robot
         # Fit approximately 6 meters around the robot (2x zoomed out from before)
-        view_range = 6.0  # meters (zoomed out 2x from previous 3.0)
+        view_range = 12.0  # meters (zoomed out 2x from previous 3.0)
         scene_range = view_range * 20  # Convert to scene units (20 pixels per meter)
 
         # Calculate scale to fit the desired range
@@ -182,10 +182,17 @@ class MiniMapView(QGraphicsView):
     def show_collision_zones_for_route(self, route_name: str, color_cache: dict = None):
         """Load and display collision zones for a specific route as a transparent overlay
 
+        Uses the SAME simple method as collision zone editor: loads the collision_mapname.png
+        directly and filters it to show only zones for this route.
+
         Args:
             route_name: Name of the route to display zones for
-            color_cache: Optional pre-built color cache from CollisionMonitorManager for fast pixel lookup
+            color_cache: Unused (kept for signal compatibility), we load the image directly
         """
+        # Note: color_cache parameter kept for PyQt signal compatibility but not used
+        # We simply load the collision map image directly instead
+        print(f"INFO: MiniMapView.show_collision_zones_for_route called for route '{route_name}'")
+
         # Remove existing collision zones overlay
         self.clear_collision_zones()
 
@@ -193,17 +200,14 @@ class MiniMapView(QGraphicsView):
             print(f"WARNING: Cannot show collision zones - no map loaded")
             return
 
-        # Find the collision map (should be loaded already)
         maps_dir = Path.home() / ".robotroutes" / "maps"
 
-        # Determine current map name from loaded pixmap
-        # We need to find which map is currently loaded to get the right zones file
-        # The zones are now stored per-map, not per-route
-        # Try to infer map name from collision map files
+        # Find which map is currently loaded by matching dimensions
         collision_map_files = list(maps_dir.glob("collision_*.png"))
         if not collision_map_files:
             collision_map_files = list(maps_dir.glob("collision_*.pgm"))
 
+        collision_map_path = None
         map_name = None
         for file in collision_map_files:
             filename = file.stem  # collision_<mapname>
@@ -213,11 +217,12 @@ class MiniMapView(QGraphicsView):
                 # Check if this matches our current pixmap dimensions
                 test_pixmap = QPixmap(str(file))
                 if test_pixmap.size() == self.pixmap.size():
+                    collision_map_path = file
                     map_name = map_name_candidate
                     break
 
-        if not map_name:
-            print(f"INFO: Could not determine current map name")
+        if not collision_map_path or not map_name:
+            print(f"INFO: Could not find collision map matching current map dimensions")
             return
 
         # Check if zones exist for this map
@@ -228,21 +233,20 @@ class MiniMapView(QGraphicsView):
 
         # Load zone definitions to get colors for this route
         try:
+            import json
             with open(collision_zones_json, 'r') as f:
-                import json
                 zones_data = json.load(f)
         except Exception as e:
-            print(f"ERROR: Failed to load zones JSON for route '{route_name}': {e}")
+            print(f"ERROR: Failed to load zones JSON: {e}")
             return
 
         if not zones_data:
-            print(f"INFO: No zones defined for route '{route_name}'")
+            print(f"INFO: No zones defined for map '{map_name}'")
             return
 
         # Extract colors for zones belonging to this route
         route_zone_colors = set()
         for zone_id_str, zone_data in zones_data.items():
-            # Check if this zone applies to the current route
             zone_routes = zone_data.get('route_names', [])
             if route_name not in zone_routes:
                 continue
@@ -255,61 +259,28 @@ class MiniMapView(QGraphicsView):
             print(f"INFO: No zones found for route '{route_name}' on map '{map_name}'")
             return
 
-        # If we have a color cache, use it for FAST rendering (avoid pixel-by-pixel scan)
-        if color_cache:
-            import time
-            start_time = time.time()
+        # Load the collision map directly (SAME AS COLLISION ZONE EDITOR)
+        collision_pixmap = QPixmap(str(collision_map_path))
+        collision_image = collision_pixmap.toImage()
 
-            # Create a blank transparent image
-            filtered_image = QImage(self.pixmap.size(), QImage.Format_ARGB32)
-            filtered_image.fill(Qt.transparent)
+        print(f"DEBUG: Collision map loaded: {collision_map_path.name}, size: {collision_pixmap.width()}x{collision_pixmap.height()}")
+        print(f"DEBUG: Base map size: {self.pixmap.width()}x{self.pixmap.height()}")
+        print(f"DEBUG: Route zone colors: {route_zone_colors}")
 
-            # For each route color, draw all pixels from cache
-            for color_tuple in route_zone_colors:
-                if color_tuple in color_cache:
-                    pixels = color_cache[color_tuple]
-                    # Set pixels directly (still needs pixel-by-pixel but only for zone pixels, not entire image)
-                    for x, y in pixels:
-                        filtered_image.setPixel(x, y, QColor(*color_tuple).rgba())
+        # Create filtered image showing only zones for this route
+        # This is pixel-perfect because we're using the ACTUAL collision map
+        filtered_image = QImage(collision_image.size(), QImage.Format_ARGB32)
+        filtered_image.fill(Qt.transparent)
 
-            elapsed = time.time() - start_time
-            print(f"PERF: Rendered {len(route_zone_colors)} collision zones in {elapsed:.3f}s using cache")
+        # Copy only pixels that match route zone colors
+        for y in range(collision_image.height()):
+            for x in range(collision_image.width()):
+                pixel_color = QColor(collision_image.pixel(x, y))
+                pixel_rgb = (pixel_color.red(), pixel_color.green(), pixel_color.blue())
 
-        else:
-            # Fallback: slow pixel-by-pixel scan (DEPRECATED)
-            print("WARNING: No color cache provided, using slow pixel-by-pixel scan")
-
-            # Find the collision map
-            collision_map_files = list(maps_dir.glob("collision_*.png"))
-            if not collision_map_files:
-                collision_map_files = list(maps_dir.glob("collision_*.pgm"))
-
-            collision_map_path = None
-            for file in collision_map_files:
-                filename = file.stem
-                if not filename.endswith("_zones"):
-                    test_pixmap = QPixmap(str(file))
-                    if test_pixmap.size() == self.pixmap.size():
-                        collision_map_path = file
-                        break
-
-            if not collision_map_path or not collision_map_path.exists():
-                print(f"INFO: No collision map found for route '{route_name}'")
-                return
-
-            collision_pixmap = QPixmap(str(collision_map_path))
-            collision_image = collision_pixmap.toImage()
-
-            # Create filtered image showing only zones for this route
-            filtered_image = collision_image.copy()
-            for y in range(filtered_image.height()):
-                for x in range(filtered_image.width()):
-                    pixel_color = QColor(filtered_image.pixel(x, y))
-                    pixel_rgb = (pixel_color.red(), pixel_color.green(), pixel_color.blue())
-
-                    # If pixel color is not in this route's zone colors, make it transparent
-                    if pixel_rgb not in route_zone_colors:
-                        filtered_image.setPixel(x, y, QColor(255, 255, 255, 0).rgba())
+                # If pixel color matches a zone for this route, copy it
+                if pixel_rgb in route_zone_colors:
+                    filtered_image.setPixel(x, y, pixel_color.rgba())
 
         # Convert to pixmap
         filtered_pixmap = QPixmap.fromImage(filtered_image)
@@ -323,12 +294,12 @@ class MiniMapView(QGraphicsView):
         painter.drawPixmap(0, 0, filtered_pixmap)
         painter.end()
 
-        # Add to scene
+        # Add to scene at (0, 0) - same position as map
         self.collision_zones_item = self.scene.addPixmap(transparent_pixmap)
         self.collision_zones_item.setPos(0, 0)
         self.collision_zones_item.setZValue(0)  # Above map, below robot
 
-        print(f"INFO: Displayed {len(route_zone_colors)} collision zones for route '{route_name}'")
+        print(f"✓ SUCCESS: Displayed {len(route_zone_colors)} collision zone(s) for route '{route_name}' on mini map")
 
     def resizeEvent(self, event):
         """Handle resize events by re-centering on robot"""

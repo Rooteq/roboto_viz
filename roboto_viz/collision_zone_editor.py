@@ -778,6 +778,20 @@ class CollisionZoneEditor(QWidget):
         self.collision_mask_pixmap = QPixmap(self.current_map_path)
         self.drawing_enabled = True
 
+        # Verify dimensions match original map
+        if self.original_map_path and Path(self.original_map_path).exists():
+            original_pixmap = QPixmap(self.original_map_path)
+            if self.collision_mask_pixmap.size() != original_pixmap.size():
+                print(f"WARNING: Collision map dimensions {self.collision_mask_pixmap.width()}x{self.collision_mask_pixmap.height()} "
+                      f"do not match original map {original_pixmap.width()}x{original_pixmap.height()}")
+                print(f"Collision map will be recreated from original")
+                # Recreate collision map from original with correct dimensions
+                self.collision_mask_pixmap = QPixmap(original_pixmap.size())
+                self.collision_mask_pixmap = original_pixmap.copy()
+                self.collision_mask_pixmap.save(self.current_map_path, "PNG")
+            else:
+                print(f"DEBUG: Collision map dimensions match: {self.collision_mask_pixmap.width()}x{self.collision_mask_pixmap.height()}")
+
         # Refresh zones list
         self.refresh_zones_list()
 
@@ -919,6 +933,7 @@ class CollisionZoneEditor(QWidget):
 
             # Save current working map as PNG (to preserve RGB colors)
             self.collision_mask_pixmap.save(str(collision_map_png), "PNG")
+            print(f"DEBUG: Saved collision map with dimensions: {self.collision_mask_pixmap.width()}x{self.collision_mask_pixmap.height()}")
 
             # Read the original map's YAML to get base properties
             original_yaml_path = maps_dir / f"{self.map_name}.yaml"
