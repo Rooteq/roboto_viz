@@ -10,7 +10,7 @@ from enum import IntEnum
 class CANLEDType(IntEnum):
     """CAN message IDs for RGB status LED control"""
     GREEN_LED = 0x201   # Good status (green LED)
-    ORANGE_LED = 0x202  # Warning status (orange LED) 
+    ORANGE_LED = 0x202  # Warning status (orange LED)
     RED_LED = 0x203     # Error status (red LED)
 
 
@@ -44,6 +44,11 @@ class CANStatusManager(QObject):
         self.navigation_preparation_active = False  # Track if in 5s preparation phase
         self.last_buzzer_state = None  # Track last buzzer state to avoid sending duplicates
         self.can_paused = False  # Track if CAN messages are temporarily paused
+
+        # Continuous sending state
+        self.current_led_state = None  # Current LED message to send continuously
+        self.current_buzzer_state = None  # Current buzzer message to send continuously
+        self._continuous_timer = None  # Timer for 1Hz continuous sending
         
         # Status level mapping for different status strings
         self.status_level_map = {
@@ -97,6 +102,7 @@ class CANStatusManager(QObject):
             
     def disconnect_can(self):
         """Disconnect from CAN interface"""
+        self._stop_continuous_sending()
         if self.socket_fd:
             try:
                 self.socket_fd.close()
@@ -105,6 +111,41 @@ class CANStatusManager(QObject):
                 print(f"Error disconnecting from CAN: {e}")
             finally:
                 self.socket_fd = None
+
+    def _start_continuous_sending(self):
+        """Start continuous 1Hz sending of current LED and buzzer states"""
+        if self._continuous_timer is None:
+            from PyQt5.QtCore import QTimer
+            self._continuous_timer = QTimer()
+            self._continuous_timer.timeout.connect(self._send_continuous_messages)
+            self._continuous_timer.start(1000)  # Send every 1000ms (1Hz)
+
+    def _stop_continuous_sending(self):
+        """Stop continuous sending timer"""
+        if self._continuous_timer is not None:
+            self._continuous_timer.stop()
+            self._continuous_timer = None
+
+    def _send_continuous_messages(self):
+        """Send current LED and buzzer messages continuously at 1Hz"""
+        # Send both LED and buzzer messages in parallel if they are set
+        if self.current_led_state is not None:
+            self._send_led_can_message(self.current_led_state)
+
+        if self.current_buzzer_state is not None:
+            self._send_buzzer_can_message(self.current_buzzer_state)
+
+    def _set_led_state_and_send(self, led_can_id: CANLEDType):
+        """Set new LED state and start continuous sending"""
+        self.current_led_state = led_can_id
+        self._send_led_can_message(led_can_id)  # Send immediately
+        self._start_continuous_sending()  # Ensure timer is running
+
+    def _set_buzzer_state_and_send(self, buzzer_can_id: CANBuzzerType):
+        """Set new buzzer state and start continuous sending"""
+        self.current_buzzer_state = buzzer_can_id
+        self._send_buzzer_can_message(buzzer_can_id)  # Send immediately
+        self._start_continuous_sending()  # Ensure timer is running
                 
     def _get_status_level(self, status_text: str) -> StatusLevel:
         """
@@ -222,7 +263,8 @@ class CANStatusManager(QObject):
         # Only send if buzzer state changed
         if self.last_buzzer_state != buzzer_id:
             self.last_buzzer_state = buzzer_id
-            return self._send_buzzer_can_message(buzzer_id)
+            self._set_buzzer_state_and_send(buzzer_id)  # Start continuous sending at 1Hz
+            return True
 
         return True  # No change, no message sent
 
@@ -265,7 +307,7 @@ class CANStatusManager(QObject):
             }
 
             led_can_id = led_mapping[status_level]
-            self._send_led_can_message(led_can_id)  # This will print debug even if socket_fd is None
+            self._set_led_state_and_send(led_can_id)  # Start continuous sending at 1Hz
             
     # PyQt slots for connecting to existing status signals
     @pyqtSlot(str)
@@ -290,7 +332,7 @@ class CANStatusManager(QObject):
             if self.socket_fd and not self.navigation_preparation_active:
                 if self.last_buzzer_state == CANBuzzerType.BUZZER_ON:
                     self.last_buzzer_state = CANBuzzerType.BUZZER_OFF
-                    self._send_buzzer_can_message(CANBuzzerType.BUZZER_OFF)
+                    self._set_buzzer_state_and_send(CANBuzzerType.BUZZER_OFF)
 
         self.send_led_status_if_changed(status)
         
@@ -309,19 +351,19 @@ class CANStatusManager(QObject):
         """Handle battery status updates - only send on warning state changes"""
         # Check if this is a battery warning state
         is_battery_warning = "WARNING" in status.upper() or "LOW BATTERY" in status.upper()
-        
+
         # Only send CAN message if battery warning state changed
         if self.last_battery_warning_state != is_battery_warning:
             self.last_battery_warning_state = is_battery_warning
             self.battery_warning_active = is_battery_warning
-            
+
             # Send appropriate CAN message for battery state change
             if is_battery_warning:
                 # Send WARNING LED for low battery
-                self._send_led_can_message(CANLEDType.ORANGE_LED)
+                self._set_led_state_and_send(CANLEDType.ORANGE_LED)
             else:
                 # Battery recovered - send OK LED only if no other issues
-                self._send_led_can_message(CANLEDType.GREEN_LED)
+                self._set_led_state_and_send(CANLEDType.GREEN_LED)
         
     @pyqtSlot(str)
     def handle_plan_status(self, status: str):
@@ -333,11 +375,11 @@ class CANStatusManager(QObject):
         """Handle wait action status - always send WARNING without blocking other messages"""
         if "waiting for" in status.lower():
             # Always send WARNING LED for wait actions, regardless of battery state
-            self._send_led_can_message(CANLEDType.ORANGE_LED)
+            self._set_led_state_and_send(CANLEDType.ORANGE_LED)
         elif "received" in status.lower():
             # Wait action completed - send OK LED only if no battery warning
             if not self.battery_warning_active:
-                self._send_led_can_message(CANLEDType.GREEN_LED)
+                self._set_led_state_and_send(CANLEDType.GREEN_LED)
         
     def add_status_mapping(self, status_text: str, level: StatusLevel):
         """
@@ -350,12 +392,12 @@ class CANStatusManager(QObject):
         """Send OK or WARNING message when STOP is pressed based on battery level"""
         if self.battery_warning_active:
             # Send WARNING LED instead of blocking the message
-            success = self._send_led_can_message(CANLEDType.ORANGE_LED)
-            return success
+            self._set_led_state_and_send(CANLEDType.ORANGE_LED)
+            return True
 
         # Send GREEN LED for successful stop
-        success = self._send_led_can_message(CANLEDType.GREEN_LED)
-        return success
+        self._set_led_state_and_send(CANLEDType.GREEN_LED)
+        return True
     
     def send_navigation_preparation_message(self):
         """Send buzzer ON and warning LED for navigation preparation (during 5s countdown)"""
@@ -365,29 +407,18 @@ class CANStatusManager(QObject):
         # Reset buzzer state tracking since we're entering preparation mode
         self.last_buzzer_state = CANBuzzerType.BUZZER_ON
 
-        # Start beeping during preparation phase
-        success_buzzer = self._send_buzzer_can_message(CANBuzzerType.BUZZER_ON)
+        # Set LED and buzzer states for preparation phase (will be sent continuously at 1Hz)
+        self.current_led_state = CANLEDType.ORANGE_LED
+        self.current_buzzer_state = CANBuzzerType.BUZZER_ON
 
-        # Send WARNING LED for preparation phase
-        success_led = self._send_led_can_message(CANLEDType.ORANGE_LED)
-
-        # Start a timer to repeatedly send buzzer ON during preparation phase
-        from PyQt5.QtCore import QTimer
-        self._preparation_buzzer_timer = QTimer()
-        self._preparation_buzzer_timer.timeout.connect(self._send_preparation_buzzer_repeat)
-        self._preparation_buzzer_timer.start(500)  # Send buzzer ON every 500ms
-
-        return success_buzzer and success_led
-    
-    def _send_preparation_buzzer_repeat(self):
-        """Repeatedly send buzzer ON during navigation preparation to ensure it stays on"""
-        if not self.navigation_preparation_active:
-            # Stop the timer if preparation is no longer active
-            if hasattr(self, '_preparation_buzzer_timer') and self._preparation_buzzer_timer:
-                print("CAN DEBUG: Stopping preparation buzzer timer (flag is False)")
-                self._preparation_buzzer_timer.stop()
-            return
+        # Send initial messages immediately
+        self._send_led_can_message(CANLEDType.ORANGE_LED)
         self._send_buzzer_can_message(CANBuzzerType.BUZZER_ON)
+
+        # Start continuous sending at 1Hz
+        self._start_continuous_sending()
+
+        return True
     
     def stop_navigation_preparation(self):
         """Stop navigation preparation - called when STOP pressed or countdown ends"""
@@ -396,21 +427,23 @@ class CANStatusManager(QObject):
             return
 
         print("CAN DEBUG: Stopping navigation preparation")
-        # End preparation phase and stop the preparation buzzer
+        # End preparation phase
         self.navigation_preparation_active = False
-        if hasattr(self, '_preparation_buzzer_timer') and self._preparation_buzzer_timer:
-            self._preparation_buzzer_timer.stop()
-            self._preparation_buzzer_timer = None
 
         # Turn off buzzer and update state tracking
         self.last_buzzer_state = CANBuzzerType.BUZZER_OFF
+        self.current_buzzer_state = CANBuzzerType.BUZZER_OFF
         self._send_buzzer_can_message(CANBuzzerType.BUZZER_OFF)
 
         # Send appropriate LED based on battery status
         if self.battery_warning_active:
+            self.current_led_state = CANLEDType.ORANGE_LED
             self._send_led_can_message(CANLEDType.ORANGE_LED)
         else:
+            self.current_led_state = CANLEDType.GREEN_LED
             self._send_led_can_message(CANLEDType.GREEN_LED)
+
+        # Continuous sending at 1Hz continues with new LED and buzzer states
 
     def send_navigation_start_ok_message(self):
         """Send OK or WARNING message when navigation starts based on battery level"""
@@ -451,15 +484,15 @@ class CANStatusManager(QObject):
         if self.is_navigating:
             if collision_detected:
                 # Always send WARNING LED for collision detection during navigation
-                self._send_led_can_message(CANLEDType.ORANGE_LED)
+                self._set_led_state_and_send(CANLEDType.ORANGE_LED)
             else:
                 # No collision detected during navigation
                 if self.battery_warning_active:
                     # Battery warning is active - keep sending WARNING LED
-                    self._send_led_can_message(CANLEDType.ORANGE_LED)
+                    self._set_led_state_and_send(CANLEDType.ORANGE_LED)
                 else:
                     # No collision and no battery warning during navigation - send OK LED
-                    self._send_led_can_message(CANLEDType.GREEN_LED)
+                    self._set_led_state_and_send(CANLEDType.GREEN_LED)
 
     def pause_can_messages(self):
         """Pause all CAN message sending (used during navigation start to prevent buffer overflow)"""

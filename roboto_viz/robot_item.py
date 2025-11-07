@@ -15,7 +15,7 @@ class RobotItem(QGraphicsItem):
         
     def paint(self, painter: QPainter, option, widget):
         # Set up the black pen for the circle
-        painter.scale(0.5,0.5)
+        painter.scale(1.5,1.5)
         black_pen = QPen(Qt.red)
         black_pen.setWidth(1)
         painter.setPen(black_pen)
@@ -28,10 +28,10 @@ class RobotItem(QGraphicsItem):
         
         # Create and draw the arrow polygon
         arrow_polygon = QPolygonF([
-            QPointF(5, 0),      # Arrow tip
-            QPointF(-3, -3),   # Left corner
-            QPointF(-3, 3),    # Right corner
-            QPointF(5, 0)       # Back to tip to close polygon
+            QPointF(6.4, 0),      # Arrow tip
+            QPointF(-3.84, -3.84),   # Left corner
+            QPointF(-3.84, 3.84),    # Right corner
+            QPointF(6.4, 0)       # Back to tip to close polygon
         ])
 
         painter.drawPolygon(arrow_polygon)
