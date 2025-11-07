@@ -1000,6 +1000,12 @@ class GuiManager(QThread):
         if self.can_battery_receiver:
             self.can_battery_receiver.battery_status_update.connect(self.handle_battery_adc_update)
             self.can_battery_receiver.battery_percentage_update.connect(self.handle_battery_percentage_update)
+            # Connect navigation signals to battery receiver
+            if hasattr(self.navigator, 'navigation_started'):
+                self.navigator.navigation_started.connect(
+                    lambda: self.can_battery_receiver.set_navigation_state(True))
+            self.navigator.finished.connect(
+                lambda: self.can_battery_receiver.set_navigation_state(False))
 
         # Connect signal receiver if available
         if self.can_signal_receiver:
