@@ -903,7 +903,10 @@ class GuiManager(QThread):
     
     # Collision detection signal
     collision_detected = pyqtSignal(bool)  # Collision detection status
-    
+
+    # Navigation lifecycle signals
+    navigation_actually_started = pyqtSignal()  # Emitted when navigation actually begins (after nav2 service completes)
+
     # Plan execution signals
     plan_execution_start = pyqtSignal(str)  # plan_name
     plan_execution_stop = pyqtSignal()
@@ -1026,6 +1029,9 @@ class GuiManager(QThread):
     @pyqtSlot()
     def handle_navigation_started(self):
         """Handle navigation actually starting - resume CAN and send start message"""
+        # Emit signal to notify all systems that navigation has actually started
+        self.navigation_actually_started.emit()
+
         # Resume CAN messages now that navigation has started
         if self.can_manager:
             self.can_manager.resume_can_messages()

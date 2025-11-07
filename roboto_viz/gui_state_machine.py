@@ -560,6 +560,26 @@ class PlanActiveState(State):
             self.gui.main_view.plan_active_view.handle_collision_detection
         )
 
+        # Navigation preparation signals for plan_active_view
+        self.connect_and_store_connections(
+            self.gui.main_view.plan_executor.navigation_preparation_started,
+            self.gui.main_view.plan_active_view.handle_navigation_preparation_started
+        )
+        self.connect_and_store_connections(
+            self.gui.main_view.plan_executor.navigation_preparation_stopped,
+            self.gui.main_view.plan_active_view.handle_navigation_preparation_stopped
+        )
+
+        # Navigation actually started signal (unified navigation start for all systems)
+        self.connect_and_store_connections(
+            self.gui.gui_manager.navigation_actually_started,
+            self.gui.main_view.plan_active_view.handle_navigation_actually_started
+        )
+        self.connect_and_store_connections(
+            self.gui.gui_manager.navigation_actually_started,
+            self.gui.gui_manager.can_manager.handle_navigation_actually_started
+        )
+
         # CAN status forwarding connections
         self.setup_can_status_forwarding()
         

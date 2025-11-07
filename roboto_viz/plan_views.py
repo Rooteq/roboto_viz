@@ -55,6 +55,7 @@ class PlanActiveView(QWidget):
         # Track navigation state for collision detection
         self.is_navigating: bool = False
         self.obstacle_detected: bool = False
+        self.navigation_preparation_active: bool = False  # Track 5s preparation phase
 
         # Create plan tools
         self.plan_tools = PlanTools(self.plan_manager)
@@ -559,11 +560,18 @@ class PlanActiveView(QWidget):
                 print("DEBUG: Configure tab - showing full map")
             print(f"DEBUG: Configure tab activated - enable_drawing={self.map_view.enable_drawing}, editing_mode={self.map_view.editing_mode}")
     
+    @pyqtSlot()
+    def handle_navigation_actually_started(self):
+        """Handle when navigation actually starts (after nav2 service completes)"""
+        self.is_navigating = True
+
     def update_robot_status(self, status: str):
         """Update robot status display"""
-        # Track navigation state
+        # Track navigation state (for stopping navigation)
         status_lower = status.lower()
-        self.is_navigating = any(word in status_lower for word in ['nav', 'navigating', 'executing'])
+        nav_stop_keywords = ['stopped', 'zatrzymany', 'idle', 'bezczynny', 'w bazie', 'na miejscu', 'error', 'błąd', 'failed']
+        if any(word in status_lower for word in nav_stop_keywords):
+            self.is_navigating = False
 
         # If we're showing obstacle status and navigation stopped, clear it
         if not self.is_navigating and self.obstacle_detected:
@@ -578,21 +586,37 @@ class PlanActiveView(QWidget):
         # Forward navigation status to plan tools for signal button logic
         self.plan_tools.update_navigation_status(status)
 
+    @pyqtSlot()
+    def handle_navigation_preparation_started(self):
+        """Handle start of 5s navigation preparation phase"""
+        self.navigation_preparation_active = True
+
+    @pyqtSlot()
+    def handle_navigation_preparation_stopped(self):
+        """Handle end of 5s navigation preparation phase"""
+        self.navigation_preparation_active = False
+
     @pyqtSlot(bool)
     def handle_collision_detection(self, collision_detected: bool):
         """Handle collision detection status and update robot status display"""
-        # Only show obstacle status when navigating (matching CAN LED logic)
-        if self.is_navigating:
-            if collision_detected:
-                # Show orange warning when obstacle is detected during navigation
-                self.obstacle_detected = True
-                self.set_current_status("Wykryto przeszkodę!")
-            else:
-                # Obstacle cleared during navigation
-                if self.obstacle_detected:
-                    self.obstacle_detected = False
-                    # Restore navigation status
-                    self.set_current_status("Navigating")
+        # Ignore collision detection during 5s preparation phase
+        if self.navigation_preparation_active:
+            return
+
+        # Handle collision detection only after preparation phase and when actually navigating
+        if not self.is_navigating:
+            return
+
+        if collision_detected:
+            # Show orange warning when obstacle is detected
+            self.obstacle_detected = True
+            self.set_current_status("Wykryto przeszkodę!")
+        else:
+            # Obstacle cleared
+            if self.obstacle_detected:
+                self.obstacle_detected = False
+                # Restore navigation status
+                self.set_current_status("Navigating")
     
     def close_plan_editor(self):
         """Close the plan editor if open"""

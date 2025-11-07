@@ -739,7 +739,7 @@ class PlanTools(QWidget):
     
     def show_signal_button(self, signal_name: str):
         """Show the signal button for wait-for-signal actions"""
-        self.signal_btn.setText(f'SIGNAL ({signal_name})')
+        self.signal_btn.setText(f'SYGNAŁ ({signal_name})')
         self.signal_btn.setVisible(True)
     
     def hide_signal_button(self):
@@ -749,7 +749,7 @@ class PlanTools(QWidget):
             return
         
         # Don't hide if button was just shown for wait_for_signal action
-        if self.signal_btn.isVisible() and self.signal_btn.text().startswith('SIGNAL ('):
+        if self.signal_btn.isVisible() and self.signal_btn.text().startswith('SYGNAŁ ('):
             return
             
         self.signal_btn.setVisible(False)
@@ -796,7 +796,7 @@ class PlanTools(QWidget):
         
         if wait_action:
             signal_name = wait_action.parameters.get('signal_name', 'default')
-            self.signal_btn.setText(f'CONTINUE TO SIGNAL ({signal_name})')
+            self.signal_btn.setText(f'PRZEJDŹ DO SYGNAŁU: ({signal_name})')
             self.signal_btn.setVisible(True)
     
     def _plan_has_wait_signal_action(self):

@@ -182,14 +182,6 @@ class CANStatusManager(QObject):
         if self.can_paused:
             return True  # Silently skip, don't print
 
-        # Debug message (always print, even if CAN not connected)
-        led_color = {
-            CANLEDType.GREEN_LED: "GREEN",
-            CANLEDType.ORANGE_LED: "ORANGE",
-            CANLEDType.RED_LED: "RED"
-        }.get(led_can_id, "UNKNOWN")
-        print(f"CAN DEBUG: Sent {led_color} LED msg (0x{int(led_can_id):03X})")
-
         if not self.socket_fd:
             return False
 
@@ -218,10 +210,6 @@ class CANStatusManager(QObject):
         # Check if CAN is paused (during navigation start)
         if self.can_paused:
             return True  # Silently skip, don't print
-
-        # Debug message (always print, even if CAN not connected)
-        buzzer_state = "ON" if buzzer_can_id == CANBuzzerType.BUZZER_ON else "OFF"
-        print(f"CAN DEBUG: Sent BUZZER {buzzer_state} msg (0x{int(buzzer_can_id):03X})")
 
         if not self.socket_fd:
             return False
@@ -315,18 +303,20 @@ class CANStatusManager(QObject):
         """Handle robot status updates"""
         self.send_led_status_if_changed(status)
         
+    @pyqtSlot()
+    def handle_navigation_actually_started(self):
+        """Handle when navigation actually starts (after nav2 service completes)"""
+        self.is_navigating = True
+
     @pyqtSlot(str)
     def handle_navigation_status(self, status: str):
         """Handle navigation status updates"""
 
-        # Update navigation state based on status
-        nav_active_keywords = ["nav to", "navigating", "nawigacja"]
+        # Update navigation state based on status (for stopping navigation)
         nav_inactive_keywords = ["zatrzymany", "stopped", "na miejscu", "w bazie", "bezczynny", "idle", "błąd", "failed", "error"]
 
         status_lower = status.lower()
-        if any(keyword in status_lower for keyword in nav_active_keywords):
-            self.is_navigating = True
-        elif any(keyword in status_lower for keyword in nav_inactive_keywords):
+        if any(keyword in status_lower for keyword in nav_inactive_keywords):
             self.is_navigating = False
             # When navigation stops, send buzzer OFF only if it was ON (unless in preparation phase)
             if self.socket_fd and not self.navigation_preparation_active:
@@ -390,6 +380,11 @@ class CANStatusManager(QObject):
     
     def send_stop_ok_message(self):
         """Send OK or WARNING message when STOP is pressed based on battery level"""
+        # Always turn OFF buzzer when STOP is pressed
+        if self.last_buzzer_state != CANBuzzerType.BUZZER_OFF:
+            self.last_buzzer_state = CANBuzzerType.BUZZER_OFF
+            self._set_buzzer_state_and_send(CANBuzzerType.BUZZER_OFF)
+
         if self.battery_warning_active:
             # Send WARNING LED instead of blocking the message
             self._set_led_state_and_send(CANLEDType.ORANGE_LED)
@@ -426,7 +421,6 @@ class CANStatusManager(QObject):
         if not self.navigation_preparation_active:
             return
 
-        print("CAN DEBUG: Stopping navigation preparation")
         # End preparation phase
         self.navigation_preparation_active = False
 
@@ -477,29 +471,34 @@ class CANStatusManager(QObject):
     @pyqtSlot(bool)
     def handle_collision_detection(self, collision_detected: bool):
         """Handle collision detection updates and control buzzer and LED status"""
-        # Send buzzer control message (buzzer logic already handles navigation state)
-        self.send_buzzer_status(collision_detected)
-
-        # Only send collision-related LED status when robot is actively navigating
+        # Only send collision-related LED and buzzer status when robot is actively navigating
         if self.is_navigating:
-            if collision_detected:
-                # Always send WARNING LED for collision detection during navigation
-                self._set_led_state_and_send(CANLEDType.ORANGE_LED)
-            else:
-                # No collision detected during navigation
-                if self.battery_warning_active:
-                    # Battery warning is active - keep sending WARNING LED
+            # Don't interfere with navigation preparation buzzer
+            if not self.navigation_preparation_active:
+                if collision_detected:
+                    # Collision detected during navigation - turn ON buzzer
+                    if self.last_buzzer_state != CANBuzzerType.BUZZER_ON:
+                        self.last_buzzer_state = CANBuzzerType.BUZZER_ON
+                        self._set_buzzer_state_and_send(CANBuzzerType.BUZZER_ON)
+                    # Always send WARNING LED for collision detection during navigation
                     self._set_led_state_and_send(CANLEDType.ORANGE_LED)
                 else:
-                    # No collision and no battery warning during navigation - send OK LED
-                    self._set_led_state_and_send(CANLEDType.GREEN_LED)
+                    # No collision detected during navigation - turn OFF buzzer
+                    if self.last_buzzer_state != CANBuzzerType.BUZZER_OFF:
+                        self.last_buzzer_state = CANBuzzerType.BUZZER_OFF
+                        self._set_buzzer_state_and_send(CANBuzzerType.BUZZER_OFF)
+                    # Update LED based on battery status
+                    if self.battery_warning_active:
+                        # Battery warning is active - keep sending WARNING LED
+                        self._set_led_state_and_send(CANLEDType.ORANGE_LED)
+                    else:
+                        # No collision and no battery warning during navigation - send OK LED
+                        self._set_led_state_and_send(CANLEDType.GREEN_LED)
 
     def pause_can_messages(self):
         """Pause all CAN message sending (used during navigation start to prevent buffer overflow)"""
-        print("CAN DEBUG: Pausing CAN messages during navigation start")
         self.can_paused = True
 
     def resume_can_messages(self):
         """Resume CAN message sending after navigation has started"""
-        print("CAN DEBUG: Resuming CAN messages after navigation start")
         self.can_paused = False
