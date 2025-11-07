@@ -56,6 +56,7 @@ class PlanActiveView(QWidget):
         self.is_navigating: bool = False
         self.obstacle_detected: bool = False
         self.navigation_preparation_active: bool = False  # Track 5s preparation phase
+        self.is_map_loading: bool = False  # Track map loading state
 
         # Create plan tools
         self.plan_tools = PlanTools(self.plan_manager)
@@ -419,8 +420,9 @@ class PlanActiveView(QWidget):
                 text_color = "#e74c3c"
             elif (status in ["Ostrzeżenie", "Słaba bateria", "Wykryto przeszkodę", "Wykryto przeszkodę!"] or
                   "wykryto przeszkodę" in status.lower() or
+                  "ładowanie" in status.lower() or
                   ("start" in status.lower() and "sek" in status.lower())):
-                # Light orange for warnings, obstacle detection, and navigation countdown
+                # Light orange for warnings, obstacle detection, map loading, and navigation countdown
                 bg_color = "#fdebd0"
                 text_color = "#f39c12"
             else:
@@ -572,6 +574,14 @@ class PlanActiveView(QWidget):
         nav_stop_keywords = ['stopped', 'zatrzymany', 'idle', 'bezczynny', 'w bazie', 'na miejscu', 'error', 'błąd', 'failed']
         if any(word in status_lower for word in nav_stop_keywords):
             self.is_navigating = False
+
+        # Track map loading state and disable START button during loading
+        if "ładowanie" in status_lower:
+            self.is_map_loading = True
+            self.plan_tools.execute_action_btn.setEnabled(False)
+        elif "załadowano" in status_lower or "załadowana" in status_lower:
+            self.is_map_loading = False
+            self.plan_tools.execute_action_btn.setEnabled(True)
 
         # If we're showing obstacle status and navigation stopped, clear it
         if not self.is_navigating and self.obstacle_detected:
