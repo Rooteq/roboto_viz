@@ -141,19 +141,23 @@ class MapView(QGraphicsView):
         self.grid_visible = False
         self.min_zoom_for_grid = 0.8  # Hide grid when zoomed out below this level
 
-    def load_image(self, image_path, origin_data, resolution=None):
+    def load_image(self, image_path, origin_data, resolution=None, preserve_view=False):
         print(f"DEBUG: Loading new map: {image_path}")
-        
+
+        # Save view state if we want to preserve it
+        if preserve_view:
+            self.save_view_state()
+
         # Clear any existing route graphics first (force clear even in editing mode)
         self.clear_route(force=True)
-        
+
         # Clear existing grid
         self.clear_grid()
-        
+
         # Update map origin and current map path
         self.map_origin = (origin_data[0], origin_data[1], origin_data[2])
         self.current_map_path = image_path
-        
+
         # Store map resolution if provided
         if resolution is not None:
             self.map_resolution = resolution
@@ -161,27 +165,33 @@ class MapView(QGraphicsView):
 
         # Load new pixmap
         self.pixmap = QPixmap(image_path)
-        
+
         # Remove old image item if it exists
         if self.image_item:
             self.scene.removeItem(self.image_item)
             self.image_item = None
-            
+
         # Add new image item
         self.image_item = self.scene.addPixmap(self.pixmap)
-        
+
         # Update scene rectangle to match new image
         self.scene.setSceneRect(QRectF(self.pixmap.rect()))
-        
+
         # Create grid overlay
         self.create_grid()
-        
+
         # Force scene update
         self.scene.update()
-        
-        # Update view to fit new image (force reset for new maps)
-        self.update_view(force_reset=True)
-        
+
+        # Update view to fit new image (or restore preserved view)
+        if preserve_view:
+            # Restore the saved view state instead of resetting
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(10, self.restore_view_state)
+        else:
+            # Normal behavior: reset view to fit
+            self.update_view(force_reset=True)
+
         print(f"DEBUG: Map loaded successfully, origin: {self.map_origin}")
 
     def save_view_state(self):

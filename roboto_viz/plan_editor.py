@@ -1384,7 +1384,9 @@ class PlanEditor(QMainWindow):
 
                 with open(speed_yaml_path, 'r') as file:
                     yaml_data = yaml.safe_load(file)
-                self.map_view.load_image(str(speed_map_path), yaml_data['origin'], yaml_data.get('resolution'))
+                # Load image with preserve_view=True to maintain zoom/pan
+                self.map_view.load_image(str(speed_map_path), yaml_data['origin'], yaml_data.get('resolution'), preserve_view=True)
+
                 print(f"DEBUG: Successfully reloaded speed map")
             except Exception as e:
                 print(f"Error reloading speed map: {e}")
@@ -1532,7 +1534,8 @@ class PlanEditor(QMainWindow):
 
                 with open(collision_yaml_path, 'r') as file:
                     yaml_data = yaml.safe_load(file)
-                self.map_view.load_image(str(collision_map_path), yaml_data['origin'], yaml_data.get('resolution'))
+                # Load image with preserve_view=True to maintain zoom/pan
+                self.map_view.load_image(str(collision_map_path), yaml_data['origin'], yaml_data.get('resolution'), preserve_view=True)
 
                 # Emit signal to update minimap
                 self.collision_zones_updated.emit(map_name)
