@@ -1339,18 +1339,26 @@ class PlanEditor(QMainWindow):
         """Stop speed zone editing mode"""
         # Stop speed zone editing mode in map view first
         self.map_view.stop_speed_zone_editing()
-        
+
         # Clean up speed zone editor state (removes working files)
+        # Temporarily disconnect editing_finished signal to prevent infinite loop
         if self.speed_zone_editor:
+            try:
+                self.speed_zone_editor.editing_finished.disconnect(self.stop_speed_zone_editing)
+            except TypeError:
+                # Signal might not be connected
+                pass
             self.speed_zone_editor.cleanup_editing()
-        
+            # Reconnect the signal
+            self.speed_zone_editor.editing_finished.connect(self.stop_speed_zone_editing)
+
         # Hide the speed zone editor window
         if self.speed_zone_window:
             self.speed_zone_window.hide()
-            
+
         # Update button state
         self.edit_speed_zones_btn.setEnabled(True)
-        
+
         # Reload original map to show clean version without speed zones
         self.load_selected_map(show_success_dialog=False)
     
