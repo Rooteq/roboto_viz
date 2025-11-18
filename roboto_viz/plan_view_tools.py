@@ -382,8 +382,8 @@ class PlanTools(QWidget):
         self.signal_btn = QPushButton("SYGNAŁ")
         self.signal_btn.setStyleSheet("""
             QPushButton {
-                min-height: 80px;
-                font-size: 24px;
+                min-height: 33px;
+                font-size: 12px;
                 padding: 20px 30px;
                 font-weight: bold;
                 border: 4px solid #3498db;
@@ -409,7 +409,7 @@ class PlanTools(QWidget):
         self.start_btn = QPushButton("WZNÓW")
         self.start_btn.setStyleSheet("""
             QPushButton {
-                min-height: 90px;
+                min-height: 33px;
                 font-size: 28px;
                 padding: 25px 40px;
                 font-weight: bold;
@@ -736,10 +736,30 @@ class PlanTools(QWidget):
     def switch_to_configure(self):
         """Switch to configure tab"""
         self.tab_widget.setCurrentIndex(1)
-    
+
+    def _set_signal_button_text(self, text: str):
+        """Set signal button text with eliding if too long"""
+        from PyQt5.QtGui import QFontMetrics
+        # Calculate available width (button actual width - padding - borders)
+        # Get button width (will match other buttons in the layout)
+        button_width = self.signal_btn.width()
+        if button_width == 0:
+            # Button not shown yet, use a reasonable default
+            button_width = 400
+        available_width = button_width - 60 - 8  # width - padding - borders
+
+        # Get font metrics
+        font_metrics = QFontMetrics(self.signal_btn.font())
+
+        # Elide text if too long
+        from PyQt5.QtCore import Qt
+        elided_text = font_metrics.elidedText(text, Qt.ElideRight, available_width)
+
+        self.signal_btn.setText(elided_text)
+
     def show_signal_button(self, signal_name: str):
         """Show the signal button for wait-for-signal actions"""
-        self.signal_btn.setText(f'SYGNAŁ ({signal_name})')
+        self._set_signal_button_text(f'SYGNAŁ ({signal_name})')
         self.signal_btn.setVisible(True)
     
     def hide_signal_button(self):
@@ -796,7 +816,7 @@ class PlanTools(QWidget):
         
         if wait_action:
             signal_name = wait_action.parameters.get('signal_name', 'default')
-            self.signal_btn.setText(f'PRZEJDŹ DO SYGNAŁU: ({signal_name})')
+            self._set_signal_button_text(f'PRZEJDŹ DO SYGNAŁU: ({signal_name})')
             self.signal_btn.setVisible(True)
     
     def _plan_has_wait_signal_action(self):

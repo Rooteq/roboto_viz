@@ -80,12 +80,12 @@ class MapView(QGraphicsView):
         button_style = """
             QPushButton {
                 background-color: white;
-                border: 1px solid gray;
-                border-radius: 2px;
-                padding: 3px;
-                min-width: 24px;
-                min-height: 24px;
-                font-size: 10px;
+                border: 2px solid gray;
+                border-radius: 4px;
+                padding: 6px;
+                min-width: 48px;
+                min-height: 48px;
+                font-size: 20px;
             }
             QPushButton:checked {
                 background-color: lightgray;
