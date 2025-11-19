@@ -1,0 +1,16 @@
+{
+  "1": {
+    "zone_id": 1,
+    "polygon_points": "[[1.0, 0.45], [1.0, -0.45], [-0.8, -0.45], [-0.8, 0.45]]",
+    "color": [
+      255,
+      100,
+      100
+    ],
+    "use_polygon_slow": true,
+    "use_polygon_stop": true,
+    "route_names": [
+      "gfn"
+    ]
+  }
+}

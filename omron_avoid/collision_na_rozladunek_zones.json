@@ -1,0 +1,60 @@
+{
+  "1": {
+    "zone_id": 1,
+    "polygon_points": "[[0.75, 0.55], [0.75, -0.55], [-0.8, -0.55], [-0.8, 0.55]]",
+    "color": [
+      255,
+      100,
+      100
+    ],
+    "use_polygon_slow": true,
+    "use_polygon_stop": true,
+    "route_names": [
+      "jazda_na_zaladunek",
+      "na_rozladunek"
+    ]
+  },
+  "3": {
+    "zone_id": 3,
+    "polygon_points": "[[2.5, 0.55], [2.5, -0.55], [-0.8, -0.55], [-0.8, 0.55]]",
+    "color": [
+      255,
+      100,
+      255
+    ],
+    "use_polygon_slow": true,
+    "use_polygon_stop": true,
+    "route_names": [
+      "na_rozladunek",
+      "jazda_na_zaladunek"
+    ]
+  },
+  "2": {
+    "zone_id": 2,
+    "polygon_points": "[[2.5, 1.7], [2.5, -1.7], [-0.8, -0.45], [-0.8, 0.45]]",
+    "color": [
+      100,
+      100,
+      255
+    ],
+    "use_polygon_slow": true,
+    "use_polygon_stop": true,
+    "route_names": [
+      "na_rozladunek"
+    ]
+  },
+  "4": {
+    "zone_id": 4,
+    "polygon_points": "[[6.0, 1.0], [6.0, -4.0], [-0.8, -0.45], [-0.8, 0.45]]",
+    "color": [
+      255,
+      255,
+      100
+    ],
+    "use_polygon_slow": true,
+    "use_polygon_stop": true,
+    "route_names": [
+      "na_rozladunek"
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+free_thresh: 0.25
+image: collision_hala.png
+mode: trinary
+negate: 0
+occupied_thresh: 0.65
+origin:
+- -29.7
+- -28.5
+- 0
+resolution: 0.05
