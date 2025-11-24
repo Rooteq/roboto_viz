@@ -1,35 +1,37 @@
 #!/usr/bin/env python3
 """
 Simple test script to verify battery SOC estimation logic.
+Updated to use Modbus-based battery receiver.
 """
 
 import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from roboto_viz.can_battery_receiver import CANBatteryReceiver
+from roboto_viz.modbus_battery_receiver import ModbusBatteryReceiver
 
 def test_battery_conversion():
     """Test battery ADC to percentage conversion"""
-    battery_receiver = CANBatteryReceiver()
-    
-    print("Testing battery SOC estimation:")
-    print("================================")
-    
+    battery_receiver = ModbusBatteryReceiver()
+
+    print("Testing battery SOC estimation (12-bit ADC, 0-4095):")
+    print("=====================================================")
+
     # Test cases: (ADC value, expected voltage, expected percentage)
+    # Note: 12-bit ADC (0-4095) instead of 10-bit (0-1023)
     test_cases = [
-        (1023, 42.0, 100),  # Full battery
+        (4095, 42.0, 100),  # Full battery (12-bit max)
         (0, 0.0, 0),        # Empty ADC
-        (512, 21.0, 0),     # Mid ADC but below min voltage
-        (780, 32.0, 0),     # Min safe voltage
-        (900, 37.0, 50),    # Mid range
-        (100, 4.1, 0),      # Very low
-        (102, 4.2, 0),      # Low but above test threshold for 10%
+        (2048, 21.0, 0),    # Mid ADC but below min voltage
+        (3121, 32.0, 0),    # Min safe voltage (32V / 42V * 4095)
+        (3604, 37.0, 50),   # Mid range (37V / 42V * 4095)
+        (400, 4.1, 0),      # Very low
+        (408, 4.2, 0),      # Low but above test threshold for 10%
     ]
-    
+
     # Calculate what ADC value gives us 10% (32V + 10% of 10V range = 33V)
-    # 33V / 42V * 1023 = 803 ADC
-    adc_10_percent = int((33.0 / 42.0) * 1023)
+    # 33V / 42V * 4095 = 3217 ADC
+    adc_10_percent = int((33.0 / 42.0) * 4095)
     test_cases.append((adc_10_percent, 33.0, 10))  # 10% threshold
     
     for adc_value, expected_voltage, expected_percentage in test_cases:
@@ -46,14 +48,14 @@ def test_battery_conversion():
     
     print("\nTesting warning threshold:")
     print("==========================")
-    
-    # Test warning cases
+
+    # Test warning cases (updated for 12-bit ADC)
     warning_test_cases = [
-        (102, "Should show WARNING"),
-        (204, "Should show WARNING"), 
-        (306, "Should show normal"),
-        (500, "Should show normal"),
-        (1023, "Should show normal"),
+        (408, "Should show WARNING"),   # ~4.2V, very low
+        (816, "Should show WARNING"),   # ~8.4V, low
+        (1224, "Should show normal"),   # ~12.6V
+        (2000, "Should show normal"),   # ~20.5V
+        (4095, "Should show normal"),   # Max, 42V
     ]
     
     for adc_value, description in warning_test_cases:

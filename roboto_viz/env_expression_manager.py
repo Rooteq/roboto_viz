@@ -2,6 +2,7 @@
 
 import minimalmodbus
 import serial
+import threading
 from typing import Dict
 from PyQt5.QtCore import QObject, pyqtSlot
 from enum import IntEnum
@@ -37,6 +38,7 @@ class CANStatusManager(QObject):
         self.port = port
         self.slave_id = slave_id
         self.instrument = None
+        self.instrument_lock = threading.Lock()  # Shared lock for Modbus access
         self.last_status_cache: Dict[str, tuple] = {}
         self.battery_warning_active = False
         self.last_battery_warning_state = None
@@ -126,8 +128,9 @@ class CANStatusManager(QObject):
         if not self.instrument:
             return
         try:
-            for coil in ModbusCoil:
-                self.instrument.write_bit(int(coil), 0, functioncode=5)
+            with self.instrument_lock:
+                for coil in ModbusCoil:
+                    self.instrument.write_bit(int(coil), 0, functioncode=5)
         except Exception as e:
             print(f"Error turning off outputs: {e}")
 
@@ -199,12 +202,13 @@ class CANStatusManager(QObject):
             return False
 
         try:
-            # Turn off all LEDs first, then turn on the desired one
-            for coil in [ModbusCoil.GREEN_LED, ModbusCoil.ORANGE_LED, ModbusCoil.RED_LED]:
-                if coil == led_coil:
-                    self.instrument.write_bit(int(coil), 1, functioncode=5)
-                else:
-                    self.instrument.write_bit(int(coil), 0, functioncode=5)
+            with self.instrument_lock:
+                # Turn off all LEDs first, then turn on the desired one
+                for coil in [ModbusCoil.GREEN_LED, ModbusCoil.ORANGE_LED, ModbusCoil.RED_LED]:
+                    if coil == led_coil:
+                        self.instrument.write_bit(int(coil), 1, functioncode=5)
+                    else:
+                        self.instrument.write_bit(int(coil), 0, functioncode=5)
             return True
 
         except Exception as e:
@@ -220,8 +224,9 @@ class CANStatusManager(QObject):
             return False
 
         try:
-            self.instrument.write_bit(
-                int(ModbusCoil.BUZZER), 1 if buzzer_on else 0, functioncode=5)
+            with self.instrument_lock:
+                self.instrument.write_bit(
+                    int(ModbusCoil.BUZZER), 1 if buzzer_on else 0, functioncode=5)
             return True
 
         except Exception as e:

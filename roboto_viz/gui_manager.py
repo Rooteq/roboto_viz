@@ -51,8 +51,8 @@ except ImportError:
 
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 from roboto_viz.env_expression_manager import CANStatusManager
-from roboto_viz.can_battery_receiver import CANBatteryReceiver
-from roboto_viz.can_signal_receiver import CANSignalReceiver
+from roboto_viz.modbus_battery_receiver import ModbusBatteryReceiver
+from roboto_viz.modbus_button_receiver import ModbusButtonReceiver
 from roboto_viz.music_player import MusicPlayer
 from roboto_viz.collision_monitor_manager import CollisionMonitorManager
 
@@ -939,7 +939,8 @@ class GuiManager(QThread):
     send_map_names = pyqtSignal(list)
 
     def __init__(self, dock_manager=None, can_interface="can0", enable_can=True,
-                 modbus_port="/dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if00-port0", modbus_slave_id=1):
+                 modbus_port="/dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if00-port0", modbus_slave_id=1,
+                 button_poll_interval=0.1, battery_poll_interval=0.5):
         super().__init__()
         self.node: ManagerNode = None
         self.executor = MultiThreadedExecutor()
@@ -951,19 +952,31 @@ class GuiManager(QThread):
         self.map_load_worker = None
 
         # Initialize Modbus status manager (for LEDs and buzzer)
+        # This creates the shared Modbus instrument and lock
         self.can_manager = None
-        # Initialize CAN receivers (still use CAN for battery and signals)
-        self.can_battery_receiver = None
-        self.can_signal_receiver = None
+        # Initialize Modbus receivers (for battery and button)
+        self.modbus_battery_receiver = None
+        self.modbus_button_receiver = None
         if enable_can:
+            # Create shared LED/buzzer manager with instrument and lock
             self.can_manager = CANStatusManager(modbus_port, modbus_slave_id)
-            self.can_battery_receiver = CANBatteryReceiver(can_interface)
-            self.can_signal_receiver = CANSignalReceiver(can_interface)
-            self._connect_can_signals()
+
+            # Create receivers using the shared instrument and lock
+            # Note: instrument will be None until connect_can() is called
+            self.modbus_battery_receiver = ModbusBatteryReceiver(
+                shared_instrument=None,  # Will be set in trigger_configure
+                instrument_lock=self.can_manager.instrument_lock,
+                poll_interval=battery_poll_interval)
+            self.modbus_button_receiver = ModbusButtonReceiver(
+                shared_instrument=None,  # Will be set in trigger_configure
+                instrument_lock=self.can_manager.instrument_lock,
+                poll_interval=button_poll_interval)
+            self._connect_modbus_signals()
 
             # Start battery receiver immediately so battery status is available from app start
-            if self.can_battery_receiver:
-                self.can_battery_receiver.start_receiving()
+            # Note: Will only work after trigger_configure() sets instrument
+            if self.modbus_battery_receiver:
+                pass  # Don't start until instrument is connected
 
         # Initialize music player
         self.music_player = MusicPlayer()
@@ -976,12 +989,12 @@ class GuiManager(QThread):
 
         self.navigator.start()
 
-    def _connect_can_signals(self):
-        """Connect all status signals to CAN manager and battery receiver"""
+    def _connect_modbus_signals(self):
+        """Connect all status signals to Modbus manager and receivers"""
         if not self.can_manager:
             return
 
-        # Connect the various status signals to CAN handlers
+        # Connect the various status signals to Modbus handlers
         self.manualStatus.connect(self.can_manager.handle_manual_status)
         self.dockingStatus.connect(self.can_manager.handle_docking_status)
         self.robotStatusCAN.connect(self.can_manager.handle_robot_status)
@@ -996,24 +1009,24 @@ class GuiManager(QThread):
         if hasattr(self.navigator, 'navStatus'):
             self.navigator.navStatus.connect(self.can_manager.handle_navigation_status)
 
-        # Connect navigation_started signal to send CAN message after nav starts
+        # Connect navigation_started signal to send Modbus message after nav starts
         if hasattr(self.navigator, 'navigation_started'):
             self.navigator.navigation_started.connect(self.handle_navigation_started)
 
         # Connect battery receiver if available
-        if self.can_battery_receiver:
-            self.can_battery_receiver.battery_status_update.connect(self.handle_battery_adc_update)
-            self.can_battery_receiver.battery_percentage_update.connect(self.handle_battery_percentage_update)
+        if self.modbus_battery_receiver:
+            self.modbus_battery_receiver.battery_status_update.connect(self.handle_battery_adc_update)
+            self.modbus_battery_receiver.battery_percentage_update.connect(self.handle_battery_percentage_update)
             # Connect navigation signals to battery receiver
             if hasattr(self.navigator, 'navigation_started'):
                 self.navigator.navigation_started.connect(
-                    lambda: self.can_battery_receiver.set_navigation_state(True))
+                    lambda: self.modbus_battery_receiver.set_navigation_state(True))
             self.navigator.finished.connect(
-                lambda: self.can_battery_receiver.set_navigation_state(False))
+                lambda: self.modbus_battery_receiver.set_navigation_state(False))
 
-        # Connect signal receiver if available
-        if self.can_signal_receiver:
-            self.can_signal_receiver.signal_received.connect(self.handle_can_signal_received)
+        # Connect button receiver if available
+        if self.modbus_button_receiver:
+            self.modbus_button_receiver.signal_received.connect(self.handle_button_click_received)
     
     def send_robot_status_to_can(self, status: str):
         """Send robot status to CAN bus via signal"""
@@ -1065,8 +1078,8 @@ class GuiManager(QThread):
         # Send battery status to CAN bus (for LED control)
         self.send_battery_status_to_can(status_string)
     
-    def handle_can_signal_received(self):
-        """Handle CAN wait signal received from ID 0x69"""
+    def handle_button_click_received(self):
+        """Handle Modbus button click signal"""
         self.can_signal_received.emit()
 
     def send_maps(self):
@@ -1170,26 +1183,28 @@ class GuiManager(QThread):
     @pyqtSlot()
     def trigger_configure(self):
         self.node.trigger_configure()
-        
+
         # Connect Modbus interface when configuring
         if self.can_manager and not self.can_manager.instrument:
             self.can_manager.connect_can()
-            
-        # Start CAN receivers when configuring
-        if self.can_battery_receiver:
-            self.can_battery_receiver.start_receiving()
-            
-        if self.can_signal_receiver:
-            self.can_signal_receiver.start_receiving()
+
+            # Share the connected instrument with battery and button receivers
+            if self.modbus_battery_receiver:
+                self.modbus_battery_receiver.instrument = self.can_manager.instrument
+                self.modbus_battery_receiver.start_receiving()
+
+            if self.modbus_button_receiver:
+                self.modbus_button_receiver.instrument = self.can_manager.instrument
+                self.modbus_button_receiver.start_receiving()
 
     @pyqtSlot()
     def trigger_deactivate(self):
-        # Stop signal receiver when deactivating
+        # Stop button receiver when deactivating
         # Note: Battery receiver keeps running to show battery status even when disconnected
-        if self.can_signal_receiver:
-            self.can_signal_receiver.stop_receiving()
+        if self.modbus_button_receiver:
+            self.modbus_button_receiver.stop_receiving()
 
-        # Disconnect CAN interface when deactivating
+        # Disconnect Modbus interface when deactivating
         if self.can_manager:
             self.can_manager.disconnect_can()
 
