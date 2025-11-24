@@ -72,16 +72,16 @@ class ModbusBatteryReceiver(QObject):
         self.initialized = False
         self.start_time = None
 
-        # Battery voltage constants for 10S Li-ion pack
+        # Battery voltage constants - ADC input voltage range
         # ESP32 ADC is 12-bit (0-4095) with 11db attenuation (~3.6V max)
-        self.ADC_MAX = 4095.0  # 12-bit ADC
+        self.ADC_MAX = 4095.0  # 12-bit ADC max value
         self.ADC_VOLTAGE_MAX = 3.6  # ESP32 ADC_11db attenuation max voltage
-        self.MAX_VOLTAGE = 42.0  # 100% - 10S Li-ion full charge
-        self.MIN_VOLTAGE = 32.0  # 0% - lowest safe voltage
-        self.NOMINAL_VOLTAGE = 36.0  # 10S * 3.6V nominal
+        self.MIN_VOLTAGE = 2.182  # 0% battery - ADC input voltage
+        self.MAX_VOLTAGE = 3.204  # 100% battery - ADC input voltage
         self.WARNING_PERCENTAGE = 10  # Warning threshold
-        # Minimum ADC value to accept (~0.87V input, ~29V battery)
-        self.MIN_ADC_THRESHOLD = 1000
+        # Minimum ADC value to accept (2.182V * 4095 / 3.6V = ~2481 ADC)
+        self.MIN_ADC_THRESHOLD = int((self.MIN_VOLTAGE / self.ADC_VOLTAGE_MAX)
+                                     * self.ADC_MAX) - 100  # Buffer below min
 
     def set_navigation_state(self, is_navigating: bool):
         """Update navigation state.
@@ -96,38 +96,30 @@ class ModbusBatteryReceiver(QObject):
             print('Battery: Navigation ended - updates will resume')
 
     def adc_to_voltage(self, adc_value: int) -> float:
-        """Convert 12-bit ADC value to battery voltage (V).
+        """Convert 12-bit ADC value to input voltage (V).
 
         ESP32 with ADC_11db attenuation measures up to ~3.6V.
-        Battery voltage is scaled down through voltage divider.
+        Returns the direct ADC input voltage (not battery voltage).
         """
-        # Convert ADC to input voltage
+        # Convert ADC to input voltage (linear conversion)
         input_voltage = (adc_value / self.ADC_MAX) * self.ADC_VOLTAGE_MAX
-        # Scale up to battery voltage (assuming appropriate voltage divider)
-        # For 42V max battery and 3.6V max ADC: divider ratio ~11.67
-        battery_voltage = (input_voltage *
-                           (self.MAX_VOLTAGE / self.ADC_VOLTAGE_MAX))
-        return battery_voltage
+        return input_voltage
 
     def voltage_to_percentage(self, voltage: float) -> int:
-        """Convert voltage to battery percentage (0-100).
+        """Convert ADC input voltage to battery percentage (0-100).
 
-        Scales so that 90% becomes 100%, 0% stays 0%.
+        2.182V = 0%, 3.204V = 100%, linear scaling.
         """
         if voltage >= self.MAX_VOLTAGE:
-            raw_percentage = 100
+            return 100
         elif voltage <= self.MIN_VOLTAGE:
             return 0
         else:
             # Linear interpolation between min and max voltage
             voltage_range = self.MAX_VOLTAGE - self.MIN_VOLTAGE
-            raw_percentage = ((voltage - self.MIN_VOLTAGE) /
-                              voltage_range) * 100
-
-        # Scale so that 90% becomes 100%, 0% stays 0%
-        # Formula: scaled = (raw / 90) * 100
-        scaled_percentage = (raw_percentage / 90.0) * 100.0
-        return max(0, min(100, int(round(scaled_percentage))))
+            percentage = ((voltage - self.MIN_VOLTAGE) /
+                          voltage_range) * 100
+            return max(0, min(100, int(round(percentage))))
 
     def get_battery_status_string(
             self, percentage: int, voltage: float) -> str:

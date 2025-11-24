@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Simple test script to verify battery SOC estimation logic.
-Updated to use Modbus-based battery receiver.
+Updated for new voltage range: 2.182V = 0%, 3.204V = 100%
 """
 
 import sys
@@ -10,61 +10,71 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from roboto_viz.modbus_battery_receiver import ModbusBatteryReceiver
 
+
 def test_battery_conversion():
     """Test battery ADC to percentage conversion"""
-    battery_receiver = ModbusBatteryReceiver()
+    # Create receiver with dummy parameters (not used for conversion test)
+    battery_receiver = ModbusBatteryReceiver(
+        shared_instrument=None,
+        instrument_lock=None,
+        poll_interval=1.0
+    )
 
-    print("Testing battery SOC estimation (12-bit ADC, 0-4095):")
-    print("=====================================================")
+    print('Testing battery SOC estimation (12-bit ADC, 0-4095):')
+    print('Voltage range: 2.182V (0%) to 3.204V (100%)')
+    print('=' * 60)
+
+    # Calculate ADC values for key voltages
+    # ADC = (voltage / 3.6V) * 4095
+    adc_0_percent = int((2.182 / 3.6) * 4095)    # ~2481 ADC
+    adc_10_percent = int((2.284 / 3.6) * 4095)   # ~2598 ADC (10% voltage)
+    adc_50_percent = int((2.693 / 3.6) * 4095)   # ~3064 ADC (50% voltage)
+    adc_100_percent = int((3.204 / 3.6) * 4095)  # ~3645 ADC
 
     # Test cases: (ADC value, expected voltage, expected percentage)
-    # Note: 12-bit ADC (0-4095) instead of 10-bit (0-1023)
     test_cases = [
-        (4095, 42.0, 100),  # Full battery (12-bit max)
-        (0, 0.0, 0),        # Empty ADC
-        (2048, 21.0, 0),    # Mid ADC but below min voltage
-        (3121, 32.0, 0),    # Min safe voltage (32V / 42V * 4095)
-        (3604, 37.0, 50),   # Mid range (37V / 42V * 4095)
-        (400, 4.1, 0),      # Very low
-        (408, 4.2, 0),      # Low but above test threshold for 10%
+        (0, 0.0, 0),                    # Empty ADC
+        (adc_0_percent, 2.182, 0),      # 0% battery
+        (adc_10_percent, 2.284, 10),    # 10% battery
+        (adc_50_percent, 2.693, 50),    # 50% battery
+        (adc_100_percent, 3.204, 100),  # 100% battery
+        (4095, 3.6, 100),               # Max ADC (clamped to 100%)
+        (2000, 1.76, 0),                # Below min voltage
     ]
 
-    # Calculate what ADC value gives us 10% (32V + 10% of 10V range = 33V)
-    # 33V / 42V * 4095 = 3217 ADC
-    adc_10_percent = int((33.0 / 42.0) * 4095)
-    test_cases.append((adc_10_percent, 33.0, 10))  # 10% threshold
-    
+    print('\nTest cases:')
+    print('-' * 60)
     for adc_value, expected_voltage, expected_percentage in test_cases:
         voltage = battery_receiver.adc_to_voltage(adc_value)
         percentage = battery_receiver.voltage_to_percentage(voltage)
-        status_string = battery_receiver.get_battery_status_string(percentage, voltage)
-        
-        print(f"ADC: {adc_value:4d} -> Voltage: {voltage:4.1f}V -> Percentage: {percentage:3d}% -> Status: {status_string}")
-        
+        status_string = battery_receiver.get_battery_status_string(
+            percentage, voltage)
+
+        status = '✓' if abs(percentage - expected_percentage) <= 1 else '✗'
+        print(f'{status} ADC: {adc_value:4d} -> '
+              f'{voltage:5.3f}V -> {percentage:3d}% -> {status_string}')
+
         # Check if voltage conversion is approximately correct
         voltage_diff = abs(voltage - expected_voltage)
-        if voltage_diff > 0.1:  # Allow 0.1V tolerance
-            print(f"  WARNING: Voltage mismatch! Expected {expected_voltage}V, got {voltage}V")
-    
-    print("\nTesting warning threshold:")
-    print("==========================")
+        if voltage_diff > 0.02:  # Allow 20mV tolerance
+            print(f'   WARNING: Voltage mismatch! '
+                  f'Expected {expected_voltage:.3f}V, got {voltage:.3f}V')
 
-    # Test warning cases (updated for 12-bit ADC)
-    warning_test_cases = [
-        (408, "Should show WARNING"),   # ~4.2V, very low
-        (816, "Should show WARNING"),   # ~8.4V, low
-        (1224, "Should show normal"),   # ~12.6V
-        (2000, "Should show normal"),   # ~20.5V
-        (4095, "Should show normal"),   # Max, 42V
-    ]
-    
-    for adc_value, description in warning_test_cases:
-        voltage = battery_receiver.adc_to_voltage(adc_value)
+    print('\nVoltage to percentage mapping:')
+    print('-' * 60)
+    test_voltages = [2.0, 2.182, 2.5, 2.693, 3.0, 3.204, 3.5]
+    for voltage in test_voltages:
         percentage = battery_receiver.voltage_to_percentage(voltage)
-        status_string = battery_receiver.get_battery_status_string(percentage, voltage)
-        
-        has_warning = "WARNING" in status_string
-        print(f"ADC: {adc_value:4d} -> {percentage:3d}% -> {status_string:12s} -> {description} -> {'✓' if (has_warning and percentage <= 10) or (not has_warning and percentage > 10) else '✗'}")
+        adc = int((voltage / 3.6) * 4095)
+        print(f'{voltage:.3f}V -> {percentage:3d}% (ADC: {adc:4d})')
 
-if __name__ == "__main__":
+    print('\nThreshold checks:')
+    print('-' * 60)
+    print(f'MIN_ADC_THRESHOLD: {battery_receiver.MIN_ADC_THRESHOLD} ADC')
+    print(f'Min voltage: {battery_receiver.MIN_VOLTAGE}V (0%)')
+    print(f'Max voltage: {battery_receiver.MAX_VOLTAGE}V (100%)')
+    print(f'Voltage range: {battery_receiver.MAX_VOLTAGE - battery_receiver.MIN_VOLTAGE:.3f}V')
+
+
+if __name__ == '__main__':
     test_battery_conversion()
