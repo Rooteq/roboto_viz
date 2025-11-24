@@ -20,16 +20,10 @@ class ModbusBatteryReceiver(QObject):
 
     Polls holding register for battery ADC value (12-bit, 0-4095).
     Converts to voltage and percentage for display.
-    IMPORTANT: Uses shared instrument with thread lock to prevent collisions.
-
-    Simple approach:
-    - Only updates battery level when robot is NOT navigating
-    - Uses median filter on recent samples
-    - Ignores values below minimum threshold
-    - Ignores messages for 10s after detecting 2s+ message break
+    Updates are paused during navigation.
     """
 
-    battery_status_update = pyqtSignal(int)  # Filtered ADC (0-4095)
+    battery_status_update = pyqtSignal(int)  # Raw ADC (0-4095)
     battery_percentage_update = pyqtSignal(int, str)  # % (0-100), str
 
     # Modbus register addresses (must match relay_modbus.h)
@@ -51,59 +45,30 @@ class ModbusBatteryReceiver(QObject):
         self.receive_thread = None
 
         # Simple median filter
-        self.sample_buffer = deque(maxlen=15)  # Keep 15 recent samples
-        self.current_percentage = None  # Current displayed percentage
-        self.current_voltage = None  # Current displayed voltage
+        self.sample_buffer = deque(maxlen=10)  # Keep 10 recent samples
+        self.current_percentage = None
 
-        # Navigation state
-        self.is_navigating = False  # Whether robot is in navigation action
-
-        # Message timing for detecting breaks
-        self.last_message_time = None
-        self.ignore_until_time = None  # Ignore messages until this time
-        self.MESSAGE_BREAK_THRESHOLD = 2.0  # 2 seconds break detection
-        self.IGNORE_DURATION = 10.0  # Ignore for 10 seconds after break
-
-        # Update timing
-        self.last_update_time = None
-        self.MIN_UPDATE_INTERVAL = 5.0  # Update at most every 5 seconds
-
-        # Startup
-        self.initialized = False
-        self.start_time = None
+        # Navigation state - updates paused when navigating
+        self.is_navigating = False
 
         # Battery voltage constants - ADC input voltage range
         # ESP32 ADC is 12-bit (0-4095) with 11db attenuation (~3.6V max)
-        self.ADC_MAX = 4095.0  # 12-bit ADC max value
-        self.ADC_VOLTAGE_MAX = 3.6  # ESP32 ADC_11db attenuation max voltage
-        self.MIN_VOLTAGE = 2.182  # 0% battery - ADC input voltage
-        self.MAX_VOLTAGE = 3.204  # 100% battery - ADC input voltage
-        self.WARNING_PERCENTAGE = 10  # Warning threshold
-        # Minimum ADC value to accept (2.182V * 4095 / 3.6V = ~2481 ADC)
-        self.MIN_ADC_THRESHOLD = int((self.MIN_VOLTAGE / self.ADC_VOLTAGE_MAX)
-                                     * self.ADC_MAX) - 100  # Buffer below min
+        self.ADC_MAX = 4095.0
+        self.ADC_VOLTAGE_MAX = 3.6
+        self.MIN_VOLTAGE = 2.182  # 0% battery
+        self.MAX_VOLTAGE = 3.204  # 100% battery
 
     def set_navigation_state(self, is_navigating: bool):
-        """Update navigation state.
+        """Update navigation state - battery updates pause during navigation.
 
         Args:
             is_navigating: True if robot is currently navigating
         """
         self.is_navigating = is_navigating
-        if is_navigating:
-            print('Battery: Navigation started - updates paused')
-        else:
-            print('Battery: Navigation ended - updates will resume')
 
     def adc_to_voltage(self, adc_value: int) -> float:
-        """Convert 12-bit ADC value to input voltage (V).
-
-        ESP32 with ADC_11db attenuation measures up to ~3.6V.
-        Returns the direct ADC input voltage (not battery voltage).
-        """
-        # Convert ADC to input voltage (linear conversion)
-        input_voltage = (adc_value / self.ADC_MAX) * self.ADC_VOLTAGE_MAX
-        return input_voltage
+        """Convert 12-bit ADC value to input voltage (V)."""
+        return (adc_value / self.ADC_MAX) * self.ADC_VOLTAGE_MAX
 
     def voltage_to_percentage(self, voltage: float) -> int:
         """Convert ADC input voltage to battery percentage (0-100).
@@ -115,48 +80,25 @@ class ModbusBatteryReceiver(QObject):
         elif voltage <= self.MIN_VOLTAGE:
             return 0
         else:
-            # Linear interpolation between min and max voltage
             voltage_range = self.MAX_VOLTAGE - self.MIN_VOLTAGE
             percentage = ((voltage - self.MIN_VOLTAGE) /
                           voltage_range) * 100
             return max(0, min(100, int(round(percentage))))
 
-    def get_battery_status_string(
-            self, percentage: int, voltage: float) -> str:
+    def get_battery_status_string(self, percentage: int) -> str:
         """Get battery status string based on percentage."""
         return '{0}%'.format(percentage)
-
-    def should_update_battery(self) -> bool:
-        """Check if we should update the battery percentage.
-
-        Returns True if:
-        - Robot is NOT navigating, AND
-        - Enough time has passed since last update
-        """
-        # Don't update when navigating
-        if self.is_navigating:
-            return False
-
-        # Always allow first update after initialization
-        if self.last_update_time is None:
-            return True
-
-        # Check if enough time has passed
-        time_since_update = time.time() - self.last_update_time
-        return time_since_update >= self.MIN_UPDATE_INTERVAL
 
     def start_receiving(self):
         """Start polling for battery ADC in a separate thread."""
         if self.receiving:
-            return True  # Already receiving
+            return True
 
         self.receiving = True
-        self.start_time = time.time()
         self.receive_thread = threading.Thread(target=self._poll_battery,
                                                daemon=True)
         self.receive_thread.start()
-        print('Started polling for Modbus battery ADC '
-              f'(every {self.poll_interval}s)')
+        print(f'Started battery polling (every {self.poll_interval}s)')
         return True
 
     def stop_receiving(self):
@@ -164,115 +106,58 @@ class ModbusBatteryReceiver(QObject):
         self.receiving = False
         if self.receive_thread and self.receive_thread.is_alive():
             self.receive_thread.join(timeout=2.0)
-            print('Stopped polling for Modbus battery ADC')
+            print('Stopped battery polling')
 
     def read_battery_adc(self) -> int:
         """Read battery ADC value from holding register."""
         try:
             with self.instrument_lock:
-                # Function code 3: Read Holding Registers
                 return self.instrument.read_register(self.HREG_BATTERY_ADC,
                                                      functioncode=3)
         except minimalmodbus.NoResponseError:
-            # Suppress verbose no-response warnings
             return None
-        except Exception as e:
-            if self.receiving:
-                print(f'Battery: Read error: {e}')
+        except Exception:
             return None
 
     def _poll_battery(self):
         """Poll for battery ADC readings in background thread."""
         while self.receiving:
             try:
+                # Skip update if navigating
+                if self.is_navigating:
+                    time.sleep(self.poll_interval)
+                    continue
+
                 # Read battery ADC value
                 battery_adc = self.read_battery_adc()
 
-                if (battery_adc is not None and
-                        self.MIN_ADC_THRESHOLD < battery_adc <= self.ADC_MAX):
-                    current_time = time.time()
-
-                    # Detect message break (>2 seconds gap)
-                    if self.last_message_time is not None:
-                        time_since_last = current_time - self.last_message_time
-                        if time_since_last > self.MESSAGE_BREAK_THRESHOLD:
-                            # Break detected - ignore for 10 seconds
-                            self.ignore_until_time = (
-                                current_time + self.IGNORE_DURATION)
-                            print(f'Battery: Message break detected '
-                                  f'({time_since_last:.1f}s), '
-                                  f'ignoring for {self.IGNORE_DURATION}s')
-
-                    self.last_message_time = current_time
-
-                    # Check if we should ignore this message
-                    if (self.ignore_until_time is not None and
-                            current_time < self.ignore_until_time):
-                        time.sleep(self.poll_interval)
-                        continue  # Ignore message
-
+                if battery_adc is not None and 0 < battery_adc <= self.ADC_MAX:
                     # Add to sample buffer
                     self.sample_buffer.append(battery_adc)
 
-                    # Initial startup - emit first value after 1 second
-                    if not self.initialized:
-                        if (self.start_time and
-                                time.time() - self.start_time >= 1.0 and
-                                len(self.sample_buffer) >= 5):
-                            # Get median of initial samples
-                            median_adc = statistics.median(
-                                self.sample_buffer)
-                            voltage = self.adc_to_voltage(median_adc)
-                            percentage = self.voltage_to_percentage(
-                                voltage)
-                            status_string = self.get_battery_status_string(
-                                percentage, voltage)
-
-                            # Store and emit initial values
-                            self.current_percentage = percentage
-                            self.current_voltage = voltage
-                            self.battery_status_update.emit(
-                                int(median_adc))
-                            self.battery_percentage_update.emit(
-                                percentage, status_string)
-                            self.initialized = True
-                            self.last_update_time = time.time()
-                            print(f'Battery initialized: {percentage}% '
-                                  f'({voltage:.1f}V, '
-                                  f'ADC: {int(median_adc)})')
-                        time.sleep(self.poll_interval)
-                        continue
-
-                    # After initialization, only update when not navigating
-                    if (self.should_update_battery() and
-                            len(self.sample_buffer) >= 5):
+                    # Need at least 3 samples for median
+                    if len(self.sample_buffer) >= 3:
                         # Calculate median of recent samples
                         median_adc = statistics.median(self.sample_buffer)
                         voltage = self.adc_to_voltage(median_adc)
-                        new_percentage = self.voltage_to_percentage(
-                            voltage)
+                        percentage = self.voltage_to_percentage(voltage)
 
-                        # Only emit if percentage actually changed
-                        if new_percentage != self.current_percentage:
+                        # Only emit if percentage changed
+                        if percentage != self.current_percentage:
+                            self.current_percentage = percentage
                             status_string = self.get_battery_status_string(
-                                new_percentage, voltage)
+                                percentage)
 
-                            self.current_percentage = new_percentage
-                            self.current_voltage = voltage
-                            self.battery_status_update.emit(
-                                int(median_adc))
+                            self.battery_status_update.emit(int(median_adc))
                             self.battery_percentage_update.emit(
-                                new_percentage, status_string)
-                            self.last_update_time = time.time()
-                            print(f'Battery updated: '
-                                  f'{new_percentage}% ({voltage:.1f}V, '
-                                  f'ADC: {int(median_adc)})')
-                elif battery_adc is not None:
-                    pass  # Suppress "ADC below threshold" spam
+                                percentage, status_string)
+
+                            print(f'Battery: {percentage}% '
+                                  f'({voltage:.3f}V, ADC: {int(median_adc)})')
 
             except Exception as e:
                 if self.receiving:
-                    print(f'Battery: Polling error: {e}')
+                    print(f'Battery: Error: {e}')
 
             # Sleep for poll interval
             time.sleep(self.poll_interval)
@@ -286,6 +171,5 @@ class ModbusBatteryReceiver(QObject):
             'thread_alive': (self.receive_thread.is_alive()
                              if self.receive_thread else False),
             'is_navigating': self.is_navigating,
-            'current_percentage': self.current_percentage,
-            'current_voltage': self.current_voltage
+            'current_percentage': self.current_percentage
         }

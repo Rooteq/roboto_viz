@@ -47,8 +47,7 @@ def test_battery_conversion():
     for adc_value, expected_voltage, expected_percentage in test_cases:
         voltage = battery_receiver.adc_to_voltage(adc_value)
         percentage = battery_receiver.voltage_to_percentage(voltage)
-        status_string = battery_receiver.get_battery_status_string(
-            percentage, voltage)
+        status_string = battery_receiver.get_battery_status_string(percentage)
 
         status = '✓' if abs(percentage - expected_percentage) <= 1 else '✗'
         print(f'{status} ADC: {adc_value:4d} -> '
@@ -68,12 +67,12 @@ def test_battery_conversion():
         adc = int((voltage / 3.6) * 4095)
         print(f'{voltage:.3f}V -> {percentage:3d}% (ADC: {adc:4d})')
 
-    print('\nThreshold checks:')
+    print('\nVoltage range:')
     print('-' * 60)
-    print(f'MIN_ADC_THRESHOLD: {battery_receiver.MIN_ADC_THRESHOLD} ADC')
     print(f'Min voltage: {battery_receiver.MIN_VOLTAGE}V (0%)')
     print(f'Max voltage: {battery_receiver.MAX_VOLTAGE}V (100%)')
-    print(f'Voltage range: {battery_receiver.MAX_VOLTAGE - battery_receiver.MIN_VOLTAGE:.3f}V')
+    print(f'Voltage span: {battery_receiver.MAX_VOLTAGE - battery_receiver.MIN_VOLTAGE:.3f}V')
+    print(f'Simplified design - no thresholds, breaks, or filtering delays')
 
 
 if __name__ == '__main__':
