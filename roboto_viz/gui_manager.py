@@ -50,7 +50,7 @@ except ImportError:
     Undock = None
 
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
-from roboto_viz.can_status_manager import CANStatusManager
+from roboto_viz.env_expression_manager import CANStatusManager
 from roboto_viz.can_battery_receiver import CANBatteryReceiver
 from roboto_viz.can_signal_receiver import CANSignalReceiver
 from roboto_viz.music_player import MusicPlayer
@@ -938,7 +938,8 @@ class GuiManager(QThread):
     send_route_names = pyqtSignal(dict)
     send_map_names = pyqtSignal(list)
 
-    def __init__(self, dock_manager=None, can_interface="can0", enable_can=True):
+    def __init__(self, dock_manager=None, can_interface="can0", enable_can=True,
+                 modbus_port="/dev/serial/by-id/usb-FTDI_Dual_RS232-HS-if00-port0", modbus_slave_id=1):
         super().__init__()
         self.node: ManagerNode = None
         self.executor = MultiThreadedExecutor()
@@ -949,13 +950,13 @@ class GuiManager(QThread):
         # Map loading worker thread
         self.map_load_worker = None
 
-        # Initialize CAN status manager
+        # Initialize Modbus status manager (for LEDs and buzzer)
         self.can_manager = None
-        # Initialize CAN receivers
+        # Initialize CAN receivers (still use CAN for battery and signals)
         self.can_battery_receiver = None
         self.can_signal_receiver = None
         if enable_can:
-            self.can_manager = CANStatusManager(can_interface)
+            self.can_manager = CANStatusManager(modbus_port, modbus_slave_id)
             self.can_battery_receiver = CANBatteryReceiver(can_interface)
             self.can_signal_receiver = CANSignalReceiver(can_interface)
             self._connect_can_signals()
@@ -1170,8 +1171,8 @@ class GuiManager(QThread):
     def trigger_configure(self):
         self.node.trigger_configure()
         
-        # Connect CAN interface when configuring
-        if self.can_manager and not self.can_manager.socket_fd:
+        # Connect Modbus interface when configuring
+        if self.can_manager and not self.can_manager.instrument:
             self.can_manager.connect_can()
             
         # Start CAN receivers when configuring

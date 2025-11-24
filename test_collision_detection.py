@@ -21,13 +21,13 @@ try:
     collision_detected = any(msg.detections)
     print(f"✓ Collision detection logic: {collision_detected}")
     
-    # Test CAN status manager import
-    from roboto_viz.can_status_manager import CANStatusManager, CANBuzzerType
+    # Test env expression manager import
+    from roboto_viz.env_expression_manager import CANStatusManager, ModbusCoil
     print("✓ CANStatusManager import successful")
-    
-    # Test buzzer message IDs
-    print(f"✓ Buzzer ON ID: 0x{int(CANBuzzerType.BUZZER_ON):03X}")
-    print(f"✓ Buzzer OFF ID: 0x{int(CANBuzzerType.BUZZER_OFF):03X}")
+
+    # Test coil addresses
+    print(f"✓ GREEN LED coil: {int(ModbusCoil.GREEN_LED)}")
+    print(f"✓ BUZZER coil: {int(ModbusCoil.BUZZER)}")
     
     print("\n✅ All collision detection components working correctly!")
     

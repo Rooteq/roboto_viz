@@ -8,45 +8,42 @@ sys.path.append('/home/rooteq/ros2_ws/src/roboto_viz')
 
 def test_collision_behavior():
     try:
-        # Test CAN status manager navigation state tracking
-        from roboto_viz.can_status_manager import CANStatusManager, CANBuzzerType
-        
+        # Test env expression manager navigation state tracking
+        from roboto_viz.env_expression_manager import CANStatusManager
+
         print("Testing collision detection with navigation state...")
-        
-        # Create manager (won't connect to CAN for testing)
-        manager = CANStatusManager("test")
+
+        # Create manager (won't connect to Modbus for testing)
+        manager = CANStatusManager("/dev/ttyUSB0", 1)
         
         # Test 1: Collision detected but not navigating - should be OFF
         manager.is_navigating = False
         collision_detected = True
         should_buzz = collision_detected and manager.is_navigating
-        expected_id = CANBuzzerType.BUZZER_ON if should_buzz else CANBuzzerType.BUZZER_OFF
         print(f"Test 1 - Collision: {collision_detected}, Navigating: {manager.is_navigating}")
-        print(f"  Expected: BUZZER_OFF (0x{int(CANBuzzerType.BUZZER_OFF):03X})")
-        print(f"  Actual: {expected_id.name} (0x{int(expected_id):03X})")
-        print(f"  ✓ PASS" if expected_id == CANBuzzerType.BUZZER_OFF else "  ❌ FAIL")
+        print(f"  Expected: buzzer OFF (False)")
+        print(f"  Actual: {should_buzz}")
+        print(f"  ✓ PASS" if not should_buzz else "  ❌ FAIL")
         print()
-        
-        # Test 2: Collision detected and navigating - should be ON  
+
+        # Test 2: Collision detected and navigating - should be ON
         manager.is_navigating = True
         collision_detected = True
         should_buzz = collision_detected and manager.is_navigating
-        expected_id = CANBuzzerType.BUZZER_ON if should_buzz else CANBuzzerType.BUZZER_OFF
         print(f"Test 2 - Collision: {collision_detected}, Navigating: {manager.is_navigating}")
-        print(f"  Expected: BUZZER_ON (0x{int(CANBuzzerType.BUZZER_ON):03X})")
-        print(f"  Actual: {expected_id.name} (0x{int(expected_id):03X})")
-        print(f"  ✓ PASS" if expected_id == CANBuzzerType.BUZZER_ON else "  ❌ FAIL")
+        print(f"  Expected: buzzer ON (True)")
+        print(f"  Actual: {should_buzz}")
+        print(f"  ✓ PASS" if should_buzz else "  ❌ FAIL")
         print()
-        
+
         # Test 3: No collision but navigating - should be OFF
         manager.is_navigating = True
         collision_detected = False
         should_buzz = collision_detected and manager.is_navigating
-        expected_id = CANBuzzerType.BUZZER_ON if should_buzz else CANBuzzerType.BUZZER_OFF
         print(f"Test 3 - Collision: {collision_detected}, Navigating: {manager.is_navigating}")
-        print(f"  Expected: BUZZER_OFF (0x{int(CANBuzzerType.BUZZER_OFF):03X})")
-        print(f"  Actual: {expected_id.name} (0x{int(expected_id):03X})")
-        print(f"  ✓ PASS" if expected_id == CANBuzzerType.BUZZER_OFF else "  ❌ FAIL")
+        print(f"  Expected: buzzer OFF (False)")
+        print(f"  Actual: {should_buzz}")
+        print(f"  ✓ PASS" if not should_buzz else "  ❌ FAIL")
         print()
         
         # Test 4: Navigation status parsing
