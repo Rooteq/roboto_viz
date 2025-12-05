@@ -95,6 +95,36 @@ class MapLoadWorker(QObject):
         self.loading_complete.emit(success, map_name, error_msg)
 
 
+class CollisionZoneLoadThread(QThread):
+    """
+    Separate QThread for loading collision zones WITHOUT blocking the executor.
+    This thread handles file I/O and numpy operations that would otherwise
+    starve the ROS2 executor in GuiManager thread.
+    """
+    loading_complete = pyqtSignal(str, object)  # route_name, color_cache
+
+    def __init__(self, collision_monitor_manager, route_name):
+        super().__init__()
+        self.collision_monitor_manager = collision_monitor_manager
+        self.route_name = route_name
+
+    def run(self):
+        """Load collision zones in background thread (does NOT block executor!)"""
+        try:
+            # This does file I/O and numpy operations - OK because we're in separate thread
+            self.collision_monitor_manager.load_collision_zones_for_route(self.route_name)
+            color_cache = self.collision_monitor_manager.color_cache
+
+            # Emit completion signal (thread-safe via Qt signals)
+            self.loading_complete.emit(self.route_name, color_cache)
+        except Exception as e:
+            print(f"ERROR: Failed to load collision zones in background thread: {e}")
+            import traceback
+            traceback.print_exc()
+            # Emit with None cache to indicate failure
+            self.loading_complete.emit(self.route_name, None)
+
+
 class LState(Enum):
     UNCONFIGURED = 0
     INACTIVE = 1
@@ -1077,6 +1107,9 @@ class GuiManager(QThread):
         # Map loading worker thread
         self.map_load_worker = None
 
+        # Collision zone loading thread (separate from executor thread)
+        self.collision_zone_load_thread = None
+
         # Initialize Modbus status manager (for LEDs and buzzer)
         # This creates the shared Modbus instrument and lock
         self.can_manager = None
@@ -1514,8 +1547,11 @@ class GuiManager(QThread):
         # 3. Nav2 will gracefully reject the goal if not ready
         # 4. Navigator thread will emit error status if goal fails
 
-        # Pause ALL Modbus operations before starting navigation
-        # Navigation start can take several seconds and we need ROS2 at full capacity
+        # Set navigation goal FIRST (non-blocking)
+        # This sends the goal to Navigator thread immediately
+        self.navigator.set_goal(route, to_dest, x, y)
+
+        # Pause Modbus AFTER setting goal (minimize duration of pause)
         if self.can_manager:
             self.can_manager.pause_can_messages()
         if self.modbus_battery_receiver:
@@ -1524,25 +1560,52 @@ class GuiManager(QThread):
             self.modbus_button_receiver.paused = True
         print('Modbus: All operations paused for navigation start')
 
-        # Load collision zones for this route FIRST (builds the color cache)
-        # This is now FAST due to numpy optimization
-        color_cache = None
+        # Load collision zones in SEPARATE THREAD to avoid blocking executor
+        # This prevents file I/O and numpy operations from starving the ROS2 executor
         if self.node and self.node.collision_monitor_manager:
-            self.node.collision_monitor_manager.load_collision_zones_for_route(route)
-            self.node.collision_monitor_manager.start_monitoring()
-            # Get the color cache for fast minimap rendering
-            color_cache = self.node.collision_monitor_manager.color_cache
+            # Cancel any existing collision zone loading thread
+            if self.collision_zone_load_thread is not None and self.collision_zone_load_thread.isRunning():
+                print("WARNING: Previous collision zone loading still in progress, waiting...")
+                self.collision_zone_load_thread.wait(1000)  # Wait up to 1 second
 
-        # Show collision zones on minimap using the pre-built cache (FAST)
-        # Emit signal with color cache (or None if not available)
-        print(f"INFO: GuiManager emitting show_collision_zones signal for route '{route}', cache available: {color_cache is not None}")
-        self.show_collision_zones.emit(route, color_cache)
+            # Create new thread for collision zone loading
+            self.collision_zone_load_thread = CollisionZoneLoadThread(
+                self.node.collision_monitor_manager,
+                route
+            )
 
-        # Set navigation goal
-        self.navigator.set_goal(route, to_dest, x, y)
+            # Connect completion signal
+            self.collision_zone_load_thread.loading_complete.connect(
+                self._on_collision_zones_loaded
+            )
+
+            # Start thread (file I/O happens in background, executor keeps spinning!)
+            print(f"INFO: Starting collision zone loading thread for route '{route}'")
+            self.collision_zone_load_thread.start()
+        else:
+            print("WARNING: No collision monitor manager available")
 
         # Note: CAN messages will be resumed after navigation actually starts
         # via the navigation_started signal connection
+
+    @pyqtSlot(str, object)
+    def _on_collision_zones_loaded(self, route_name: str, color_cache):
+        """
+        Called when collision zone loading thread completes.
+        This runs in the GUI thread (via Qt signal), so it's safe to emit signals.
+        """
+        if color_cache is not None:
+            # Start monitoring now that zones are loaded
+            if self.node and self.node.collision_monitor_manager:
+                self.node.collision_monitor_manager.start_monitoring()
+
+            # Show collision zones on minimap
+            print(f"INFO: Collision zones loaded for route '{route_name}', emitting show_collision_zones signal")
+            self.show_collision_zones.emit(route_name, color_cache)
+        else:
+            print(f"WARNING: Failed to load collision zones for route '{route_name}'")
+            # Still show empty zones (will just be invisible)
+            self.show_collision_zones.emit(route_name, None)
 
     @pyqtSlot()
     def stop_nav(self):
