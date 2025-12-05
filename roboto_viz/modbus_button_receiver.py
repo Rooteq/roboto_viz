@@ -42,6 +42,7 @@ class ModbusButtonReceiver(QObject):
         self.receiving = False
         self.receive_thread = None
         self.click_count = 0
+        self.paused = False  # Pause flag for critical operations
 
     def start_receiving(self):
         """Start polling for button clicks in a separate thread."""
@@ -97,6 +98,11 @@ class ModbusButtonReceiver(QObject):
         """Poll for button clicks in background thread."""
         while self.receiving:
             try:
+                # Skip polling if paused
+                if self.paused:
+                    time.sleep(self.poll_interval)
+                    continue
+
                 # Read button click flag
                 if self.read_button_click():
                     self.click_count += 1

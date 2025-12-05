@@ -36,11 +36,13 @@ except ImportError:
                 CollisionDetectorState = None
 from rclpy.duration import Duration
 from action_msgs.msg import GoalStatus
+from nav2_msgs.srv import LoadMap
 
 import math
 from enum import Enum
 from roboto_viz.route_manager import RouteManager, BezierRoute
 from typing import Dict, List, Tuple
+from pathlib import Path as PathLib  # Alias to avoid collision with nav_msgs.msg.Path
 
 try:
     from lidar_auto_docking_messages.action import Dock, Undock
@@ -57,22 +59,40 @@ from roboto_viz.music_player import MusicPlayer
 from roboto_viz.collision_monitor_manager import CollisionMonitorManager
 
 
-class MapLoadWorker(QThread):
-    """Worker thread for loading maps onto the robot in the background"""
+class MapLoadWorker(QObject):
+    """
+    Worker object for coordinating async map loading.
+    This no longer blocks - it just triggers the async service call and waits for callback.
+    """
     loading_complete = pyqtSignal(bool, str, str)  # success, map_name, error_msg
 
-    def __init__(self, route_manager, map_name):
+    def __init__(self, manager_node, route_manager, map_name):
         super().__init__()
+        self.manager_node = manager_node
         self.route_manager = route_manager
         self.map_name = map_name
 
-    def run(self):
-        """Load the map in background thread"""
-        try:
-            success, error_msg = self.route_manager.load_map_onto_robot(self.map_name)
-            self.loading_complete.emit(success, self.map_name, error_msg)
-        except Exception as e:
-            self.loading_complete.emit(False, self.map_name, str(e))
+    def start_loading(self):
+        """
+        Initiate async map loading.
+        This returns immediately - the result will come via callback.
+        """
+        # Set callback for when map loading completes
+        self.manager_node.map_load_callback = self._on_map_loaded
+
+        # Trigger async map load (non-blocking)
+        self.manager_node.load_map_async(
+            self.map_name,
+            self.route_manager.maps_dir
+        )
+
+    def _on_map_loaded(self, success: bool, map_name: str, error_msg: str):
+        """Called by ManagerNode when map loading completes"""
+        # Clear the callback
+        self.manager_node.map_load_callback = None
+
+        # Emit signal to GUI
+        self.loading_complete.emit(success, map_name, error_msg)
 
 
 class LState(Enum):
@@ -101,7 +121,12 @@ class ManagerNode(LifecycleNode):
         self.undock_action_client = None
         self.current_dock_goal_handle = None
         self.current_undock_goal_handle = None
-        
+
+        # Map loading service clients
+        self.map_server_client = self.create_client(LoadMap, '/map_server/load_map')
+        self.speed_mask_server_client = self.create_client(LoadMap, '/filter_mask_server/load_map')
+        self.map_load_callback = None  # Callback for map load completion
+
         #CALLBACKS:
         self.service_availability_callback = None
         self.listener_pose_callback = None
@@ -114,7 +139,7 @@ class ManagerNode(LifecycleNode):
         #INTERNAL STATES:
         self.srv_available: bool = False
         self.suppress_docking_status = False  # Flag to suppress docking status during general stop
-        
+
         self.cmd_vel_msg: Twist = Twist()
 
         self._current_state: LState = LState.UNCONFIGURED
@@ -602,7 +627,7 @@ class ManagerNode(LifecycleNode):
         if msg.detections:
             # Check if any detection is true
             collision_detected = any(msg.detections)
-            
+
             # Call the callback if set
             if self.collision_detection_callback:
                 self.collision_detection_callback(collision_detected)
@@ -610,7 +635,107 @@ class ManagerNode(LifecycleNode):
             # No detections array, assume no collision
             if self.collision_detection_callback:
                 self.collision_detection_callback(False)
-        
+
+    def load_map_async(self, map_name: str, maps_dir: PathLib):
+        """
+        Asynchronously load a map onto the robot using ROS2 service calls.
+        This method is non-blocking and uses async service calls.
+
+        Args:
+            map_name: Name of the map file (without extension)
+            maps_dir: PathLib to the maps directory
+        """
+        map_path = maps_dir / f"{map_name}.yaml"
+
+        if not map_path.exists():
+            error_msg = f"Map file not found: {map_path}"
+            self.get_logger().error(error_msg)
+            if self.map_load_callback:
+                self.map_load_callback(False, map_name, error_msg)
+            return
+
+        # Check if map server is ready
+        if not self.map_server_client.service_is_ready():
+            error_msg = "Map server not ready"
+            self.get_logger().error(error_msg)
+            if self.map_load_callback:
+                self.map_load_callback(False, map_name, error_msg)
+            return
+
+        # Create request for main map
+        req = LoadMap.Request()
+        req.map_url = str(map_path)
+
+        self.get_logger().info(f"Sending async request to load map '{map_name}'")
+
+        # Send async request
+        future = self.map_server_client.call_async(req)
+        future.add_done_callback(
+            lambda f: self._handle_map_load_response(f, map_name, maps_dir)
+        )
+
+    def _handle_map_load_response(self, future, map_name: str, maps_dir: PathLib):
+        """Handle map load service response"""
+        try:
+            response = future.result()
+            if response.result == 0:  # LoadMap.Response.RESULT_SUCCESS == 0
+                self.get_logger().info(f"Successfully loaded map '{map_name}'")
+
+                # Now try to load speed mask if it exists
+                speed_map_path = maps_dir / f"speed_{map_name}.yaml"
+
+                if speed_map_path.exists():
+                    self.get_logger().info(f"Loading speed mask for '{map_name}'...")
+                    self._load_speed_mask_async(map_name, speed_map_path)
+                else:
+                    # No speed mask, we're done
+                    if self.map_load_callback:
+                        self.map_load_callback(True, map_name, "")
+            else:
+                error_msg = f"Map server returned error code: {response.result}"
+                self.get_logger().error(error_msg)
+                if self.map_load_callback:
+                    self.map_load_callback(False, map_name, error_msg)
+        except Exception as e:
+            error_msg = f"Exception during map load: {str(e)}"
+            self.get_logger().error(error_msg)
+            if self.map_load_callback:
+                self.map_load_callback(False, map_name, error_msg)
+
+    def _load_speed_mask_async(self, map_name: str, speed_map_path: PathLib):
+        """Asynchronously load speed mask"""
+        if not self.speed_mask_server_client.service_is_ready():
+            self.get_logger().warn("Speed mask server not ready, skipping speed mask")
+            if self.map_load_callback:
+                self.map_load_callback(True, map_name, "")
+            return
+
+        req = LoadMap.Request()
+        req.map_url = str(speed_map_path)
+
+        future = self.speed_mask_server_client.call_async(req)
+        future.add_done_callback(
+            lambda f: self._handle_speed_mask_response(f, map_name)
+        )
+
+    def _handle_speed_mask_response(self, future, map_name: str):
+        """Handle speed mask load response"""
+        try:
+            response = future.result()
+            if response.result == 0:
+                self.get_logger().info(f"Successfully loaded speed mask for '{map_name}'")
+            else:
+                self.get_logger().warn(f"Speed mask server returned error: {response.result}")
+
+            # Either way, we're done (speed mask is optional)
+            if self.map_load_callback:
+                self.map_load_callback(True, map_name, "")
+        except Exception as e:
+            self.get_logger().warn(f"Exception loading speed mask: {str(e)}")
+            # Still consider success since main map loaded
+            if self.map_load_callback:
+                self.map_load_callback(True, map_name, "")
+
 class NavData(QObject):
     def __init__(self):
         super().__init__()
@@ -802,16 +927,17 @@ class Navigator(QThread):
                     print("NAV ERROR: path_msg.poses is EMPTY! This is the bug!")
 
                 try:
-                    # Wait for nav2 to be active
-                    self.nav_data.navigator.waitUntilNav2Active()
+                    # REMOVED: waitUntilNav2Active() - this BLOCKS and causes deadlock!
+                    # Nav2 will reject the goal if not ready, which is fine.
+                    # The async check happens in GuiManager before this point.
 
-                    # Start path navigation
+                    # Start path navigation (non-blocking - sends action goal and returns)
                     self.nav_data.navigator.followPath(
                         path_msg,
                         controller_id='FollowPath',
                         goal_checker_id='goal_checker'
                     )
-                    print("NAV DEBUG: followPath() completed, navigation active")
+                    print("NAV DEBUG: followPath() completed, navigation goal sent")
 
                     # Emit signal that navigation has actually started
                     self.navigation_started.emit()
@@ -1042,16 +1168,24 @@ class GuiManager(QThread):
 
     @pyqtSlot()
     def handle_navigation_started(self):
-        """Handle navigation actually starting - resume CAN and send start message"""
+        """Handle navigation actually starting - resume all Modbus operations.
+
+        Navigation has successfully started, ROS2 is no longer under heavy load.
+        """
         # Emit signal to notify all systems that navigation has actually started
         self.navigation_actually_started.emit()
 
-        # Resume CAN messages now that navigation has started
+        # Resume ALL Modbus operations now that navigation has started
         if self.can_manager:
             self.can_manager.resume_can_messages()
+        if self.modbus_battery_receiver:
+            self.modbus_battery_receiver.paused = False
+        if self.modbus_button_receiver:
+            self.modbus_button_receiver.paused = False
+        print('Modbus: All operations resumed after navigation start')
 
         # Use QTimer to add a delay before sending CAN messages
-        # This prevents overwhelming the CAN bus when nav2 service calls complete
+        # This prevents overwhelming the bus when nav2 service calls complete
         QTimer.singleShot(500, self._send_navigation_start_can_message)
 
     def _send_navigation_start_can_message(self):
@@ -1109,29 +1243,59 @@ class GuiManager(QThread):
 
     @pyqtSlot(str)
     def handle_map_selected(self, map_name: str):
-        """Handle map selection from GUI - loads map in background thread"""
+        """Handle map selection from GUI - loads map in background thread.
+
+        Pauses Modbus to free up ROS2 system resources during map loading.
+        """
         # print(f"DEBUG: GuiManager.handle_map_selected called with map: {map_name}")
         self.nav_data.set_current_map(map_name)
         # print(f"DEBUG: nav_data.current_map set to: {self.nav_data.current_map}")
         # print(f"DEBUG: nav_data routes loaded: {list(self.nav_data.routes.keys())}")
 
+        # Pause ALL Modbus operations during map loading to free up ROS2 resources
+        if self.can_manager:
+            self.can_manager.pause_can_messages()
+        if self.modbus_battery_receiver:
+            self.modbus_battery_receiver.paused = True
+        if self.modbus_button_receiver:
+            self.modbus_button_receiver.paused = True
+        print('Modbus: All operations paused for map loading')
+
         # Emit status update to inform user that map loading is starting
         self.manualStatus.emit(f"Ładowanie mapy '{map_name}'...")
 
         # Cancel any existing map loading operation
-        if self.map_load_worker and self.map_load_worker.isRunning():
-            # print("DEBUG: Cancelling previous map load operation")
-            pass
-            self.map_load_worker.quit()
-            self.map_load_worker.wait()
+        if self.map_load_worker is not None:
+            # Disconnect previous worker
+            try:
+                self.map_load_worker.loading_complete.disconnect(self._on_map_load_complete)
+            except TypeError:
+                pass  # Already disconnected
+            # Clear callback on node
+            if self.node and self.node.map_load_callback:
+                self.node.map_load_callback = None
 
-        # Create and start worker thread to load map in background
-        self.map_load_worker = MapLoadWorker(self.nav_data.route_manager, map_name)
+        # Create worker (no longer a QThread, just a QObject)
+        self.map_load_worker = MapLoadWorker(self.node, self.nav_data.route_manager, map_name)
         self.map_load_worker.loading_complete.connect(self._on_map_load_complete)
-        self.map_load_worker.start()
+
+        # Start async loading (returns immediately, no blocking)
+        self.map_load_worker.start_loading()
 
     def _on_map_load_complete(self, success: bool, map_name: str, error_msg: str):
-        """Handle completion of background map loading"""
+        """Handle completion of background map loading.
+
+        Resumes Modbus after map loading completes.
+        """
+        # Resume ALL Modbus operations now that map loading is complete
+        if self.can_manager:
+            self.can_manager.resume_can_messages()
+        if self.modbus_battery_receiver:
+            self.modbus_battery_receiver.paused = False
+        if self.modbus_button_receiver:
+            self.modbus_button_receiver.paused = False
+        print('Modbus: All operations resumed after map loading')
+
         if success:
             self.manualStatus.emit(f"Mapa '{map_name}' załadowana pomyślnie")
         else:
@@ -1199,17 +1363,31 @@ class GuiManager(QThread):
 
     @pyqtSlot()
     def trigger_deactivate(self):
+        """Deactivate robot connection - robust shutdown.
+
+        Never blocks, always completes even if Modbus hangs.
+        """
         # Stop button receiver when deactivating
-        # Note: Battery receiver keeps running to show battery status even when disconnected
+        # Note: Battery receiver keeps running to show battery status
         if self.modbus_button_receiver:
-            self.modbus_button_receiver.stop_receiving()
+            try:
+                self.modbus_button_receiver.stop_receiving()
+            except Exception as e:
+                print(f'Error stopping button receiver: {e}')
 
         # Disconnect Modbus interface when deactivating
         if self.can_manager:
-            self.can_manager.disconnect_can()
+            try:
+                self.can_manager.disconnect_can()
+            except Exception as e:
+                print(f'Error disconnecting Modbus: {e}')
 
-        self.node.trigger_deactivate()
-        self.node.trigger_shutdown()
+        # Always shutdown ROS node even if Modbus failed
+        try:
+            self.node.trigger_deactivate()
+            self.node.trigger_shutdown()
+        except Exception as e:
+            print(f'Error shutting down ROS node: {e}')
     
     @pyqtSlot(float,float,float)
     def set_init_pose(self, x, y, w):
@@ -1330,10 +1508,21 @@ class GuiManager(QThread):
 
     @pyqtSlot(str, bool, float, float)
     def handle_set_route(self, route: str, to_dest: bool, x:float, y:float):
-        # Pause CAN messages before starting navigation to prevent buffer overflow
-        # Navigation start can take several seconds and CAN messages would accumulate
+        # NOTE: We do NOT check if nav2 is ready here because:
+        # 1. waitUntilNav2Active() BLOCKS and causes deadlock
+        # 2. BasicNavigator has no non-blocking check method
+        # 3. Nav2 will gracefully reject the goal if not ready
+        # 4. Navigator thread will emit error status if goal fails
+
+        # Pause ALL Modbus operations before starting navigation
+        # Navigation start can take several seconds and we need ROS2 at full capacity
         if self.can_manager:
             self.can_manager.pause_can_messages()
+        if self.modbus_battery_receiver:
+            self.modbus_battery_receiver.paused = True
+        if self.modbus_button_receiver:
+            self.modbus_button_receiver.paused = True
+        print('Modbus: All operations paused for navigation start')
 
         # Load collision zones for this route FIRST (builds the color cache)
         # This is now FAST due to numpy optimization

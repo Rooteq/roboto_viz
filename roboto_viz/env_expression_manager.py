@@ -3,6 +3,7 @@
 import minimalmodbus
 import serial
 import threading
+import time
 from typing import Dict
 from PyQt5.QtCore import QObject, pyqtSlot
 from enum import IntEnum
@@ -52,6 +53,11 @@ class CANStatusManager(QObject):
         self.current_buzzer_state = None
         self._continuous_timer = None
 
+        # Rate limiting for collision detection
+        self.last_collision_state = None
+        self.last_collision_time = 0
+        self.COLLISION_UPDATE_INTERVAL = 0.5  # Only update every 500ms
+
         # Status level mapping for different status strings
         self.status_level_map = {
             # OK states
@@ -95,7 +101,7 @@ class CANStatusManager(QObject):
             self.instrument.serial.parity = serial.PARITY_NONE
             self.instrument.serial.stopbits = 1
             self.instrument.serial.bytesize = 8
-            self.instrument.serial.timeout = 1
+            self.instrument.serial.timeout = 0.3  # Reduced from 1s to 0.3s
             self.instrument.mode = minimalmodbus.MODE_RTU
 
             # Test connection by turning off all outputs
@@ -110,16 +116,30 @@ class CANStatusManager(QObject):
             return False
 
     def disconnect_can(self):
-        """Disconnect from Modbus interface."""
+        """Disconnect from Modbus interface.
+
+        Robust shutdown - never blocks, always cleans up.
+        """
         self._stop_continuous_sending()
         if self.instrument:
             try:
-                # Turn off all outputs before disconnecting
-                self._turn_off_all_outputs()
-                self.instrument.serial.close()
-                print("Modbus Status Manager disconnected")
+                # Try to turn off all outputs (timeout protected)
+                # Don't block if this fails
+                try:
+                    self._turn_off_all_outputs()
+                except Exception:
+                    pass  # Ignore errors during shutdown
+
+                # Close serial port
+                if hasattr(self.instrument, 'serial') and self.instrument.serial:
+                    try:
+                        self.instrument.serial.close()
+                    except Exception:
+                        pass  # Ignore close errors
+
+                print('Modbus Status Manager disconnected')
             except Exception as e:
-                print(f"Error disconnecting from Modbus: {e}")
+                print(f'Error disconnecting from Modbus: {e}')
             finally:
                 self.instrument = None
 
@@ -135,12 +155,15 @@ class CANStatusManager(QObject):
             print(f"Error turning off outputs: {e}")
 
     def _start_continuous_sending(self):
-        """Start continuous 1Hz sending of current LED and buzzer states."""
+        """Start continuous 0.5Hz sending of current LED and buzzer states.
+
+        Reduced from 1Hz to 0.5Hz (2s interval) to reduce Modbus bus load.
+        """
         if self._continuous_timer is None:
             from PyQt5.QtCore import QTimer
             self._continuous_timer = QTimer()
             self._continuous_timer.timeout.connect(self._send_continuous_messages)
-            self._continuous_timer.start(1000)
+            self._continuous_timer.start(2000)  # 2s interval (was 1s)
 
     def _stop_continuous_sending(self):
         """Stop continuous sending timer."""
@@ -149,7 +172,13 @@ class CANStatusManager(QObject):
             self._continuous_timer = None
 
     def _send_continuous_messages(self):
-        """Send current LED and buzzer messages continuously at 1Hz."""
+        """Send current LED and buzzer messages continuously at 0.5Hz.
+
+        Skips sending if Modbus is paused (e.g., during map load/nav start).
+        """
+        if self.modbus_paused:
+            return  # Don't send when paused
+
         if self.current_led_coil is not None:
             self._send_led_message(self.current_led_coil)
 
@@ -425,27 +454,53 @@ class CANStatusManager(QObject):
 
     @pyqtSlot(bool)
     def handle_collision_detection(self, collision_detected: bool):
-        """Handle collision detection updates."""
-        if self.is_navigating:
-            if not self.navigation_preparation_active:
-                if collision_detected:
-                    if not self.last_buzzer_state:
-                        self.last_buzzer_state = True
-                        self._set_buzzer_state_and_send(True)
-                    self._set_led_state_and_send(ModbusCoil.ORANGE_LED)
-                else:
-                    if self.last_buzzer_state:
-                        self.last_buzzer_state = False
-                        self._set_buzzer_state_and_send(False)
-                    if self.battery_warning_active:
-                        self._set_led_state_and_send(ModbusCoil.ORANGE_LED)
-                    else:
-                        self._set_led_state_and_send(ModbusCoil.GREEN_LED)
+        """Handle collision detection updates with rate limiting.
+
+        Rate limited to max 2Hz to prevent Modbus bus flooding.
+        Collision topics can publish at 10-30Hz which would overwhelm serial.
+        """
+        if not self.is_navigating or self.navigation_preparation_active:
+            return
+
+        import time
+        current_time = time.time()
+
+        # Rate limit: only update every 500ms AND when state changes
+        state_changed = collision_detected != self.last_collision_state
+        time_elapsed = current_time - self.last_collision_time
+        should_update = state_changed and time_elapsed >= self.COLLISION_UPDATE_INTERVAL
+
+        if not should_update:
+            return
+
+        # Update tracking
+        self.last_collision_state = collision_detected
+        self.last_collision_time = current_time
+
+        # Send Modbus updates
+        if collision_detected:
+            if not self.last_buzzer_state:
+                self.last_buzzer_state = True
+                self._set_buzzer_state_and_send(True)
+            self._set_led_state_and_send(ModbusCoil.ORANGE_LED)
+        else:
+            if self.last_buzzer_state:
+                self.last_buzzer_state = False
+                self._set_buzzer_state_and_send(False)
+            if self.battery_warning_active:
+                self._set_led_state_and_send(ModbusCoil.ORANGE_LED)
+            else:
+                self._set_led_state_and_send(ModbusCoil.GREEN_LED)
 
     def pause_can_messages(self):
-        """Pause all Modbus message sending."""
+        """Pause all Modbus message sending.
+
+        Called during map loading and navigation start to free ROS2 resources.
+        """
         self.modbus_paused = True
+        print('Modbus: All operations paused')
 
     def resume_can_messages(self):
         """Resume Modbus message sending."""
         self.modbus_paused = False
+        print('Modbus: All operations resumed')

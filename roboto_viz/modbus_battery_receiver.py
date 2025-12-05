@@ -43,6 +43,7 @@ class ModbusBatteryReceiver(QObject):
         self.poll_interval = poll_interval
         self.receiving = False
         self.receive_thread = None
+        self.paused = False  # Pause flag for critical operations
 
         # Simple median filter
         self.sample_buffer = deque(maxlen=10)  # Keep 10 recent samples
@@ -123,8 +124,8 @@ class ModbusBatteryReceiver(QObject):
         """Poll for battery ADC readings in background thread."""
         while self.receiving:
             try:
-                # Skip update if navigating
-                if self.is_navigating:
+                # Skip update if navigating or paused
+                if self.is_navigating or self.paused:
                     time.sleep(self.poll_interval)
                     continue
 
