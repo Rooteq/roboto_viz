@@ -57,7 +57,7 @@ class ModbusBatteryReceiver(QObject):
         self.ADC_MAX = 4095.0
         self.ADC_VOLTAGE_MAX = 3.6
         self.MIN_VOLTAGE = 2.182  # 0% battery
-        self.MAX_VOLTAGE = 3.204  # 100% battery
+        self.MAX_VOLTAGE = 3.218  # 100% battery
 
     def set_navigation_state(self, is_navigating: bool):
         """Update navigation state - battery updates pause during navigation.
